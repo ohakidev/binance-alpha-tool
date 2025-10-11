@@ -1,0 +1,218 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User model
+model User {
+  id            String    @id @default(uuid())
+  name          String
+  walletAddress String?   @unique
+  telegramId    String?   @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  airdrops      UserAirdrop[]
+  alerts        Alert[]
+  
+  @@map("users")
+}
+
+// Airdrop model - Enhanced for Binance Alpha
+model Airdrop {
+  id              String    @id @default(uuid())
+  token           String    @unique  // Token symbol (unique identifier)
+  name            String
+  chain           String              // BSC, ETH, etc.
+  logoUrl         String?
+
+  // Binance Alpha specific
+  multiplier      Int       @default(1)  // 1x, 2x, 4x
+  isBaseline      Boolean   @default(false)
+  alphaUrl        String?   // Binance Alpha page URL
+
+  // Airdrop details
+  description     String?
+  totalSupply     String?
+  airdropAmount   String?
+  initialPrice    Float?
+  currentPrice    Float?
+
+  // Eligibility (stored as JSON string for SQLite compatibility)
+  eligibility     String    @default("[]")
+  requirements    String    @default("[]")
+
+  // Dates
+  snapshotDate    DateTime?
+  claimStartDate  DateTime?
+  claimEndDate    DateTime?
+  listingDate     DateTime?
+
+  // Points system
+  requiredPoints  Int?
+  pointsPerDay    Int?
+
+  // Status
+  status          AirdropStatus @default(UPCOMING)
+  verified        Boolean       @default(false)
+  isActive        Boolean       @default(true)
+
+  // External links
+  websiteUrl      String?
+  twitterUrl      String?
+  discordUrl      String?
+  telegramUrl     String?
+
+  // Metadata
+  estimatedValue  Float?
+  participantCount Int?
+
+  // Admin info
+  addedBy         String?   // Admin who added this
+  notes           String?   // Internal notes
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  users           UserAirdrop[]
+  alerts          Alert[]
+
+  @@index([token])
+  @@index([status])
+  @@index([isActive])
+  @@map("airdrops")
+}
+
+// User-Airdrop relationship
+model UserAirdrop {
+  id          String    @id @default(uuid())
+  userId      String
+  airdropId   String
+  
+  // Tracking
+  isEligible  Boolean   @default(false)
+  hasClaimed  Boolean   @default(false)
+  claimedAt   DateTime?
+  claimAmount String?
+  
+  // Notifications
+  notified    Boolean   @default(false)
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  airdrop     Airdrop   @relation(fields: [airdropId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, airdropId])
+  @@map("user_airdrops")
+}
+
+// Alert/Notification model
+model Alert {
+  id          String      @id @default(uuid())
+  userId      String
+  airdropId   String?
+  
+  // Alert details
+  type        AlertType
+  title       String
+  message     String
+  
+  // Status
+  sent        Boolean     @default(false)
+  sentAt      DateTime?
+  read        Boolean     @default(false)
+  readAt      DateTime?
+  
+  createdAt   DateTime    @default(now())
+  
+  // Relations
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  airdrop     Airdrop?    @relation(fields: [airdropId], references: [id], onDelete: SetNull)
+  
+  @@map("alerts")
+}
+
+// Stability tracking
+model StabilityScore {
+  id              String    @id @default(uuid())
+  symbol          String
+  
+  // Metrics
+  stabilityScore  Float
+  riskLevel       RiskLevel
+  volatilityIndex Float
+  volumeScore     Float
+  
+  // Price data
+  currentPrice    Float
+  priceChange     Float
+  high24h         Float
+  low24h          Float
+  volume24h       Float
+  
+  timestamp       DateTime  @default(now())
+  
+  @@index([symbol, timestamp])
+  @@map("stability_scores")
+}
+
+// Income tracking
+model IncomeEntry {
+  id          String    @id @default(uuid())
+  userId      String
+  
+  // Income details
+  amount      Float
+  currency    String    @default("USDT")
+  source      String
+  category    String
+  description String?
+  
+  // Date
+  date        DateTime
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([userId, date])
+  @@map("income_entries")
+}
+
+// Enums
+enum AirdropStatus {
+  UPCOMING
+  SNAPSHOT
+  CLAIMABLE
+  ENDED
+  CANCELLED
+}
+
+enum AlertType {
+  AIRDROP_NEW
+  AIRDROP_SNAPSHOT
+  AIRDROP_CLAIMABLE
+  AIRDROP_ENDING
+  PRICE_ALERT
+  STABILITY_WARNING
+}
+
+enum RiskLevel {
+  SAFE
+  MODERATE
+  HIGH
+}
