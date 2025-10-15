@@ -5,11 +5,27 @@
  * Airdrop profit calculator with income tracking integration
  */
 
-import { UnifiedCalculator } from "@/components/features/calculator/unified-calculator";
+import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { Calendar, TrendingUp } from "lucide-react";
 import { useLanguage } from "@/lib/stores/language-store";
+
+// Dynamic import for UnifiedCalculator to avoid webpack errors in dev mode
+const UnifiedCalculator = dynamic(
+  () => import("@/components/features/calculator/unified-calculator").then(mod => mod.UnifiedCalculator),
+  {
+    loading: () => (
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-7xl">
+        <div className="animate-pulse space-y-4">
+          <div className="h-32 bg-muted rounded-2xl" />
+          <div className="h-96 bg-muted rounded-lg" />
+        </div>
+      </div>
+    ),
+    ssr: false,
+  }
+);
 
 export default function CalculatorPage() {
   const { t } = useLanguage();

@@ -59,6 +59,7 @@ export default function CalendarPage() {
         username: "Demo User",
         totalEarnings: 0,
         entryCount: 0,
+        balance: 0,
       });
     }
   }, [users]);

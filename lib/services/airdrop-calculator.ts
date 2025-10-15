@@ -5,7 +5,7 @@ import { AirdropStatus, AlertType } from "@prisma/client";
 
 interface AirdropData {
   name: string;
-  symbol: string;
+  token: string;  // Changed from symbol to token to match Prisma schema
   chain: string;
   description?: string;
   eligibility: string[];
@@ -135,7 +135,7 @@ export class AirdropCalculator {
     // ส่งการแจ้งเตือนไปยัง Telegram
     await telegramService.sendAirdropAlert({
       name: airdrop.name,
-      symbol: airdrop.symbol,
+      symbol: airdrop.token,  // Use token field from schema
       chain: airdrop.chain,
       status: airdrop.status,
       claimStartDate: airdrop.claimStartDate || undefined,
@@ -204,7 +204,7 @@ export class AirdropCalculator {
 
       const newStatus = this.determineStatus({
         name: airdrop.name,
-        symbol: airdrop.symbol,
+        token: airdrop.token,  // Use token field from schema
         chain: airdrop.chain,
         eligibility,
         requirements,
@@ -223,13 +223,13 @@ export class AirdropCalculator {
         if (newStatus === AirdropStatus.SNAPSHOT) {
           await telegramService.sendSnapshotAlert({
             name: airdrop.name,
-            symbol: airdrop.symbol,
+            symbol: airdrop.token,  // Use token field from schema
             snapshotDate: airdrop.snapshotDate || undefined,
           });
         } else if (newStatus === AirdropStatus.CLAIMABLE) {
           await telegramService.sendClaimableAlert({
             name: airdrop.name,
-            symbol: airdrop.symbol,
+            symbol: airdrop.token,  // Use token field from schema
             claimEndDate: airdrop.claimEndDate || undefined,
           });
         }

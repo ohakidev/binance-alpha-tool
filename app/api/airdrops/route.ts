@@ -116,9 +116,9 @@ export async function POST(request: NextRequest) {
     // Validate input
     const validatedData = AirdropSchema.parse(body);
 
-    // Check if token already exists (using symbol field in database)
+    // Check if token already exists
     const existing = await prisma.airdrop.findFirst({
-      where: { symbol: validatedData.token },
+      where: { token: validatedData.token },
     });
 
     if (existing) {
@@ -128,16 +128,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert arrays to JSON strings and map fields for SQLite
-    const { token, ...rest } = validatedData;
+    // Convert arrays to JSON strings
     const airdrop = await prisma.airdrop.create({
       data: {
-        ...rest,
-        symbol: token, // Map token to symbol for database
+        token: validatedData.token,
+        name: validatedData.name,
+        chain: validatedData.chain,
+        logoUrl: validatedData.logoUrl,
+        multiplier: validatedData.multiplier,
+        isBaseline: validatedData.isBaseline,
+        alphaUrl: validatedData.alphaUrl,
+        description: validatedData.description,
+        totalSupply: validatedData.totalSupply,
+        airdropAmount: validatedData.airdropAmount,
+        initialPrice: validatedData.initialPrice,
+        currentPrice: validatedData.currentPrice,
         eligibility: JSON.stringify(validatedData.eligibility),
         requirements: JSON.stringify(validatedData.requirements),
+        snapshotDate: validatedData.snapshotDate ? new Date(validatedData.snapshotDate) : null,
         claimStartDate: validatedData.claimStartDate ? new Date(validatedData.claimStartDate) : null,
         claimEndDate: validatedData.claimEndDate ? new Date(validatedData.claimEndDate) : null,
+        listingDate: validatedData.listingDate ? new Date(validatedData.listingDate) : null,
+        requiredPoints: validatedData.requiredPoints,
+        pointsPerDay: validatedData.pointsPerDay,
+        status: validatedData.status,
+        verified: validatedData.verified,
+        isActive: validatedData.isActive,
+        websiteUrl: validatedData.websiteUrl,
+        twitterUrl: validatedData.twitterUrl,
+        discordUrl: validatedData.discordUrl,
+        telegramUrl: validatedData.telegramUrl,
+        estimatedValue: validatedData.estimatedValue,
+        participantCount: validatedData.participantCount,
+        addedBy: validatedData.addedBy,
+        notes: validatedData.notes,
       },
     });
 

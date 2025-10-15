@@ -45,7 +45,7 @@ export function middleware(request: NextRequest) {
   // CSP
   response.headers.set(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.binance.com https://deep-index.moralis.io"
+    "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.binance.com https://deep-index.moralis.io https://alpha123.uk https://www.binance.com"
   );
 
   // Rate limiting for API routes

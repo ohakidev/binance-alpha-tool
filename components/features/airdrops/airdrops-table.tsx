@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AirdropLogo } from '@/components/ui/airdrop-logo';
 import {
   useReactTable,
   getCoreRowModel,
@@ -31,6 +30,8 @@ import {
   DollarSign,
   Target,
   X,
+  Send,
+  Bell,
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { th } from 'date-fns/locale';
@@ -63,6 +64,10 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { ParticleEffect } from '@/components/ui/particle-effect';
+import { GlowCard } from '@/components/ui/glow-card';
+import { ShimmerButton } from '@/components/ui/shimmer-button';
+import { useTelegram } from '@/lib/hooks/use-telegram';
 
 // Types
 interface Airdrop {
@@ -81,6 +86,11 @@ interface Airdrop {
   description?: string;
   website?: string;
   twitter?: string;
+  // New fields
+  type: 'TGE' | 'PreTGE' | 'Airdrop';
+  requiredPoints: number;
+  deductPoints: number;
+  contractAddress: string;
 }
 
 interface ClaimRecord {
@@ -155,6 +165,7 @@ export function AirdropsTable() {
   const [selectedAirdrop, setSelectedAirdrop] = useState<Airdrop | null>(null);
   const [selectedChains, setSelectedChains] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const { isLoading: isSendingTelegram, sendAirdropAlert, testConnection } = useTelegram();
 
   // Query for live airdrops
   const { data: liveData, isLoading: liveLoading } = useQuery({
@@ -165,7 +176,7 @@ export function AirdropsTable() {
       return json.data as Airdrop[];
     },
     enabled: activeTab === 'live',
-    refetchInterval: 60000,
+    refetchInterval: 7000, // 7 วินาที
   });
 
   // Query for upcoming airdrops
@@ -177,7 +188,7 @@ export function AirdropsTable() {
       return json.data as Airdrop[];
     },
     enabled: activeTab === 'upcoming',
-    refetchInterval: 300000,
+    refetchInterval: 7000, // 7 วินาที
   });
 
   // Filter and search data
@@ -246,32 +257,75 @@ export function AirdropsTable() {
 
   // Columns for live/upcoming airdrops (memoized)
   const airdropColumns: ColumnDef<Airdrop>[] = useMemo(() => [
+    // 1. โปรเจค (ไม่มีรูป, เป็นลิงก์)
     {
       accessorKey: 'projectName',
       header: 'โปรเจค',
       cell: ({ row }) => {
         const airdrop = row.original;
+        const contractLink = airdrop.contractAddress
+          ? `https://debot.ai/token/${airdrop.chain.toLowerCase()}/${airdrop.contractAddress}`
+          : '#';
+
         return (
-          <div className="flex items-center gap-3">
-            <AirdropLogo
-              logo={airdrop.logo}
-              alt={airdrop.projectName}
-              size={40}
-              className="flex-shrink-0"
-            />
-            <div className="min-w-0">
-              <div className="font-semibold truncate">{airdrop.projectName}</div>
-              <div className="text-xs text-muted-foreground flex items-center gap-2">
-                <span>{airdrop.symbol}</span>
-                <Badge variant="outline" className={`text-xs h-4 px-1.5 ${chainColors[airdrop.chain]}`}>
-                  {airdrop.chain}
-                </Badge>
-              </div>
+          <div className="min-w-0">
+            <a
+              href={contractLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-primary hover:text-primary/80 hover:underline transition-colors truncate block"
+              onClick={(e) => !airdrop.contractAddress && e.preventDefault()}
+            >
+              {airdrop.projectName}
+            </a>
+            <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+              <span>{airdrop.symbol}</span>
+              <Badge variant="outline" className={`text-xs h-4 px-1.5 ${chainColors[airdrop.chain]}`}>
+                {airdrop.chain}
+              </Badge>
             </div>
           </div>
         );
       },
     },
+    // 2. คะแนนที่ต้องการ
+    {
+      accessorKey: 'requiredPoints',
+      header: 'คะแนนที่ต้องการ',
+      cell: ({ row }) => {
+        const airdrop = row.original;
+        return (
+          <div>
+            <div className="font-semibold text-amber-400">
+              {airdrop.requiredPoints || 0} pts
+            </div>
+            {airdrop.deductPoints > 0 && (
+              <div className="text-xs text-red-400">-{airdrop.deductPoints} pts</div>
+            )}
+          </div>
+        );
+      },
+    },
+    // 3. ประเภท
+    {
+      accessorKey: 'type',
+      header: 'ประเภท',
+      cell: ({ row }) => {
+        const airdrop = row.original;
+        const typeColors = {
+          TGE: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+          PreTGE: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+          Airdrop: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+        };
+
+        return (
+          <Badge variant="outline" className={`text-xs ${typeColors[airdrop.type] || typeColors.Airdrop}`}>
+            {airdrop.type || 'Airdrop'}
+          </Badge>
+        );
+      },
+    },
+    // 4. จำนวน
     {
       accessorKey: 'airdropAmount',
       header: 'จำนวน',
@@ -287,6 +341,7 @@ export function AirdropsTable() {
         );
       },
     },
+    // 5. เวลา
     {
       accessorKey: activeTab === 'live' ? 'claimEndDate' : 'claimStartDate',
       header: activeTab === 'live' ? 'เวลาที่เหลือ' : 'เริ่มใน',
@@ -312,48 +367,53 @@ export function AirdropsTable() {
         );
       },
     },
-    {
-      accessorKey: 'requirements',
-      header: 'ความต้องการ',
-      cell: ({ row }) => {
-        const requirements = row.getValue('requirements') as string[];
-        if (!requirements || requirements.length === 0) {
-          return <span className="text-xs text-muted-foreground">ไม่มี</span>;
-        }
-        return (
-          <div className="flex gap-1 flex-wrap max-w-[200px]">
-            {requirements.slice(0, 2).map((req, i) => (
-              <Badge key={i} variant="secondary" className="text-xs">
-                {req}
-              </Badge>
-            ))}
-            {requirements.length > 2 && (
-              <Badge variant="outline" className="text-xs">
-                +{requirements.length - 2}
-              </Badge>
-            )}
-          </div>
-        );
-      },
-    },
+    // 6. Actions
     {
       id: 'actions',
       header: '',
       cell: ({ row }) => {
         const airdrop = row.original;
         return (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleAirdropClick(airdrop)}
-            className="h-8"
-          >
-            <ExternalLink className="w-4 h-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                sendAirdropAlert({
+                  name: airdrop.projectName,
+                  symbol: airdrop.symbol,
+                  chain: airdrop.chain,
+                  status: airdrop.status,
+                  claimStartDate: airdrop.claimStartDate ? new Date(airdrop.claimStartDate) : undefined,
+                  claimEndDate: airdrop.claimEndDate ? new Date(airdrop.claimEndDate) : undefined,
+                  estimatedValue: airdrop.estimatedValue || undefined,
+                  airdropAmount: airdrop.airdropAmount,
+                  requirements: airdrop.requirements,
+                  requiredPoints: airdrop.requiredPoints,
+                  deductPoints: airdrop.deductPoints,
+                  contractAddress: airdrop.contractAddress,
+                });
+              }}
+              className="h-8 text-cyan-500 hover:text-cyan-400"
+              disabled={isSendingTelegram}
+              title="ส่งแจ้งเตือนไป Telegram"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleAirdropClick(airdrop)}
+              className="h-8"
+              title="ดูรายละเอียด"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </Button>
+          </div>
         );
       },
     },
-  ], [handleAirdropClick, activeTab]);
+  ], [handleAirdropClick, activeTab, isSendingTelegram, sendAirdropAlert]);
 
   // Columns for history (memoized)
   const historyColumns: ColumnDef<ClaimRecord>[] = useMemo(() => [
@@ -363,21 +423,13 @@ export function AirdropsTable() {
       cell: ({ row }) => {
         const record = row.original;
         return (
-          <div className="flex items-center gap-3">
-            <AirdropLogo
-              logo={record.logo}
-              alt={record.projectName}
-              size={40}
-              className="flex-shrink-0"
-            />
-            <div>
-              <div className="font-semibold">{record.projectName}</div>
-              <div className="text-xs text-muted-foreground flex items-center gap-2">
-                <span>{record.symbol}</span>
-                <Badge variant="outline" className={`text-xs h-4 px-1.5 ${chainColors[record.chain]}`}>
-                  {record.chain}
-                </Badge>
-              </div>
+          <div className="min-w-0">
+            <div className="font-semibold">{record.projectName}</div>
+            <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+              <span>{record.symbol}</span>
+              <Badge variant="outline" className={`text-xs h-4 px-1.5 ${chainColors[record.chain]}`}>
+                {record.chain}
+              </Badge>
             </div>
           </div>
         );
@@ -504,27 +556,54 @@ export function AirdropsTable() {
   const hasFilters = selectedChains.length > 0 || searchQuery.trim().length > 0;
 
   return (
-    <div className="space-y-6">
-        {/* Header with gradient */}
-        <motion.div
+    <div className="space-y-6 relative">
+      {/* Particle Background */}
+      <ParticleEffect count={30} className="opacity-40" />
+
+      {/* Header with gradient */}
+      <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/20 via-purple-500/10 to-cyan-500/10 p-6 border border-primary/20"
+        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/20 via-purple-500/10 to-cyan-500/10 p-8 border-2 border-primary/30 shadow-2xl"
       >
         <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-2">
-            <Sparkles className="w-8 h-8 text-primary animate-pulse" />
-            <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">
-                Binance Alpha Airdrops
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Track and manage your airdrops
-              </p>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-4">
+              <motion.div
+                animate={{
+                  scale: [1, 1.2, 1],
+                  rotate: [0, 10, -10, 0],
+                }}
+                transition={{
+                  duration: 3,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
+              >
+                <Sparkles className="w-10 h-10 text-primary drop-shadow-lg" />
+              </motion.div>
+              <div>
+                <h1 className="text-4xl font-black bg-gradient-to-r from-primary via-purple-500 to-cyan-400 bg-clip-text text-transparent drop-shadow-sm">
+                  Binance Alpha Airdrops
+                </h1>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Track, manage and get notified about your airdrops
+                </p>
+              </div>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={testConnection}
+              className="gap-2"
+            >
+              <Bell className="w-4 h-4" />
+              ทดสอบ Telegram
+            </Button>
           </div>
         </div>
-        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-primary/20 to-transparent rounded-full blur-3xl" />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-primary/30 to-transparent rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-cyan-500/20 to-transparent rounded-full blur-3xl" />
       </motion.div>
 
       {/* Stats Cards */}
@@ -838,38 +917,21 @@ export function AirdropsTable() {
       <Dialog open={!!selectedAirdrop} onOpenChange={() => setSelectedAirdrop(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <div className="flex items-center gap-4">
-              {selectedAirdrop && (
-                <AirdropLogo
-                  logo={selectedAirdrop.logo}
-                  alt={selectedAirdrop.projectName}
-                  size={60}
-                />
-              )}
-              <div className="flex-1">
-                <DialogTitle className="text-2xl">{selectedAirdrop?.projectName}</DialogTitle>
-                <DialogDescription className="flex items-center gap-2 mt-2">
-                  <span className="text-lg">{selectedAirdrop?.symbol}</span>
-                  {selectedAirdrop && (
-                    <Badge variant="outline" className={chainColors[selectedAirdrop.chain]}>
-                      {selectedAirdrop.chain}
-                    </Badge>
-                  )}
-                </DialogDescription>
-              </div>
+            <div className="flex-1">
+              <DialogTitle className="text-2xl">{selectedAirdrop?.projectName}</DialogTitle>
+              <DialogDescription className="flex items-center gap-2 mt-2">
+                <span className="text-lg">{selectedAirdrop?.symbol}</span>
+                {selectedAirdrop && (
+                  <Badge variant="outline" className={chainColors[selectedAirdrop.chain]}>
+                    {selectedAirdrop.chain}
+                  </Badge>
+                )}
+              </DialogDescription>
             </div>
           </DialogHeader>
 
           {selectedAirdrop && (
             <div className="space-y-6 mt-4">
-              {/* Logo */}
-              <div className="flex justify-center">
-                <AirdropLogo
-                  logo={selectedAirdrop.logo}
-                  alt={selectedAirdrop.projectName}
-                  size={80}
-                />
-              </div>
 
               {/* Description */}
               {selectedAirdrop.description && (
@@ -939,10 +1001,39 @@ export function AirdropsTable() {
                 </div>
               )}
 
-              {/* Action Button */}
-              <Button className="w-full bg-gradient-to-r from-primary via-purple-500 to-cyan-500 hover:opacity-90 text-white font-semibold py-6 text-lg">
-                {selectedAirdrop.status === 'live' ? '🎁 เคลมเลย' : '⏰ ตั้งการแจ้งเตือน'}
-              </Button>
+              {/* Action Buttons */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <ShimmerButton
+                  className="w-full py-6 text-lg"
+                  background="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+                  onClick={() => {
+                    if (selectedAirdrop) {
+                      sendAirdropAlert({
+                        name: selectedAirdrop.projectName,
+                        symbol: selectedAirdrop.symbol,
+                        chain: selectedAirdrop.chain,
+                        status: selectedAirdrop.status,
+                        claimStartDate: selectedAirdrop.claimStartDate ? new Date(selectedAirdrop.claimStartDate) : undefined,
+                        claimEndDate: selectedAirdrop.claimEndDate ? new Date(selectedAirdrop.claimEndDate) : undefined,
+                        estimatedValue: selectedAirdrop.estimatedValue || undefined,
+                        airdropAmount: selectedAirdrop.airdropAmount,
+                        requirements: selectedAirdrop.requirements,
+                      });
+                    }
+                  }}
+                  disabled={isSendingTelegram}
+                >
+                  <Send className="w-5 h-5" />
+                  ส่ง Telegram
+                </ShimmerButton>
+
+                <Button
+                  className="w-full bg-gradient-to-r from-primary via-purple-500 to-cyan-500 hover:opacity-90 text-white font-semibold py-6 text-lg"
+                  onClick={() => window.open('https://www.binance.com/en/alpha', '_blank')}
+                >
+                  {selectedAirdrop.status === 'live' ? '🎁 เคลมเลย' : '⏰ ดูรายละเอียด'}
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>

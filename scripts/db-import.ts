@@ -75,11 +75,11 @@ async function importAirdrops(backupFile?: string) {
       try {
         // Check if already exists
         const existing = await prisma.airdrop.findFirst({
-          where: { symbol: airdrop.symbol },
+          where: { token: airdrop.token },
         });
 
         if (existing) {
-          console.log(`⏭️  Skipped (exists): ${airdrop.symbol}`);
+          console.log(`⏭️  Skipped (exists): ${airdrop.token}`);
           skipped++;
           continue;
         }

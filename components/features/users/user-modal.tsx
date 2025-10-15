@@ -110,6 +110,7 @@ export function UserModal({ isOpen, onClose, userId }: UserModalProps) {
           username: username.trim(),
           totalEarnings: 0,
           entryCount: 0,
+          balance: 0,
         });
         addToast({
           type: "success",

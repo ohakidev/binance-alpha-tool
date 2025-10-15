@@ -43,9 +43,9 @@ export async function POST(request: NextRequest) {
 
     for (const airdrop of body) {
       try {
-        // Check if already exists
+        // Check if already exists (using token as unique identifier)
         const existing = await prisma.airdrop.findFirst({
-          where: { symbol: airdrop.symbol },
+          where: { token: airdrop.token },
         });
 
         if (existing) {

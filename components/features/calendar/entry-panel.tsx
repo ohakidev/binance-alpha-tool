@@ -89,6 +89,7 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
       amount: "",
       category: "airdrop",
       notes: "",
+      tradingCost: "",
     });
   };
 
@@ -98,6 +99,7 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
       amount: entry.amount.toString(),
       category: entry.category,
       notes: entry.notes || "",
+      tradingCost: "",
     });
     setEditingId(entry.id);
   };
@@ -336,6 +338,7 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
                           amount: "",
                           category: "airdrop",
                           notes: "",
+                          tradingCost: "",
                         });
                       }}
                       className="px-6 py-3 glass hover:bg-white/10 rounded-lg transition-colors"

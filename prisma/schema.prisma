@@ -62,6 +62,13 @@ model Airdrop {
   // Points system
   requiredPoints  Int?
   pointsPerDay    Int?
+  deductPoints    Int?      @default(0)  // Points to deduct after claim
+
+  // Type classification
+  type            AirdropType @default(AIRDROP)
+
+  // Contract information
+  contractAddress String?   // Token contract address
 
   // Status
   status          AirdropStatus @default(UPCOMING)
@@ -215,4 +222,10 @@ enum RiskLevel {
   SAFE
   MODERATE
   HIGH
+}
+
+enum AirdropType {
+  TGE       // Token Generation Event
+  PRETGE    // Pre-TGE
+  AIRDROP   // Standard Airdrop
 }

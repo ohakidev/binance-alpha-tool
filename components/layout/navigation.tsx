@@ -8,6 +8,7 @@
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import {
   Sparkles,
   TrendingUp,
@@ -30,6 +31,12 @@ export function Navigation() {
   const pathname = usePathname();
   const { setSidebarOpen } = useUIStore();
   const { t } = useLanguage();
+  const [mounted, setMounted] = useState(false);
+
+  // Prevent hydration mismatch by only using translations after mount
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const navItems = [
     { href: "/", label: t("nav.airdrops"), icon: Sparkles },
@@ -80,6 +87,7 @@ export function Navigation() {
                                 ? "text-primary"
                                 : "text-muted-foreground hover:text-foreground"
                             }`}
+                            suppressHydrationWarning
                           >
                             {item.label}
                           </span>
@@ -100,7 +108,7 @@ export function Navigation() {
                       </Link>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="bg-primary text-primary-foreground">
-                      <p className="text-sm font-medium">{item.label}</p>
+                      <p className="text-sm font-medium" suppressHydrationWarning>{item.label}</p>
                     </TooltipContent>
                   </Tooltip>
                 );
@@ -147,6 +155,7 @@ export function Navigation() {
                       className={`text-xs font-medium transition-colors ${
                         isActive ? "text-primary" : "text-muted-foreground"
                       }`}
+                      suppressHydrationWarning
                     >
                       {item.label}
                     </span>
@@ -162,7 +171,7 @@ export function Navigation() {
                   </Link>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="bg-primary text-primary-foreground mb-2">
-                  <p className="text-sm font-medium">{item.label}</p>
+                  <p className="text-sm font-medium" suppressHydrationWarning>{item.label}</p>
                 </TooltipContent>
               </Tooltip>
             );

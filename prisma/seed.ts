@@ -33,11 +33,10 @@ async function main() {
   const airdrops = [
     {
       name: "ZetaChain Protocol",
-      symbol: "ZETA",
+      token: "ZETA",
       chain: "BNB Chain",
       description:
         "Universal blockchain and smart contract platform enabling omnichain dApps",
-      logoUrl: "https://cryptologos.cc/logos/zetachain-zeta-logo.png",
       eligibility: JSON.stringify(["Early adopter", "Testnet participant"]),
       requirements: JSON.stringify([
         "Complete at least 5 cross-chain transactions",
@@ -55,14 +54,19 @@ async function main() {
       participantCount: 50000,
       websiteUrl: "https://www.zetachain.com",
       twitterUrl: "https://twitter.com/zetablockchain",
+
+      // New fields
+      type: "TGE" as const,
+      requiredPoints: 500,
+      deductPoints: 50,
+      contractAddress: "0x1234567890abcdef1234567890abcdef12345678",
     },
     {
       name: "Starknet",
-      symbol: "STRK",
+      token: "STRK",
       chain: "Ethereum",
       description:
         "Decentralized ZK-Rollup operating as an L2 network over Ethereum",
-      logoUrl: "https://cryptologos.cc/logos/starknet-strk-logo.png",
       eligibility: JSON.stringify(["Starknet user", "Developer"]),
       requirements: JSON.stringify([
         "Made at least 3 transactions on Starknet",
@@ -80,14 +84,19 @@ async function main() {
       participantCount: 1000000,
       websiteUrl: "https://www.starknet.io",
       twitterUrl: "https://twitter.com/StarkNetEco",
+
+      // New fields
+      type: "TGE" as const,
+      requiredPoints: 300,
+      deductPoints: 20,
+      contractAddress: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
     },
     {
       name: "LayerZero",
-      symbol: "LZ",
+      token: "LZ",
       chain: "Multichain",
       description:
         "Omnichain interoperability protocol for cross-chain messaging",
-      logoUrl: "https://cryptologos.cc/logos/layerzero-lz-logo.png",
       eligibility: JSON.stringify(["Multichain user", "Bridge user"]),
       requirements: JSON.stringify([
         "Used LayerZero protocol on at least 3 different chains",
@@ -105,13 +114,18 @@ async function main() {
       participantCount: 250000,
       websiteUrl: "https://layerzero.network",
       twitterUrl: "https://twitter.com/LayerZero_Labs",
+
+      // New fields
+      type: "PRETGE" as const,
+      requiredPoints: 400,
+      deductPoints: 30,
+      contractAddress: "0x9876543210fedcba9876543210fedcba98765432",
     },
     {
       name: "zkSync Era",
-      symbol: "ZKS",
+      token: "ZKS",
       chain: "zkSync",
       description: "zkEVM Layer 2 scaling solution for Ethereum",
-      logoUrl: "https://cryptologos.cc/logos/zksync-zks-logo.png",
       eligibility: JSON.stringify(["zkSync user", "Liquidity provider"]),
       requirements: JSON.stringify([
         "Hold assets on zkSync for minimum 30 days",
@@ -129,13 +143,18 @@ async function main() {
       participantCount: 500000,
       websiteUrl: "https://zksync.io",
       twitterUrl: "https://twitter.com/zksync",
+
+      // New fields
+      type: "AIRDROP" as const,
+      requiredPoints: 200,
+      deductPoints: 10,
+      contractAddress: "0xzksynczksynczksynczksynczksynczksync1234",
     },
     {
       name: "Polygon zkEVM",
-      symbol: "POL",
+      token: "POL",
       chain: "Polygon",
       description: "Zero-knowledge Ethereum Virtual Machine by Polygon",
-      logoUrl: "https://cryptologos.cc/logos/polygon-matic-logo.png",
       eligibility: JSON.stringify(["Polygon user", "Early adopter"]),
       requirements: JSON.stringify([
         "Minimum 5 transactions on Polygon zkEVM",
@@ -153,6 +172,12 @@ async function main() {
       participantCount: 750000,
       websiteUrl: "https://polygon.technology",
       twitterUrl: "https://twitter.com/0xPolygon",
+
+      // New fields
+      type: "AIRDROP" as const,
+      requiredPoints: 150,
+      deductPoints: 15,
+      contractAddress: "0xpolygonpolygonpolygonpolygonpolygonpoly1234",
     },
   ];
 

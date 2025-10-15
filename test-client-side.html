@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Client-Side Alpha123 API</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 1200px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+    h1 { color: #fbbf24; }
+    button {
+      background: #10b981;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 6px;
+      margin: 10px 5px;
+    }
+    button:hover { background: #059669; }
+    #status {
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 8px;
+      background: #1e293b;
+      border-left: 4px solid #3b82f6;
+    }
+    .success { border-left-color: #10b981; }
+    .error { border-left-color: #ef4444; }
+    pre {
+      background: #1e293b;
+      padding: 15px;
+      border-radius: 6px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #374151;
+    }
+    th {
+      background: #1e293b;
+      color: #fbbf24;
+      font-weight: 600;
+    }
+    tr:hover { background: #1e293b; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Test Client-Side Alpha123.uk API</h1>
+  <p>This tests fetching data directly from browser (bypasses 403 server-side errors)</p>
+
+  <button onclick="testFetch()">1. Test Fetch from Alpha123.uk</button>
+  <button onclick="testSaveToDatabase()">2. Test Save to Database</button>
+  <button onclick="testFullFlow()">3. Test Full Flow (Fetch + Save)</button>
+
+  <div id="status"></div>
+  <div id="results"></div>
+
+  <script>
+    const statusDiv = document.getElementById('status');
+    const resultsDiv = document.getElementById('results');
+
+    function log(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      statusDiv.className = type;
+      statusDiv.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+      console.log(`[${timestamp}] ${message}`);
+    }
+
+    function displayData(data) {
+      if (!data || data.length === 0) {
+        resultsDiv.innerHTML = '<p>No data to display</p>';
+        return;
+      }
+
+      let html = `
+        <h3>📋 Received ${data.length} Projects</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Token</th>
+              <th>Name</th>
+              <th>Chain</th>
+              <th>Amount</th>
+              <th>Points</th>
+              <th>Type</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      data.slice(0, 10).forEach(project => {
+        html += `
+          <tr>
+            <td><strong>${project.token}</strong></td>
+            <td>${project.name || project.token}</td>
+            <td>${project.chain_id || 'N/A'}</td>
+            <td>${project.amount || 'TBA'}</td>
+            <td>${project.points || 0}</td>
+            <td>${project.type || 'N/A'}</td>
+            <td>${project.date || 'TBA'} ${project.time || ''}</td>
+          </tr>
+        `;
+      });
+
+      html += `</tbody></table>`;
+      if (data.length > 10) {
+        html += `<p><em>Showing first 10 of ${data.length} projects</em></p>`;
+      }
+
+      resultsDiv.innerHTML = html;
+    }
+
+    async function testFetch() {
+      try {
+        log('🔍 Fetching from https://alpha123.uk/api/data?fresh=1 ...', 'info');
+
+        const response = await fetch('https://alpha123.uk/api/data?fresh=1', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+          cache: 'no-store',
+        });
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status} ${response.statusText}`);
+        }
+
+        const rawData = await response.json();
+        console.log('Raw data:', rawData);
+
+        let projects = [];
+        if (Array.isArray(rawData)) {
+          projects = rawData;
+        } else if (rawData.data && Array.isArray(rawData.data)) {
+          projects = rawData.data;
+        }
+
+        log(`✅ SUCCESS: Received ${projects.length} projects from alpha123.uk`, 'success');
+        displayData(projects);
+
+        resultsDiv.innerHTML += `<h3>📄 Raw Response:</h3><pre>${JSON.stringify(rawData, null, 2).substring(0, 1000)}...</pre>`;
+
+      } catch (error) {
+        log(`❌ ERROR: ${error.message}`, 'error');
+        resultsDiv.innerHTML = `<pre>${error.stack}</pre>`;
+      }
+    }
+
+    async function testSaveToDatabase() {
+      try {
+        log('💾 Testing save to database...', 'info');
+
+        // Create sample data
+        const sampleProjects = [
+          {
+            token: 'TEST',
+            name: 'Test Project',
+            chain: 'BSC',
+            airdropAmount: '1000 TEST',
+            claimStartDate: new Date().toISOString(),
+            contractAddress: '0x123...',
+            requiredPoints: 100,
+            deductPoints: 10,
+            type: 'AIRDROP',
+            status: 'UPCOMING',
+            estimatedValue: 0.5,
+          }
+        ];
+
+        const response = await fetch('http://localhost:3006/api/binance/alpha/save', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ projects: sampleProjects }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Save failed: ${response.status} ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        log(`✅ SUCCESS: Saved to database`, 'success');
+        resultsDiv.innerHTML = `<h3>💾 Save Result:</h3><pre>${JSON.stringify(result, null, 2)}</pre>`;
+
+      } catch (error) {
+        log(`❌ ERROR: ${error.message}`, 'error');
+        resultsDiv.innerHTML = `<pre>${error.stack}</pre>`;
+      }
+    }
+
+    async function testFullFlow() {
+      try {
+        // Step 1: Fetch from alpha123.uk
+        log('🔍 Step 1/2: Fetching from alpha123.uk...', 'info');
+
+        const fetchResponse = await fetch('https://alpha123.uk/api/data?fresh=1', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+          cache: 'no-store',
+        });
+
+        if (!fetchResponse.ok) {
+          throw new Error(`Fetch failed: ${fetchResponse.status}`);
+        }
+
+        const rawData = await fetchResponse.json();
+
+        let projects = [];
+        if (Array.isArray(rawData)) {
+          projects = rawData;
+        } else if (rawData.data && Array.isArray(rawData.data)) {
+          projects = rawData.data;
+        }
+
+        log(`✅ Step 1/2: Fetched ${projects.length} projects`, 'info');
+        displayData(projects);
+
+        // Step 2: Process and save
+        log('💾 Step 2/2: Processing and saving to database...', 'info');
+
+        const processedProjects = projects.map(project => {
+          const parseDateTime = (date, time) => {
+            if (!date) return null;
+            try {
+              let dateStr = date;
+              if (time) dateStr += ` ${time}`;
+              const parsed = new Date(dateStr);
+              return !isNaN(parsed.getTime()) ? parsed.toISOString() : null;
+            } catch (e) {
+              return null;
+            }
+          };
+
+          const mapChain = (chainId) => {
+            if (!chainId) return 'BSC';
+            const chainMap = {
+              '56': 'BSC', 'bsc': 'BSC',
+              '1': 'Ethereum', 'eth': 'Ethereum',
+              '137': 'Polygon', 'polygon': 'Polygon',
+            };
+            return chainMap[chainId.toLowerCase()] || 'BSC';
+          };
+
+          const mapType = (type) => {
+            if (!type) return 'AIRDROP';
+            const typeMap = {
+              'tge': 'TGE',
+              'pretge': 'PRETGE',
+              'grab': 'AIRDROP',
+            };
+            return typeMap[type.toLowerCase()] || 'AIRDROP';
+          };
+
+          const determineStatus = (claimDate) => {
+            if (!claimDate) return 'UPCOMING';
+            const now = new Date();
+            const date = new Date(claimDate);
+            const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            if (diffDays < -7) return 'ENDED';
+            if (diffDays < 0) return 'CLAIMABLE';
+            if (diffDays <= 7) return 'SNAPSHOT';
+            return 'UPCOMING';
+          };
+
+          const claimDate = parseDateTime(project.date, project.time);
+
+          return {
+            token: project.token,
+            name: project.name || project.token,
+            chain: mapChain(project.chain_id),
+            airdropAmount: project.amount || 'TBA',
+            claimStartDate: claimDate,
+            contractAddress: project.contract_address || null,
+            requiredPoints: project.points || 0,
+            deductPoints: Math.floor((project.points || 0) * 0.1),
+            type: mapType(project.type),
+            status: determineStatus(claimDate),
+            estimatedValue: project.price || null,
+          };
+        });
+
+        const saveResponse = await fetch('http://localhost:3006/api/binance/alpha/save', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ projects: processedProjects }),
+        });
+
+        if (!saveResponse.ok) {
+          throw new Error(`Save failed: ${saveResponse.status}`);
+        }
+
+        const result = await saveResponse.json();
+
+        log(`✅ SUCCESS: Full flow completed! Created: ${result.data.created}, Updated: ${result.data.updated}`, 'success');
+        resultsDiv.innerHTML += `<h3>💾 Save Result:</h3><pre>${JSON.stringify(result, null, 2)}</pre>`;
+
+      } catch (error) {
+        log(`❌ ERROR: ${error.message}`, 'error');
+        resultsDiv.innerHTML += `<pre>${error.stack}</pre>`;
+      }
+    }
+
+    // Auto-run test on load
+    window.addEventListener('load', () => {
+      log('Ready to test. Click a button to start.', 'info');
+    });
+  </script>
+</body>
+</html>

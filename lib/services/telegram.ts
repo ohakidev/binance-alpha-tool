@@ -62,13 +62,21 @@ class TelegramService {
 
   constructor() {
     const token = process.env.TELEGRAM_BOT_TOKEN;
-    this.chatId = process.env.TELEGRAM_CHAT_ID || "";
+    let chatId = process.env.TELEGRAM_CHAT_ID || "";
+
+    // Auto-add @ prefix if chatId is username without @
+    if (chatId && !chatId.startsWith('@') && !chatId.startsWith('-') && isNaN(Number(chatId))) {
+      chatId = '@' + chatId;
+      console.log(`ℹ️  Auto-added @ prefix to chat ID: ${chatId}`);
+    }
+
+    this.chatId = chatId;
     this.language = (process.env.TELEGRAM_LANGUAGE as Language) || "th";
     this.isEnabled = !!(token && this.chatId);
 
     if (this.isEnabled && token) {
       this.bot = new TelegramBot(token, { polling: false });
-      console.log("✅ Telegram bot initialized");
+      console.log(`✅ Telegram bot initialized - Chat ID: ${this.chatId}`);
     } else {
       console.warn(
         "⚠️  Telegram bot disabled: Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID"
@@ -103,12 +111,20 @@ class TelegramService {
       };
       const formattedMessage = `${emojis[type]} *${title}*\n\n${message}`;
 
+      console.log(`📤 Sending to Telegram (${this.chatId}):`, title);
+
       await this.bot.sendMessage(this.chatId, formattedMessage, {
         parse_mode: "Markdown",
       });
+
+      console.log(`✅ Message sent successfully to ${this.chatId}`);
       return true;
-    } catch (error) {
-      console.error("❌ Telegram send error:", error);
+    } catch (error: any) {
+      console.error("❌ Telegram send error:", {
+        chatId: this.chatId,
+        error: error.message,
+        response: error.response?.body,
+      });
       return false;
     }
   }
@@ -124,7 +140,7 @@ class TelegramService {
     estimatedValue?: number;
     airdropAmount?: string;
     requirements?: string[];
-    thresholdPoints?: number;
+    requiredPoints?: number;
     deductPoints?: number;
     contractAddress?: string;
   }): Promise<boolean> {
@@ -144,75 +160,58 @@ class TelegramService {
       message += `🍄 ${this.t("airdrop")}: *${airdrop.name}*\n`;
       message += `💎 ${this.t("symbol")}: $${airdrop.symbol}\n`;
 
-      if (airdrop.airdropAmount) {
-        const valueText = airdrop.estimatedValue
-          ? ` ($${airdrop.estimatedValue})`
-          : "";
-        message += `🎁 ${this.t("amount")}: ${
-          airdrop.airdropAmount
-        }${valueText}\n`;
-      }
-
-      message += `\n`;
-
-      // Timeline
+      // Timeline - แปลงเป็นเวลาไทย (UTC+7)
       if (airdrop.claimStartDate) {
         const startDate = new Date(airdrop.claimStartDate);
-        const dateStr =
-          lang === "th"
-            ? startDate.toLocaleDateString("th-TH", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : startDate.toLocaleDateString("en-US", {
-                weekday: "short",
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              }) + " UTC";
+        // แปลงเป็นเวลาไทย
+        const thaiTime = new Date(startDate.getTime() + (7 * 60 * 60 * 1000));
+        const dateStr = thaiTime.toLocaleString("en-US", {
+          weekday: "short",
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          timeZone: "UTC",
+        }) + " UTC";
         message += `📅 ${this.t("start")}: ${dateStr}\n`;
       }
 
       if (airdrop.claimEndDate) {
         const endDate = new Date(airdrop.claimEndDate);
-        const dateStr =
-          lang === "th"
-            ? endDate.toLocaleDateString("th-TH", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : endDate.toLocaleDateString("en-US", {
-                weekday: "short",
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              }) + " UTC";
+        // แปลงเป็นเวลาไทย
+        const thaiTime = new Date(endDate.getTime() + (7 * 60 * 60 * 1000));
+        const dateStr = thaiTime.toLocaleString("en-US", {
+          weekday: "short",
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          timeZone: "UTC",
+        }) + " UTC";
         message += `🏆 ${this.t("end")}: ${dateStr}\n`;
       }
 
       message += `\n`;
 
       // Requirements
-      if (airdrop.thresholdPoints) {
-        message += `🎯 ${this.t("threshold")}: ${
-          airdrop.thresholdPoints
-        } pts\n`;
+      if (airdrop.requiredPoints) {
+        message += `🎯 ${this.t("threshold")}: ${airdrop.requiredPoints} pts\n`;
       }
 
       if (airdrop.deductPoints) {
-        message += `⚖️ ${this.t("deductPoints")}: ${
-          airdrop.deductPoints
-        } pts\n`;
+        message += `⚖️ ${this.t("deductPoints")}: -${airdrop.deductPoints} pts\n`;
+      }
+
+      // Airdrop amount
+      if (airdrop.airdropAmount) {
+        const valueText = airdrop.estimatedValue
+          ? ` ($${airdrop.estimatedValue})`
+          : "";
+        message += `🎁 ${this.t("airdrop")}: ${airdrop.airdropAmount}${valueText}\n`;
       }
 
       message += `\n`;
@@ -222,36 +221,42 @@ class TelegramService {
 
       if (airdrop.contractAddress) {
         message += `📦 ${this.t("contract")}:\n`;
-        message += `\`${airdrop.contractAddress}\`\n`;
+        message += `\`${airdrop.contractAddress}\``;
       }
 
-      message += `\n`;
+      console.log(`📤 Sending airdrop alert to Telegram (${this.chatId}):`, airdrop.name);
 
-      // Action buttons (inline text)
-      message += `💰 [${this.t(
-        "dex"
-      ).toUpperCase()}](https://dex.example.com) | `;
-      message += `📊 [${this.t(
-        "mexc"
-      ).toUpperCase()}](https://mexc.example.com)\n`;
-
-      // Reactions simulation
-      message += `\n⭐ 2   ❤️ 10   😁 8   👏 3   👀 3   ✍️ 2\n`;
-      message += `👁 ${
-        Math.floor(Math.random() * 5000) + 1000
-      }   ${new Date().toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-      })}`;
+      // สร้าง inline keyboard buttons
+      const keyboard = {
+        inline_keyboard: [
+          [
+            {
+              text: "🌐 DEX",
+              url: `https://www.binance.com/en/trade/${airdrop.symbol}_USDT`,
+            },
+            {
+              text: "📊 MEXC",
+              url: `https://www.mexc.com/exchange/${airdrop.symbol}_USDT`,
+            },
+          ],
+        ],
+      };
 
       await this.bot.sendMessage(this.chatId, message, {
         parse_mode: "Markdown",
         disable_web_page_preview: true,
+        reply_markup: keyboard,
       });
 
+      console.log(`✅ Airdrop alert sent successfully to ${this.chatId}`);
       return true;
-    } catch (error) {
-      console.error("❌ Telegram airdrop alert error:", error);
+    } catch (error: any) {
+      console.error("❌ Telegram airdrop alert error:", {
+        chatId: this.chatId,
+        airdrop: airdrop.name,
+        error: error.message,
+        response: error.response?.body,
+      });
       return false;
     }
   }
@@ -260,7 +265,7 @@ class TelegramService {
     name: string;
     symbol: string;
     snapshotDate?: Date;
-    thresholdPoints?: number;
+    requiredPoints?: number;
     requirements?: string[];
   }): Promise<boolean> {
     if (!this.isEnabled || !this.bot) {
@@ -299,9 +304,9 @@ class TelegramService {
         message += `📸 Snapshot: ${dateStr}\n\n`;
       }
 
-      if (airdrop.thresholdPoints) {
+      if (airdrop.requiredPoints) {
         message += `🎯 ${this.t("threshold")}: ${
-          airdrop.thresholdPoints
+          airdrop.requiredPoints
         } pts\n\n`;
       }
 
@@ -329,7 +334,7 @@ class TelegramService {
     symbol: string;
     claimEndDate?: Date;
     claimAmount?: string;
-    thresholdPoints?: number;
+    requiredPoints?: number;
   }): Promise<boolean> {
     if (!this.isEnabled || !this.bot) {
       console.log("Telegram claimable alert (disabled):", airdrop.name);
@@ -348,8 +353,8 @@ class TelegramService {
         message += `🎁 ${this.t("airdrop")}: ${airdrop.claimAmount}\n`;
       }
 
-      if (airdrop.thresholdPoints) {
-        message += `🎯 Minimum ${airdrop.thresholdPoints} pts\n`;
+      if (airdrop.requiredPoints) {
+        message += `🎯 Minimum ${airdrop.requiredPoints} pts\n`;
       }
 
       if (airdrop.claimEndDate) {

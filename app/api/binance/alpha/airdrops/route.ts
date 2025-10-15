@@ -48,28 +48,7 @@ export async function GET(request: Request) {
     });
 
     // คำนวณคะแนนสำหรับแต่ละ airdrop
-    const airdropsWithScores = airdrops.map(
-      (airdrop: {
-        id: string;
-        name: string;
-        symbol: string;
-        logoUrl: string | null;
-        chain: string;
-        status: string;
-        description: string | null;
-        websiteUrl: string | null;
-        twitterUrl: string | null;
-        discordUrl: string | null;
-        eligibility: string;
-        requirements: string;
-        airdropAmount: string | null;
-        estimatedValue: number | null;
-        snapshotDate: Date | null;
-        claimStartDate: Date | null;
-        claimEndDate: Date | null;
-        verified: boolean;
-        participantCount: number | null;
-      }) => {
+    const airdropsWithScores = airdrops.map((airdrop: any) => {
         // Parse JSON strings to arrays
         const eligibility = JSON.parse(airdrop.eligibility || "[]");
         const requirements = JSON.parse(airdrop.requirements || "[]");
@@ -77,8 +56,8 @@ export async function GET(request: Request) {
         return {
           id: airdrop.id,
           projectName: airdrop.name,
-          symbol: airdrop.symbol,
-          logo: airdrop.logoUrl || "🎁",
+          symbol: airdrop.symbol || airdrop.token,
+          logo: "🎁",
           chain: airdrop.chain,
           status: airdrop.status.toLowerCase(),
           description: airdrop.description || "",
@@ -96,6 +75,13 @@ export async function GET(request: Request) {
             airdrop.claimStartDate?.toISOString() || new Date().toISOString(),
           verified: airdrop.verified,
           participantCount: airdrop.participantCount,
+
+          // New fields
+          type: airdrop.type || 'Airdrop',
+          requiredPoints: airdrop.requiredPoints || 0,
+          deductPoints: airdrop.deductPoints || 0,
+          contractAddress: airdrop.contractAddress || '',
+
           score: airdropCalculator.calculateAirdropScore({
             estimatedValue: airdrop.estimatedValue || undefined,
             participantCount: airdrop.participantCount || undefined,
@@ -139,7 +125,7 @@ export async function POST(request: Request) {
 
     const airdrop = await airdropCalculator.createAirdrop({
       name: body.name || body.projectName,
-      symbol: body.symbol,
+      token: body.symbol || body.token,
       chain: body.chain,
       description: body.description,
       eligibility: body.eligibility || [],

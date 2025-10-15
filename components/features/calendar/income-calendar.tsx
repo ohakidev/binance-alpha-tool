@@ -233,7 +233,7 @@ export function IncomeCalendar({ onDateSelect, selectedDate }: IncomeCalendarPro
 
         {/* Calendar days - Better grid */}
         <div className="grid grid-cols-7 gap-2">
-          <AnimatePresence mode="wait">
+          <AnimatePresence>
             {calendarDays.map((day, index) => {
               if (!day) {
                 return <div key={`empty-${index}`} className="aspect-square" />;

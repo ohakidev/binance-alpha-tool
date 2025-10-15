@@ -539,7 +539,7 @@ export function UnifiedCalculator() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <span className="text-sm font-medium text-emerald-400">
-                              {(data.points / data.volume * 100).toFixed(2)}%
+                              {data.volume > 0 ? (data.points / data.volume * 100).toFixed(2) : '0.00'}%
                             </span>
                           </td>
                         </motion.tr>

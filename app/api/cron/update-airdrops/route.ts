@@ -63,7 +63,7 @@ export async function GET(request: Request) {
     for (const airdrop of upcomingSnapshots) {
       await telegramService.sendSnapshotAlert({
         name: airdrop.name,
-        symbol: airdrop.symbol,
+        symbol: airdrop.token,
         snapshotDate: airdrop.snapshotDate || undefined,
       });
     }
@@ -86,7 +86,7 @@ export async function GET(request: Request) {
     for (const airdrop of endingSoon) {
       await telegramService.sendClaimableAlert({
         name: airdrop.name,
-        symbol: airdrop.symbol,
+        symbol: airdrop.token,
         claimEndDate: airdrop.claimEndDate || undefined,
       });
     }
