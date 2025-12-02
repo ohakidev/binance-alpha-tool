@@ -8,7 +8,8 @@
 
 import dynamic from "next/dynamic";
 import { useAutoSync } from "@/lib/hooks/use-auto-sync";
-import { useEffect } from "react";
+import { SyncStatusIndicator } from "@/components/ui/sync-status-indicator";
+import { useQueryClient } from "@tanstack/react-query";
 
 // Dynamic import for AirdropsTable for better performance
 const AirdropsTable = dynamic(
@@ -32,11 +33,20 @@ const AirdropsTable = dynamic(
 );
 
 export default function Home() {
-  // Enable auto-sync every 7 seconds
-  const { state } = useAutoSync({
-    enabled: true, // Auto-start on mount
-    interval: 7000, // 7 seconds
+  const queryClient = useQueryClient();
+
+  // Disable auto-sync to prevent excessive refreshing
+  // User can manually refresh using the button
+  const { state, syncNow } = useAutoSync({
+    enabled: false, // Disabled - only manual refresh
+    interval: 60000, // 1 minute (if enabled)
     onSync: (result) => {
+      // Invalidate React Query cache to refetch ONLY airdrops data
+      queryClient.invalidateQueries({
+        queryKey: ['airdrops'],
+        refetchType: 'active', // Only refetch active queries, not inactive ones
+      });
+
       // Log successful sync for debugging
       if (result.data && (result.data.created > 0 || result.data.updated > 0)) {
         console.log(`✅ Data synced: Created ${result.data.created}, Updated ${result.data.updated}`);
@@ -47,28 +57,27 @@ export default function Home() {
     },
   });
 
-  // Log sync status for debugging
-  useEffect(() => {
-    if (state.isRunning) {
-      console.log(
-        `🔄 Auto-sync active | Syncs: ${state.syncCount} | Errors: ${state.errorCount} | Last: ${state.lastSync?.toLocaleTimeString() || "N/A"}`
-      );
-    }
-  }, [state]);
+  const handleManualRefresh = () => {
+    console.log('🔄 Manual refresh triggered');
+    syncNow();
+  };
 
   return (
     <div className="min-h-screen bg-background" suppressHydrationWarning>
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-7xl">
-        {/* Auto-sync status indicator (hidden in production) */}
-        {process.env.NODE_ENV === "development" && state.isRunning && (
-          <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-sm">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-            <span className="text-emerald-400">
-              Auto-sync: {state.syncCount} syncs
-            </span>
-          </div>
-        )}
+      {/* Sync Status Indicator - Fixed top-right */}
+      <div className="fixed top-20 right-4 z-30">
+        <SyncStatusIndicator
+          isRunning={state.isRunning}
+          isSyncing={state.isSyncing}
+          secondsUntilNextSync={state.secondsUntilNextSync}
+          syncCount={state.syncCount}
+          errorCount={state.errorCount}
+          lastSync={state.lastSync}
+          onManualRefresh={handleManualRefresh}
+        />
+      </div>
 
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-7xl">
         <AirdropsTable />
       </div>
     </div>

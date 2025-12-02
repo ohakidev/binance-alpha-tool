@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useState, useMemo, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useMemo, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   useReactTable,
   getCoreRowModel,
@@ -12,8 +12,8 @@ import {
   SortingState,
   ColumnFiltersState,
   flexRender,
-} from '@tanstack/react-table';
-import { motion } from 'framer-motion';
+} from "@tanstack/react-table";
+import { motion } from "framer-motion";
 import {
   Calendar,
   Trophy,
@@ -32,17 +32,17 @@ import {
   X,
   Send,
   Bell,
-} from 'lucide-react';
-import { formatDistanceToNow, format } from 'date-fns';
-import { th } from 'date-fns/locale';
+} from "lucide-react";
+import { formatDistanceToNow, format } from "date-fns";
+import { th } from "date-fns/locale";
 
 // UI Components
-import { Card, CardHeader, CardContent } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -50,24 +50,24 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { ParticleEffect } from '@/components/ui/particle-effect';
-import { GlowCard } from '@/components/ui/glow-card';
-import { ShimmerButton } from '@/components/ui/shimmer-button';
-import { useTelegram } from '@/lib/hooks/use-telegram';
+} from "@/components/ui/dropdown-menu";
+import { ParticleEffect } from "@/components/ui/particle-effect";
+import { GlowCard } from "@/components/ui/glow-card";
+import { ShimmerButton } from "@/components/ui/shimmer-button";
+import { useTelegram } from "@/lib/hooks/use-telegram";
 
 // Types
 interface Airdrop {
@@ -87,7 +87,7 @@ interface Airdrop {
   website?: string;
   twitter?: string;
   // New fields
-  type: 'TGE' | 'PreTGE' | 'Airdrop';
+  type: "TGE" | "PreTGE" | "Airdrop";
   requiredPoints: number;
   deductPoints: number;
   contractAddress: string;
@@ -109,95 +109,105 @@ interface ClaimRecord {
 
 // Chain colors
 const chainColors: Record<string, string> = {
-  BSC: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
-  ETH: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
-  Polygon: 'bg-violet-500/10 text-violet-400 border-violet-500/30',
-  Solana: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+  BSC: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30",
+  ETH: "bg-purple-500/10 text-purple-400 border-purple-500/30",
+  Polygon: "bg-violet-500/10 text-violet-400 border-violet-500/30",
+  Solana: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
 };
 
 // Mock claim history data
 const mockClaimHistory: ClaimRecord[] = [
   {
-    id: '1',
-    projectName: 'Zeta Protocol',
-    symbol: 'ZETA',
-    logo: '🚀',
-    chain: 'BSC',
+    id: "1",
+    projectName: "Zeta Protocol",
+    symbol: "ZETA",
+    logo: "🚀",
+    chain: "BSC",
     pointsUsed: 1000,
-    amountReceived: '500 ZETA',
+    amountReceived: "500 ZETA",
     pricePerToken: 0.25,
     totalValue: 125,
-    claimedAt: '2025-01-15T10:30:00Z',
+    claimedAt: "2025-01-15T10:30:00Z",
     currentValue: 150,
   },
   {
-    id: '2',
-    projectName: 'Luna Finance',
-    symbol: 'LUNA',
-    logo: '🌙',
-    chain: 'ETH',
+    id: "2",
+    projectName: "Luna Finance",
+    symbol: "LUNA",
+    logo: "🌙",
+    chain: "ETH",
     pointsUsed: 500,
-    amountReceived: '200 LUNA',
+    amountReceived: "200 LUNA",
     pricePerToken: 1.2,
     totalValue: 240,
-    claimedAt: '2025-01-10T14:20:00Z',
+    claimedAt: "2025-01-10T14:20:00Z",
     currentValue: 220,
   },
   {
-    id: '3',
-    projectName: 'Star Wallet',
-    symbol: 'STAR',
-    logo: '⭐',
-    chain: 'Polygon',
+    id: "3",
+    projectName: "Star Wallet",
+    symbol: "STAR",
+    logo: "⭐",
+    chain: "Polygon",
     pointsUsed: 800,
-    amountReceived: '1000 STAR',
+    amountReceived: "1000 STAR",
     pricePerToken: 0.08,
     totalValue: 80,
-    claimedAt: '2025-01-05T09:15:00Z',
+    claimedAt: "2025-01-05T09:15:00Z",
     currentValue: 95,
   },
 ];
 
 export function AirdropsTable() {
-  const [activeTab, setActiveTab] = useState<'live' | 'upcoming' | 'history'>('live');
+  const [activeTab, setActiveTab] = useState<"live" | "upcoming" | "history">(
+    "live",
+  );
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [selectedAirdrop, setSelectedAirdrop] = useState<Airdrop | null>(null);
   const [selectedChains, setSelectedChains] = useState<string[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const { isLoading: isSendingTelegram, sendAirdropAlert, testConnection } = useTelegram();
+  const [searchQuery, setSearchQuery] = useState("");
+  const {
+    isLoading: isSendingTelegram,
+    sendAirdropAlert,
+    testConnection,
+  } = useTelegram();
 
   // Query for live airdrops
   const { data: liveData, isLoading: liveLoading } = useQuery({
-    queryKey: ['airdrops', 'live'],
+    queryKey: ["airdrops", "live"],
     queryFn: async () => {
-      const res = await fetch('/api/binance/alpha/airdrops?status=claimable');
+      const res = await fetch("/api/binance/alpha/airdrops?status=claimable");
       const json = await res.json();
       return json.data as Airdrop[];
     },
-    enabled: activeTab === 'live',
-    refetchInterval: 7000, // 7 วินาที
+    enabled: activeTab === "live",
+    refetchInterval: false, // Disabled - use manual refresh button
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
   // Query for upcoming airdrops
   const { data: upcomingData, isLoading: upcomingLoading } = useQuery({
-    queryKey: ['airdrops', 'upcoming'],
+    queryKey: ["airdrops", "upcoming"],
     queryFn: async () => {
-      const res = await fetch('/api/binance/alpha/airdrops?status=upcoming');
+      const res = await fetch("/api/binance/alpha/airdrops?status=upcoming");
       const json = await res.json();
       return json.data as Airdrop[];
     },
-    enabled: activeTab === 'upcoming',
-    refetchInterval: 7000, // 7 วินาที
+    enabled: activeTab === "upcoming",
+    refetchInterval: false, // Disabled - use manual refresh button
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
   // Filter and search data
   const filteredData = useMemo(() => {
     let data: (Airdrop | ClaimRecord)[] = [];
 
-    if (activeTab === 'history') {
+    if (activeTab === "history") {
       data = mockClaimHistory;
-    } else if (activeTab === 'upcoming') {
+    } else if (activeTab === "upcoming") {
       data = upcomingData || [];
     } else {
       data = liveData || [];
@@ -211,32 +221,41 @@ export function AirdropsTable() {
     // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      data = data.filter((item) =>
-        item.projectName.toLowerCase().includes(query) ||
-        item.symbol.toLowerCase().includes(query)
+      data = data.filter(
+        (item) =>
+          item.projectName.toLowerCase().includes(query) ||
+          item.symbol.toLowerCase().includes(query),
       );
     }
 
     return data;
   }, [activeTab, liveData, upcomingData, selectedChains, searchQuery]);
 
-  const isLoading = activeTab === 'live' ? liveLoading : activeTab === 'upcoming' ? upcomingLoading : false;
+  const isLoading =
+    activeTab === "live"
+      ? liveLoading
+      : activeTab === "upcoming"
+        ? upcomingLoading
+        : false;
 
   // Calculate stats
   const stats = useMemo(() => {
-    if (activeTab === 'history') {
+    if (activeTab === "history") {
       const totalClaimed = mockClaimHistory.length;
-      const totalValue = mockClaimHistory.reduce((sum, r) => sum + (r.currentValue || r.totalValue), 0);
+      const totalValue = mockClaimHistory.reduce(
+        (sum, r) => sum + (r.currentValue || r.totalValue),
+        0,
+      );
       const totalProfit = mockClaimHistory.reduce(
         (sum, r) => sum + ((r.currentValue || r.totalValue) - r.totalValue),
-        0
+        0,
       );
       return { count: totalClaimed, totalValue, totalProfit };
     } else {
       const count = filteredData.length;
       const totalValue = filteredData.reduce(
         (sum, item) => sum + ((item as Airdrop).estimatedValue || 0),
-        0
+        0,
       );
       return { count, totalValue, totalProfit: 0 };
     }
@@ -249,245 +268,287 @@ export function AirdropsTable() {
 
   const handleChainToggle = useCallback((chain: string, checked: boolean) => {
     if (checked) {
-      setSelectedChains(prev => [...prev, chain]);
+      setSelectedChains((prev) => [...prev, chain]);
     } else {
-      setSelectedChains(prev => prev.filter((c) => c !== chain));
+      setSelectedChains((prev) => prev.filter((c) => c !== chain));
     }
   }, []);
 
   // Columns for live/upcoming airdrops (memoized)
-  const airdropColumns: ColumnDef<Airdrop>[] = useMemo(() => [
-    // 1. โปรเจค (ไม่มีรูป, เป็นลิงก์)
-    {
-      accessorKey: 'projectName',
-      header: 'โปรเจค',
-      cell: ({ row }) => {
-        const airdrop = row.original;
-        const contractLink = airdrop.contractAddress
-          ? `https://debot.ai/token/${airdrop.chain.toLowerCase()}/${airdrop.contractAddress}`
-          : '#';
+  const airdropColumns: ColumnDef<Airdrop>[] = useMemo(
+    () => [
+      // 1. โปรเจค (ไม่มีรูป, เป็นลิงก์)
+      {
+        accessorKey: "projectName",
+        header: "โปรเจค",
+        cell: ({ row }) => {
+          const airdrop = row.original;
+          const contractLink = airdrop.contractAddress
+            ? `https://debot.ai/token/${airdrop.chain.toLowerCase()}/${airdrop.contractAddress}`
+            : "#";
 
-        return (
-          <div className="min-w-0">
-            <a
-              href={contractLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-semibold text-primary hover:text-primary/80 hover:underline transition-colors truncate block"
-              onClick={(e) => !airdrop.contractAddress && e.preventDefault()}
-            >
-              {airdrop.projectName}
-            </a>
-            <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-              <span>{airdrop.symbol}</span>
-              <Badge variant="outline" className={`text-xs h-4 px-1.5 ${chainColors[airdrop.chain]}`}>
-                {airdrop.chain}
-              </Badge>
+          return (
+            <div className="min-w-0">
+              <a
+                href={contractLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-primary hover:text-primary/80 hover:underline transition-colors truncate block"
+                onClick={(e) => !airdrop.contractAddress && e.preventDefault()}
+              >
+                {airdrop.projectName}
+              </a>
+              <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                <span>{airdrop.symbol}</span>
+                <Badge
+                  variant="outline"
+                  className={`text-xs h-4 px-1.5 ${chainColors[airdrop.chain]}`}
+                >
+                  {airdrop.chain}
+                </Badge>
+              </div>
             </div>
-          </div>
-        );
+          );
+        },
       },
-    },
-    // 2. คะแนนที่ต้องการ
-    {
-      accessorKey: 'requiredPoints',
-      header: 'คะแนนที่ต้องการ',
-      cell: ({ row }) => {
-        const airdrop = row.original;
-        return (
-          <div>
-            <div className="font-semibold text-amber-400">
-              {airdrop.requiredPoints || 0} pts
+      // 2. คะแนนที่ต้องการ
+      {
+        accessorKey: "requiredPoints",
+        header: "คะแนนที่ต้องการ",
+        cell: ({ row }) => {
+          const airdrop = row.original;
+          return (
+            <div>
+              <div className="font-semibold text-amber-400">
+                {airdrop.requiredPoints || 0} pts
+              </div>
+              {airdrop.deductPoints > 0 && (
+                <div className="text-xs text-red-400">
+                  -{airdrop.deductPoints} pts
+                </div>
+              )}
             </div>
-            {airdrop.deductPoints > 0 && (
-              <div className="text-xs text-red-400">-{airdrop.deductPoints} pts</div>
-            )}
-          </div>
-        );
+          );
+        },
       },
-    },
-    // 3. ประเภท
-    {
-      accessorKey: 'type',
-      header: 'ประเภท',
-      cell: ({ row }) => {
-        const airdrop = row.original;
-        const typeColors = {
-          TGE: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-          PreTGE: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-          Airdrop: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-        };
+      // 3. ประเภท
+      {
+        accessorKey: "type",
+        header: "ประเภท",
+        cell: ({ row }) => {
+          const airdrop = row.original;
+          const typeColors = {
+            TGE: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+            PreTGE: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+            Airdrop: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
+          };
 
-        return (
-          <Badge variant="outline" className={`text-xs ${typeColors[airdrop.type] || typeColors.Airdrop}`}>
-            {airdrop.type || 'Airdrop'}
-          </Badge>
-        );
+          return (
+            <Badge
+              variant="outline"
+              className={`text-xs ${typeColors[airdrop.type] || typeColors.Airdrop}`}
+            >
+              {airdrop.type || "Airdrop"}
+            </Badge>
+          );
+        },
       },
-    },
-    // 4. จำนวน
-    {
-      accessorKey: 'airdropAmount',
-      header: 'จำนวน',
-      cell: ({ row }) => {
-        const airdrop = row.original;
-        return (
-          <div>
-            <div className="font-semibold text-primary">{airdrop.airdropAmount}</div>
-            {airdrop.estimatedValue && (
-              <div className="text-xs text-muted-foreground">≈ ${airdrop.estimatedValue.toLocaleString()}</div>
-            )}
-          </div>
-        );
-      },
-    },
-    // 5. เวลา
-    {
-      accessorKey: activeTab === 'live' ? 'claimEndDate' : 'claimStartDate',
-      header: activeTab === 'live' ? 'เวลาที่เหลือ' : 'เริ่มใน',
-      cell: ({ row }) => {
-        const airdrop = row.original;
-        const targetDate = activeTab === 'live' ? airdrop.claimEndDate : airdrop.claimStartDate;
-
-        if (!targetDate) return <span className="text-xs text-muted-foreground">TBA</span>;
-
-        const timeText = formatDistanceToNow(new Date(targetDate), {
-          locale: th,
-          addSuffix: true,
-        });
-        const dateText = format(new Date(targetDate), 'dd MMM', { locale: th });
-
-        return (
-          <div>
-            <div className={`font-semibold ${activeTab === 'live' ? 'text-red-400' : 'text-cyan-400'}`}>
-              {timeText}
+      // 4. จำนวน
+      {
+        accessorKey: "airdropAmount",
+        header: "จำนวน",
+        cell: ({ row }) => {
+          const airdrop = row.original;
+          return (
+            <div>
+              <div className="font-semibold text-primary">
+                {airdrop.airdropAmount}
+              </div>
+              {airdrop.estimatedValue && (
+                <div className="text-xs text-muted-foreground">
+                  ≈ ${airdrop.estimatedValue.toLocaleString()}
+                </div>
+              )}
             </div>
-            <div className="text-xs text-muted-foreground">{dateText}</div>
-          </div>
-        );
+          );
+        },
       },
-    },
-    // 6. Actions
-    {
-      id: 'actions',
-      header: '',
-      cell: ({ row }) => {
-        const airdrop = row.original;
-        return (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                sendAirdropAlert({
-                  name: airdrop.projectName,
-                  symbol: airdrop.symbol,
-                  chain: airdrop.chain,
-                  status: airdrop.status,
-                  claimStartDate: airdrop.claimStartDate ? new Date(airdrop.claimStartDate) : undefined,
-                  claimEndDate: airdrop.claimEndDate ? new Date(airdrop.claimEndDate) : undefined,
-                  estimatedValue: airdrop.estimatedValue || undefined,
-                  airdropAmount: airdrop.airdropAmount,
-                  requirements: airdrop.requirements,
-                  requiredPoints: airdrop.requiredPoints,
-                  deductPoints: airdrop.deductPoints,
-                  contractAddress: airdrop.contractAddress,
-                });
-              }}
-              className="h-8 text-cyan-500 hover:text-cyan-400"
-              disabled={isSendingTelegram}
-              title="ส่งแจ้งเตือนไป Telegram"
-            >
-              <Send className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleAirdropClick(airdrop)}
-              className="h-8"
-              title="ดูรายละเอียด"
-            >
-              <ExternalLink className="w-4 h-4" />
-            </Button>
-          </div>
-        );
+      // 5. เวลา
+      {
+        accessorKey: activeTab === "live" ? "claimEndDate" : "claimStartDate",
+        header: activeTab === "live" ? "เวลาที่เหลือ" : "เริ่มใน",
+        cell: ({ row }) => {
+          const airdrop = row.original;
+          const targetDate =
+            activeTab === "live"
+              ? airdrop.claimEndDate
+              : airdrop.claimStartDate;
+
+          if (!targetDate)
+            return <span className="text-xs text-muted-foreground">TBA</span>;
+
+          const timeText = formatDistanceToNow(new Date(targetDate), {
+            locale: th,
+            addSuffix: true,
+          });
+          const dateText = format(new Date(targetDate), "dd MMM", {
+            locale: th,
+          });
+
+          return (
+            <div>
+              <div
+                className={`font-semibold ${activeTab === "live" ? "text-red-400" : "text-cyan-400"}`}
+              >
+                {timeText}
+              </div>
+              <div className="text-xs text-muted-foreground">{dateText}</div>
+            </div>
+          );
+        },
       },
-    },
-  ], [handleAirdropClick, activeTab, isSendingTelegram, sendAirdropAlert]);
+      // 6. Actions
+      {
+        id: "actions",
+        header: "",
+        cell: ({ row }) => {
+          const airdrop = row.original;
+          return (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  sendAirdropAlert({
+                    name: airdrop.projectName,
+                    symbol: airdrop.symbol,
+                    chain: airdrop.chain,
+                    status: airdrop.status,
+                    claimStartDate: airdrop.claimStartDate
+                      ? new Date(airdrop.claimStartDate)
+                      : undefined,
+                    claimEndDate: airdrop.claimEndDate
+                      ? new Date(airdrop.claimEndDate)
+                      : undefined,
+                    estimatedValue: airdrop.estimatedValue || undefined,
+                    airdropAmount: airdrop.airdropAmount,
+                    requirements: airdrop.requirements,
+                    requiredPoints: airdrop.requiredPoints,
+                    deductPoints: airdrop.deductPoints,
+                    contractAddress: airdrop.contractAddress,
+                  });
+                }}
+                className="h-8 text-cyan-500 hover:text-cyan-400"
+                disabled={isSendingTelegram}
+                title="ส่งแจ้งเตือนไป Telegram"
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleAirdropClick(airdrop)}
+                className="h-8"
+                title="ดูรายละเอียด"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </Button>
+            </div>
+          );
+        },
+      },
+    ],
+    [handleAirdropClick, activeTab, isSendingTelegram, sendAirdropAlert],
+  );
 
   // Columns for history (memoized)
-  const historyColumns: ColumnDef<ClaimRecord>[] = useMemo(() => [
-    {
-      accessorKey: 'projectName',
-      header: 'โปรเจค',
-      cell: ({ row }) => {
-        const record = row.original;
-        return (
-          <div className="min-w-0">
-            <div className="font-semibold">{record.projectName}</div>
-            <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-              <span>{record.symbol}</span>
-              <Badge variant="outline" className={`text-xs h-4 px-1.5 ${chainColors[record.chain]}`}>
-                {record.chain}
-              </Badge>
+  const historyColumns: ColumnDef<ClaimRecord>[] = useMemo(
+    () => [
+      {
+        accessorKey: "projectName",
+        header: "โปรเจค",
+        cell: ({ row }) => {
+          const record = row.original;
+          return (
+            <div className="min-w-0">
+              <div className="font-semibold">{record.projectName}</div>
+              <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                <span>{record.symbol}</span>
+                <Badge
+                  variant="outline"
+                  className={`text-xs h-4 px-1.5 ${chainColors[record.chain]}`}
+                >
+                  {record.chain}
+                </Badge>
+              </div>
             </div>
-          </div>
-        );
+          );
+        },
       },
-    },
-    {
-      accessorKey: 'amountReceived',
-      header: 'ที่ได้รับ',
-      cell: ({ row }) => {
-        const record = row.original;
-        return (
-          <div>
-            <div className="font-semibold">{record.amountReceived}</div>
-            <div className="text-xs text-muted-foreground">แต้ม: {record.pointsUsed}</div>
-          </div>
-        );
+      {
+        accessorKey: "amountReceived",
+        header: "ที่ได้รับ",
+        cell: ({ row }) => {
+          const record = row.original;
+          return (
+            <div>
+              <div className="font-semibold">{record.amountReceived}</div>
+              <div className="text-xs text-muted-foreground">
+                แต้ม: {record.pointsUsed}
+              </div>
+            </div>
+          );
+        },
       },
-    },
-    {
-      accessorKey: 'totalValue',
-      header: 'มูลค่าเคลม',
-      cell: ({ row }) => (
-        <div className="font-semibold">${row.getValue('totalValue')}</div>
-      ),
-    },
-    {
-      accessorKey: 'currentValue',
-      header: 'มูลค่าปัจจุบัน',
-      cell: ({ row }) => {
-        const record = row.original;
-        const current = record.currentValue || record.totalValue;
-        const profit = current - record.totalValue;
-        const profitPercent = ((profit / record.totalValue) * 100).toFixed(1);
+      {
+        accessorKey: "totalValue",
+        header: "มูลค่าเคลม",
+        cell: ({ row }) => (
+          <div className="font-semibold">${row.getValue("totalValue")}</div>
+        ),
+      },
+      {
+        accessorKey: "currentValue",
+        header: "มูลค่าปัจจุบัน",
+        cell: ({ row }) => {
+          const record = row.original;
+          const current = record.currentValue || record.totalValue;
+          const profit = current - record.totalValue;
+          const profitPercent = ((profit / record.totalValue) * 100).toFixed(1);
 
-        return (
-          <div>
-            <div className="font-semibold text-emerald-400">${current}</div>
-            <div className={`text-xs ${profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-              {profit >= 0 ? '+' : ''}{profitPercent}%
+          return (
+            <div>
+              <div className="font-semibold text-emerald-400">${current}</div>
+              <div
+                className={`text-xs ${profit >= 0 ? "text-emerald-500" : "text-red-500"}`}
+              >
+                {profit >= 0 ? "+" : ""}
+                {profitPercent}%
+              </div>
             </div>
-          </div>
-        );
+          );
+        },
       },
-    },
-    {
-      accessorKey: 'claimedAt',
-      header: 'วันที่',
-      cell: ({ row }) => {
-        const date = new Date(row.getValue('claimedAt'));
-        return (
-          <div>
-            <div className="font-medium">{format(date, 'dd MMM', { locale: th })}</div>
-            <div className="text-xs text-muted-foreground">{format(date, 'HH:mm', { locale: th })}</div>
-          </div>
-        );
+      {
+        accessorKey: "claimedAt",
+        header: "วันที่",
+        cell: ({ row }) => {
+          const date = new Date(row.getValue("claimedAt"));
+          return (
+            <div>
+              <div className="font-medium">
+                {format(date, "dd MMM", { locale: th })}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {format(date, "HH:mm", { locale: th })}
+              </div>
+            </div>
+          );
+        },
       },
-    },
-  ], []);
+    ],
+    [],
+  );
 
   // Table instances
   const airdropTable = useReactTable({
@@ -530,16 +591,17 @@ export function AirdropsTable() {
     },
   });
 
-  const table = activeTab === 'history' ? historyTable : airdropTable;
+  const table = activeTab === "history" ? historyTable : airdropTable;
 
   // Available chains
   const availableChains = useMemo(() => {
     const chains = new Set<string>();
-    const data = activeTab === 'history'
-      ? mockClaimHistory
-      : activeTab === 'upcoming'
-        ? upcomingData || []
-        : liveData || [];
+    const data =
+      activeTab === "history"
+        ? mockClaimHistory
+        : activeTab === "upcoming"
+          ? upcomingData || []
+          : liveData || [];
 
     data.forEach((item) => {
       if (item.chain) chains.add(item.chain);
@@ -550,7 +612,7 @@ export function AirdropsTable() {
   // Clear all filters (memoized)
   const clearFilters = useCallback(() => {
     setSelectedChains([]);
-    setSearchQuery('');
+    setSearchQuery("");
   }, []);
 
   const hasFilters = selectedChains.length > 0 || searchQuery.trim().length > 0;
@@ -619,10 +681,12 @@ export function AirdropsTable() {
                 <div>
                   <div className="text-sm text-muted-foreground mb-1 flex items-center gap-2">
                     <Target className="w-4 h-4" />
-                    {activeTab === 'history' ? 'จำนวนที่เคลม' : 'จำนวนทั้งหมด'}
+                    {activeTab === "history" ? "จำนวนที่เคลม" : "จำนวนทั้งหมด"}
                   </div>
                   <div className="text-3xl font-bold">{stats.count}</div>
-                  <div className="text-xs text-muted-foreground mt-1">โปรเจค</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    โปรเจค
+                  </div>
                 </div>
                 <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
                   <Trophy className="w-6 h-6 text-primary" />
@@ -643,7 +707,7 @@ export function AirdropsTable() {
                 <div>
                   <div className="text-sm text-muted-foreground mb-1 flex items-center gap-2">
                     <DollarSign className="w-4 h-4" />
-                    {activeTab === 'history' ? 'มูลค่าปัจจุบัน' : 'มูลค่ารวม'}
+                    {activeTab === "history" ? "มูลค่าปัจจุบัน" : "มูลค่ารวม"}
                   </div>
                   <div className="text-3xl font-bold text-emerald-400">
                     ${stats.totalValue.toLocaleString()}
@@ -669,22 +733,27 @@ export function AirdropsTable() {
                 <div>
                   <div className="text-sm text-muted-foreground mb-1 flex items-center gap-2">
                     <Clock className="w-4 h-4" />
-                    {activeTab === 'history' ? 'กำไร/ขาดทุน' : 'สถานะ'}
+                    {activeTab === "history" ? "กำไร/ขาดทุน" : "สถานะ"}
                   </div>
-                  {activeTab === 'history' ? (
+                  {activeTab === "history" ? (
                     <>
-                      <div className={`text-3xl font-bold ${stats.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {stats.totalProfit >= 0 ? '+' : ''}${stats.totalProfit.toFixed(2)}
+                      <div
+                        className={`text-3xl font-bold ${stats.totalProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}
+                      >
+                        {stats.totalProfit >= 0 ? "+" : ""}$
+                        {stats.totalProfit.toFixed(2)}
                       </div>
-                      <div className="text-xs text-muted-foreground mt-1">ทั้งหมด</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        ทั้งหมด
+                      </div>
                     </>
                   ) : (
                     <>
                       <div className="text-3xl font-bold text-cyan-400">
-                        {activeTab === 'live' ? 'LIVE' : 'UPCOMING'}
+                        {activeTab === "live" ? "LIVE" : "UPCOMING"}
                       </div>
                       <div className="text-xs text-muted-foreground mt-1">
-                        {activeTab === 'live' ? 'เปิดเคลมแล้ว' : 'กำลังจะมา'}
+                        {activeTab === "live" ? "เปิดเคลมแล้ว" : "กำลังจะมา"}
                       </div>
                     </>
                   )}
@@ -701,7 +770,13 @@ export function AirdropsTable() {
       {/* Main Card */}
       <Card>
         <CardHeader>
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'live' | 'upcoming' | 'history')} className="w-full">
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) =>
+              setActiveTab(v as "live" | "upcoming" | "history")
+            }
+            className="w-full"
+          >
             <TabsList className="grid w-full grid-cols-3 mb-4">
               <TabsTrigger value="live" className="flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
@@ -737,7 +812,10 @@ export function AirdropsTable() {
                         <Filter className="w-4 h-4" />
                         Chain
                         {selectedChains.length > 0 && (
-                          <Badge variant="secondary" className="ml-1 h-5 px-1.5">
+                          <Badge
+                            variant="secondary"
+                            className="ml-1 h-5 px-1.5"
+                          >
                             {selectedChains.length}
                           </Badge>
                         )}
@@ -748,7 +826,9 @@ export function AirdropsTable() {
                         <DropdownMenuCheckboxItem
                           key={chain}
                           checked={selectedChains.includes(chain)}
-                          onCheckedChange={(checked) => handleChainToggle(chain, checked)}
+                          onCheckedChange={(checked) =>
+                            handleChainToggle(chain, checked)
+                          }
                         >
                           {chain}
                         </DropdownMenuCheckboxItem>
@@ -766,7 +846,11 @@ export function AirdropsTable() {
                     <Badge key={chain} variant="secondary" className="gap-1">
                       {chain}
                       <button
-                        onClick={() => setSelectedChains(selectedChains.filter((c) => c !== chain))}
+                        onClick={() =>
+                          setSelectedChains(
+                            selectedChains.filter((c) => c !== chain),
+                          )
+                        }
                         className="hover:bg-background/20 rounded-full"
                       >
                         <X className="w-3 h-3" />
@@ -777,14 +861,19 @@ export function AirdropsTable() {
                     <Badge variant="secondary" className="gap-1">
                       ค้นหา: {searchQuery}
                       <button
-                        onClick={() => setSearchQuery('')}
+                        onClick={() => setSearchQuery("")}
                         className="hover:bg-background/20 rounded-full"
                       >
                         <X className="w-3 h-3" />
                       </button>
                     </Badge>
                   )}
-                  <Button variant="ghost" size="sm" onClick={clearFilters} className="h-6 text-xs">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearFilters}
+                    className="h-6 text-xs"
+                  >
                     ล้างทั้งหมด
                   </Button>
                 </div>
@@ -805,28 +894,37 @@ export function AirdropsTable() {
                     <Table>
                       <TableHeader>
                         {table.getHeaderGroups().map((headerGroup) => (
-                          <TableRow key={headerGroup.id} className="bg-muted/50">
+                          <TableRow
+                            key={headerGroup.id}
+                            className="bg-muted/50"
+                          >
                             {headerGroup.headers.map((header) => (
                               <TableHead key={header.id}>
                                 {header.isPlaceholder ? null : (
                                   <div
                                     className={
                                       header.column.getCanSort()
-                                        ? 'flex items-center gap-2 cursor-pointer select-none hover:text-foreground'
-                                        : ''
+                                        ? "flex items-center gap-2 cursor-pointer select-none hover:text-foreground"
+                                        : ""
                                     }
                                     onClick={header.column.getToggleSortingHandler()}
                                   >
                                     {flexRender(
                                       header.column.columnDef.header as never,
-                                      header.getContext() as never
+                                      header.getContext() as never,
                                     )}
                                     {header.column.getCanSort() && (
                                       <span className="text-muted-foreground">
                                         {{
-                                          asc: <ChevronUp className="w-4 h-4" />,
-                                          desc: <ChevronDown className="w-4 h-4" />,
-                                        }[header.column.getIsSorted() as string] ?? (
+                                          asc: (
+                                            <ChevronUp className="w-4 h-4" />
+                                          ),
+                                          desc: (
+                                            <ChevronDown className="w-4 h-4" />
+                                          ),
+                                        }[
+                                          header.column.getIsSorted() as string
+                                        ] ?? (
                                           <ChevronsUpDown className="w-4 h-4" />
                                         )}
                                       </span>
@@ -839,38 +937,52 @@ export function AirdropsTable() {
                         ))}
                       </TableHeader>
                       <TableBody>
-                          {table.getRowModel().rows?.length ? (
-                            table.getRowModel().rows.map((row, index) => (
-                              <motion.tr
-                                key={row.id}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: index * 0.05, duration: 0.3 }}
-                                className="border-b transition-all hover:bg-muted/50 hover:shadow-lg group cursor-pointer"
-                                whileHover={{ scale: 1.01 }}
-                              >
-                                {row.getVisibleCells().map((cell) => (
-                                  <TableCell key={cell.id} className="group-hover:text-foreground transition-colors">
-                                    {flexRender(cell.column.columnDef.cell as never, cell.getContext() as never)}
-                                  </TableCell>
-                                ))}
-                              </motion.tr>
-                            ))
-                          ) : (
-                            <TableRow>
-                              <TableCell colSpan={table.getAllColumns().length} className="h-32">
-                                <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                                  <Trophy className="w-16 h-16 opacity-20" />
-                                  <div className="text-center">
-                                    <p className="font-medium">ไม่พบข้อมูล</p>
-                                    <p className="text-sm">
-                                      {hasFilters ? 'ลองปรับเปลี่ยนตัวกรอง' : 'ยังไม่มีข้อมูล'}
-                                    </p>
-                                  </div>
+                        {table.getRowModel().rows?.length ? (
+                          table.getRowModel().rows.map((row, index) => (
+                            <motion.tr
+                              key={row.id}
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{
+                                delay: index * 0.05,
+                                duration: 0.3,
+                              }}
+                              className="border-b transition-all hover:bg-muted/50 hover:shadow-lg group cursor-pointer"
+                              whileHover={{ scale: 1.01 }}
+                            >
+                              {row.getVisibleCells().map((cell) => (
+                                <TableCell
+                                  key={cell.id}
+                                  className="group-hover:text-foreground transition-colors"
+                                >
+                                  {flexRender(
+                                    cell.column.columnDef.cell as never,
+                                    cell.getContext() as never,
+                                  )}
+                                </TableCell>
+                              ))}
+                            </motion.tr>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell
+                              colSpan={table.getAllColumns().length}
+                              className="h-32"
+                            >
+                              <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                                <Trophy className="w-16 h-16 opacity-20" />
+                                <div className="text-center">
+                                  <p className="font-medium">ไม่พบข้อมูล</p>
+                                  <p className="text-sm">
+                                    {hasFilters
+                                      ? "ลองปรับเปลี่ยนตัวกรอง"
+                                      : "ยังไม่มีข้อมูล"}
+                                  </p>
                                 </div>
-                              </TableCell>
-                            </TableRow>
-                          )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
                       </TableBody>
                     </Table>
                   </div>
@@ -879,11 +991,16 @@ export function AirdropsTable() {
                   {table.getPageCount() > 1 && (
                     <div className="flex items-center justify-between mt-4">
                       <div className="text-sm text-muted-foreground">
-                        แสดง {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} ถึง{' '}
+                        แสดง{" "}
+                        {table.getState().pagination.pageIndex *
+                          table.getState().pagination.pageSize +
+                          1}{" "}
+                        ถึง{" "}
                         {Math.min(
-                          (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-                          table.getFilteredRowModel().rows.length
-                        )}{' '}
+                          (table.getState().pagination.pageIndex + 1) *
+                            table.getState().pagination.pageSize,
+                          table.getFilteredRowModel().rows.length,
+                        )}{" "}
                         จาก {table.getFilteredRowModel().rows.length} รายการ
                       </div>
                       <div className="flex gap-2">
@@ -914,15 +1031,23 @@ export function AirdropsTable() {
       </Card>
 
       {/* Detail Dialog */}
-      <Dialog open={!!selectedAirdrop} onOpenChange={() => setSelectedAirdrop(null)}>
+      <Dialog
+        open={!!selectedAirdrop}
+        onOpenChange={() => setSelectedAirdrop(null)}
+      >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <div className="flex-1">
-              <DialogTitle className="text-2xl">{selectedAirdrop?.projectName}</DialogTitle>
+              <DialogTitle className="text-2xl">
+                {selectedAirdrop?.projectName}
+              </DialogTitle>
               <DialogDescription className="flex items-center gap-2 mt-2">
                 <span className="text-lg">{selectedAirdrop?.symbol}</span>
                 {selectedAirdrop && (
-                  <Badge variant="outline" className={chainColors[selectedAirdrop.chain]}>
+                  <Badge
+                    variant="outline"
+                    className={chainColors[selectedAirdrop.chain]}
+                  >
                     {selectedAirdrop.chain}
                   </Badge>
                 )}
@@ -932,11 +1057,12 @@ export function AirdropsTable() {
 
           {selectedAirdrop && (
             <div className="space-y-6 mt-4">
-
               {/* Description */}
               {selectedAirdrop.description && (
                 <div>
-                  <h4 className="font-semibold mb-2 text-sm text-muted-foreground">คำอธิบาย</h4>
+                  <h4 className="font-semibold mb-2 text-sm text-muted-foreground">
+                    คำอธิบาย
+                  </h4>
                   <p className="text-sm">{selectedAirdrop.description}</p>
                 </div>
               )}
@@ -945,8 +1071,12 @@ export function AirdropsTable() {
               <div className="grid grid-cols-2 gap-4">
                 <Card className="bg-primary/5 border-primary/20">
                   <CardContent className="p-4">
-                    <div className="text-sm text-muted-foreground mb-1">จำนวน Airdrop</div>
-                    <div className="text-2xl font-bold text-primary">{selectedAirdrop.airdropAmount}</div>
+                    <div className="text-sm text-muted-foreground mb-1">
+                      จำนวน Airdrop
+                    </div>
+                    <div className="text-2xl font-bold text-primary">
+                      {selectedAirdrop.airdropAmount}
+                    </div>
                     {selectedAirdrop.estimatedValue && (
                       <div className="text-sm text-muted-foreground mt-1">
                         ≈ ${selectedAirdrop.estimatedValue.toLocaleString()} USD
@@ -959,27 +1089,31 @@ export function AirdropsTable() {
                   <Card className="bg-cyan-500/5 border-cyan-500/20">
                     <CardContent className="p-4">
                       <div className="text-sm text-muted-foreground mb-1">
-                        {selectedAirdrop.status === 'live' ? 'สิ้นสุด' : 'เริ่ม'}
+                        {selectedAirdrop.status === "live"
+                          ? "สิ้นสุด"
+                          : "เริ่ม"}
                       </div>
                       <div className="text-2xl font-bold">
                         {formatDistanceToNow(
                           new Date(
-                            selectedAirdrop.status === 'live'
-                              ? selectedAirdrop.claimEndDate || selectedAirdrop.claimStartDate
-                              : selectedAirdrop.claimStartDate
+                            selectedAirdrop.status === "live"
+                              ? selectedAirdrop.claimEndDate ||
+                                selectedAirdrop.claimStartDate
+                              : selectedAirdrop.claimStartDate,
                           ),
-                          { locale: th, addSuffix: true }
+                          { locale: th, addSuffix: true },
                         )}
                       </div>
                       <div className="text-sm text-muted-foreground mt-1">
                         {format(
                           new Date(
-                            selectedAirdrop.status === 'live'
-                              ? selectedAirdrop.claimEndDate || selectedAirdrop.claimStartDate
-                              : selectedAirdrop.claimStartDate
+                            selectedAirdrop.status === "live"
+                              ? selectedAirdrop.claimEndDate ||
+                                selectedAirdrop.claimStartDate
+                              : selectedAirdrop.claimStartDate,
                           ),
-                          'dd MMM yyyy • HH:mm',
-                          { locale: th }
+                          "dd MMM yyyy • HH:mm",
+                          { locale: th },
                         )}
                       </div>
                     </CardContent>
@@ -988,18 +1122,25 @@ export function AirdropsTable() {
               </div>
 
               {/* Requirements */}
-              {selectedAirdrop.requirements && selectedAirdrop.requirements.length > 0 && (
-                <div>
-                  <h4 className="font-semibold mb-3 text-sm text-muted-foreground">ความต้องการ</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedAirdrop.requirements.map((req, i) => (
-                      <Badge key={i} variant="secondary" className="text-sm py-1">
-                        {req}
-                      </Badge>
-                    ))}
+              {selectedAirdrop.requirements &&
+                selectedAirdrop.requirements.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-3 text-sm text-muted-foreground">
+                      ความต้องการ
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedAirdrop.requirements.map((req, i) => (
+                        <Badge
+                          key={i}
+                          variant="secondary"
+                          className="text-sm py-1"
+                        >
+                          {req}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {/* Action Buttons */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1013,9 +1154,14 @@ export function AirdropsTable() {
                         symbol: selectedAirdrop.symbol,
                         chain: selectedAirdrop.chain,
                         status: selectedAirdrop.status,
-                        claimStartDate: selectedAirdrop.claimStartDate ? new Date(selectedAirdrop.claimStartDate) : undefined,
-                        claimEndDate: selectedAirdrop.claimEndDate ? new Date(selectedAirdrop.claimEndDate) : undefined,
-                        estimatedValue: selectedAirdrop.estimatedValue || undefined,
+                        claimStartDate: selectedAirdrop.claimStartDate
+                          ? new Date(selectedAirdrop.claimStartDate)
+                          : undefined,
+                        claimEndDate: selectedAirdrop.claimEndDate
+                          ? new Date(selectedAirdrop.claimEndDate)
+                          : undefined,
+                        estimatedValue:
+                          selectedAirdrop.estimatedValue || undefined,
                         airdropAmount: selectedAirdrop.airdropAmount,
                         requirements: selectedAirdrop.requirements,
                       });
@@ -1029,9 +1175,13 @@ export function AirdropsTable() {
 
                 <Button
                   className="w-full bg-gradient-to-r from-primary via-purple-500 to-cyan-500 hover:opacity-90 text-white font-semibold py-6 text-lg"
-                  onClick={() => window.open('https://www.binance.com/en/alpha', '_blank')}
+                  onClick={() =>
+                    window.open("https://www.binance.com/en/alpha", "_blank")
+                  }
                 >
-                  {selectedAirdrop.status === 'live' ? '🎁 เคลมเลย' : '⏰ ดูรายละเอียด'}
+                  {selectedAirdrop.status === "live"
+                    ? "🎁 เคลมเลย"
+                    : "⏰ ดูรายละเอียด"}
                 </Button>
               </div>
             </div>

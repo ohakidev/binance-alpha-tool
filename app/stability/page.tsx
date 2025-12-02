@@ -1,13 +1,35 @@
 ﻿'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { TrendingUp } from 'lucide-react';
 import { EnhancedStabilityTable } from '@/components/features/stability/enhanced-stability-table';
 import { useLanguage } from '@/lib/stores/language-store';
+import { useAutoSync } from '@/lib/hooks/use-auto-sync';
+import { SyncStatusIndicator } from '@/components/ui/sync-status-indicator';
 
 export default function StabilityPage() {
   const { language } = useLanguage();
+  const queryClient = useQueryClient();
+
+  // Disable auto-sync to prevent excessive refreshing
+  const { state, syncNow } = useAutoSync({
+    enabled: false, // Disabled - only manual refresh
+    interval: 60000, // 1 minute
+    onSync: (result) => {
+      // Invalidate stability query to refetch ONLY this data
+      queryClient.invalidateQueries({
+        queryKey: ['stability'],
+        refetchType: 'active',
+      });
+      if (result.success) {
+        console.log('✅ Stability data synced');
+      }
+    },
+    onError: (error) => {
+      console.error('Stability sync error:', error);
+    },
+  });
 
   const { data: stabilityResponse, isLoading } = useQuery({
     queryKey: ['stability'],
@@ -16,7 +38,9 @@ export default function StabilityPage() {
       if (!res.ok) throw new Error('Failed to fetch');
       return res.json();
     },
-    refetchInterval: 15000,
+    refetchInterval: false, // Disable auto-refetch
+    refetchOnWindowFocus: false, // Don't refetch when window gains focus
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
   });
 
   const stabilityData = stabilityResponse?.data || [];
@@ -33,13 +57,32 @@ export default function StabilityPage() {
     );
   }
 
+  const handleManualRefresh = () => {
+    console.log('🔄 Manual stability refresh triggered');
+    syncNow();
+  };
+
   return (
     <div className="min-h-screen bg-[#fafbfc] dark:bg-gradient-to-br dark:from-slate-950 dark:via-blue-950 dark:to-slate-900 p-4 md:p-8">
+      {/* Sync Status Indicator - Fixed top-right */}
+      <div className="fixed top-20 right-4 z-30">
+        <SyncStatusIndicator
+          isRunning={state.isRunning}
+          isSyncing={state.isSyncing}
+          secondsUntilNextSync={state.secondsUntilNextSync}
+          syncCount={state.syncCount}
+          errorCount={state.errorCount}
+          lastSync={state.lastSync}
+          onManualRefresh={handleManualRefresh}
+        />
+      </div>
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="max-w-7xl mx-auto"
       >
+
         <div className="mb-6">
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}

@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from "react";
 
 interface AutoSyncOptions {
   /**
@@ -28,10 +28,12 @@ interface AutoSyncOptions {
 
 interface AutoSyncState {
   isRunning: boolean;
+  isSyncing: boolean;
   lastSync: Date | null;
   nextSync: Date | null;
   syncCount: number;
   errorCount: number;
+  secondsUntilNextSync: number;
 }
 
 /**
@@ -49,20 +51,47 @@ interface AutoSyncState {
 export function useAutoSync(options: AutoSyncOptions = {}) {
   const {
     enabled = true,
-    interval = parseInt(process.env.NEXT_PUBLIC_ALPHA_SYNC_INTERVAL || '7000'),
+    interval = parseInt(process.env.NEXT_PUBLIC_ALPHA_SYNC_INTERVAL || "60000"), // Changed to 60 seconds (1 minute)
     onSync,
     onError,
   } = options;
 
   const [state, setState] = useState<AutoSyncState>({
     isRunning: false,
+    isSyncing: false,
     lastSync: null,
     nextSync: null,
     syncCount: 0,
     errorCount: 0,
+    secondsUntilNextSync: 0,
   });
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownRef = useRef<NodeJS.Timeout | null>(null);
+
+  /**
+   * Start countdown timer
+   */
+  const startCountdown = () => {
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+    }
+
+    setState((prev) => ({
+      ...prev,
+      secondsUntilNextSync: Math.floor(interval / 1000),
+    }));
+
+    countdownRef.current = setInterval(() => {
+      setState((prev) => {
+        const nextSeconds = prev.secondsUntilNextSync - 1;
+        return {
+          ...prev,
+          secondsUntilNextSync: nextSeconds < 0 ? 0 : nextSeconds,
+        };
+      });
+    }, 1000);
+  };
 
   /**
    * Perform sync operation
@@ -70,17 +99,21 @@ export function useAutoSync(options: AutoSyncOptions = {}) {
    */
   const syncNow = async () => {
     try {
-      console.log('🔄 Triggering auto-sync (client-side)...');
+      setState((prev) => ({ ...prev, isSyncing: true }));
+      console.log("🔄 Triggering auto-sync (client-side)...");
 
       // Step 1: Fetch data via server-side proxy (avoids CORS)
-      console.log('📡 Fetching from real Binance Alpha API...');
-      const fetchResponse = await fetch('/api/binance/alpha/real-sync?force=true', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
+      console.log("📡 Fetching from real Binance Alpha API...");
+      const fetchResponse = await fetch(
+        "/api/binance/alpha/real-sync?force=true",
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          cache: "no-store",
         },
-        cache: 'no-store',
-      });
+      );
 
       if (!fetchResponse.ok) {
         throw new Error(`Sync API error: ${fetchResponse.status}`);
@@ -94,20 +127,25 @@ export function useAutoSync(options: AutoSyncOptions = {}) {
 
         setState((prev) => ({
           ...prev,
+          isSyncing: false,
           lastSync: new Date(),
           nextSync: new Date(Date.now() + interval),
           syncCount: prev.syncCount + 1,
         }));
 
+        // Start countdown for next sync
+        startCountdown();
+
         onSync?.(result);
       } else {
-        throw new Error(result.error || 'Sync failed');
+        throw new Error(result.error || "Sync failed");
       }
     } catch (error) {
-      console.error('❌ Sync error:', error);
+      console.error("❌ Sync error:", error);
 
       setState((prev) => ({
         ...prev,
+        isSyncing: false,
         errorCount: prev.errorCount + 1,
       }));
 
@@ -120,7 +158,7 @@ export function useAutoSync(options: AutoSyncOptions = {}) {
    */
   const start = () => {
     if (intervalRef.current) {
-      console.warn('⚠️ Auto-sync already running');
+      console.warn("⚠️ Auto-sync already running");
       return;
     }
 
@@ -132,8 +170,9 @@ export function useAutoSync(options: AutoSyncOptions = {}) {
       nextSync: new Date(Date.now() + interval),
     }));
 
-    // Sync immediately on start
-    syncNow();
+    // DON'T sync immediately on start - wait for first interval
+    // This prevents initial page refresh
+    startCountdown();
 
     // Set up interval
     intervalRef.current = setInterval(() => {
@@ -148,15 +187,21 @@ export function useAutoSync(options: AutoSyncOptions = {}) {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
-
-      setState((prev) => ({
-        ...prev,
-        isRunning: false,
-        nextSync: null,
-      }));
-
-      console.log('🛑 Auto-sync stopped');
     }
+
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+
+    setState((prev) => ({
+      ...prev,
+      isRunning: false,
+      nextSync: null,
+      secondsUntilNextSync: 0,
+    }));
+
+    console.log("🛑 Auto-sync stopped");
   };
 
   /**

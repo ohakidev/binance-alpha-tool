@@ -1,9 +1,11 @@
-import { NextResponse } from 'next/server';
-import { realAlphaFetcher } from '@/lib/services/real-alpha-fetcher';
-import { prisma } from '@/lib/prisma';
+import { NextResponse } from "next/server";
+import { realAlphaFetcher } from "@/lib/services/real-alpha-fetcher";
+import { prisma } from "@/lib/prisma";
+import { telegramService } from "@/lib/services/telegram";
 
 /**
  * API Route: Sync Alpha Projects from Binance/Alpha123
+ * Automatically sends Telegram notifications for new airdrops
  *
  * GET /api/binance/alpha/sync
  * Query params:
@@ -12,9 +14,11 @@ import { prisma } from '@/lib/prisma';
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const forceRefresh = searchParams.get('force') === 'true';
+    const forceRefresh = searchParams.get("force") === "true";
 
-    console.log('🔄 Starting Alpha projects sync from alpha123.uk...', { forceRefresh });
+    console.log("🔄 Starting Alpha projects sync from alpha123.uk...", {
+      forceRefresh,
+    });
 
     // Fetch real data from alpha123.uk
     const projects = await realAlphaFetcher.fetchAllProjects(forceRefresh);
@@ -23,9 +27,9 @@ export async function GET(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: 'No data received from alpha123.uk',
+          error: "No data received from alpha123.uk",
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -36,8 +40,24 @@ export async function GET(request: Request) {
       created: 0,
       updated: 0,
       failed: 0,
+      notified: 0,
       errors: [] as string[],
     };
+
+    // Store new airdrops for batch notification
+    const newAirdrops: Array<{
+      name: string;
+      symbol: string;
+      chain: string;
+      status: string;
+      claimStartDate?: Date;
+      claimEndDate?: Date;
+      estimatedValue?: number;
+      airdropAmount?: string;
+      requiredPoints?: number;
+      deductPoints?: number;
+      contractAddress?: string;
+    }> = [];
 
     for (const project of projects) {
       try {
@@ -61,11 +81,26 @@ export async function GET(request: Request) {
           console.log(`✏️  Updated: ${prismaData.name} (${prismaData.token})`);
         } else {
           // Create new
-          await prisma.airdrop.create({
+          const newAirdrop = await prisma.airdrop.create({
             data: prismaData,
           });
           syncResults.created++;
           console.log(`✨ Created: ${prismaData.name} (${prismaData.token})`);
+
+          // Add to new airdrops list for notification
+          newAirdrops.push({
+            name: newAirdrop.name,
+            symbol: newAirdrop.token,
+            chain: newAirdrop.chain,
+            status: newAirdrop.status,
+            claimStartDate: newAirdrop.claimStartDate || undefined,
+            claimEndDate: newAirdrop.claimEndDate || undefined,
+            estimatedValue: newAirdrop.estimatedValue || undefined,
+            airdropAmount: newAirdrop.airdropAmount || undefined,
+            requiredPoints: newAirdrop.requiredPoints || undefined,
+            deductPoints: newAirdrop.deductPoints || undefined,
+            contractAddress: newAirdrop.contractAddress || undefined,
+          });
         }
       } catch (error: any) {
         syncResults.failed++;
@@ -75,26 +110,57 @@ export async function GET(request: Request) {
       }
     }
 
-    console.log('✅ Sync completed:', syncResults);
+    // Send Telegram notifications for new airdrops
+    if (newAirdrops.length > 0) {
+      console.log(
+        `📤 Sending Telegram notifications for ${newAirdrops.length} new airdrops...`,
+      );
+
+      for (const airdrop of newAirdrops) {
+        try {
+          const sent = await telegramService.sendAirdropAlert(airdrop);
+          if (sent) {
+            syncResults.notified++;
+            console.log(
+              `✅ Telegram notification sent for: ${airdrop.name} (${airdrop.symbol})`,
+            );
+          } else {
+            console.log(
+              `⚠️ Telegram notification skipped (disabled): ${airdrop.name}`,
+            );
+          }
+
+          // Add small delay between notifications to avoid rate limiting
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        } catch (error: any) {
+          console.error(
+            `❌ Failed to send Telegram notification for ${airdrop.symbol}:`,
+            error.message,
+          );
+        }
+      }
+    }
+
+    console.log("✅ Sync completed:", syncResults);
 
     return NextResponse.json({
       success: true,
       data: {
-        source: 'alpha123.uk',
+        source: "alpha123.uk",
         lastUpdate: new Date().toISOString(),
         total: projects.length,
         ...syncResults,
       },
     });
   } catch (error: any) {
-    console.error('❌ Sync error:', error);
+    console.error("❌ Sync error:", error);
 
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to sync Alpha projects',
+        error: error.message || "Failed to sync Alpha projects",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -106,7 +172,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   // Force refresh on POST
   const url = new URL(request.url);
-  url.searchParams.set('force', 'true');
+  url.searchParams.set("force", "true");
 
   // Call GET with force parameter
   return GET(new Request(url.toString()));

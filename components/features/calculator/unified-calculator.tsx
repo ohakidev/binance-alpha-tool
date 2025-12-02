@@ -43,7 +43,6 @@ export function UnifiedCalculator() {
 
   // Get active user
   const activeUserId = useUserStore((state) => state.activeUserId);
-  const activeUser = useUserStore((state) => state.getActiveUser());
   const getEntriesByUserAndMonth = useIncomeStore((state) => state.getEntriesByUserAndMonth);
 
   // Get current month entries for the active user
