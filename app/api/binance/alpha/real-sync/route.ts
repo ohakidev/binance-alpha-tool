@@ -1,15 +1,18 @@
 /**
  * Real Binance Alpha Sync API
- * Uses official Binance Alpha API
- * Automatically sends Telegram notifications for new airdrops
+ * Uses the new AlphaService with OOP pattern
  *
  * GET /api/binance/alpha/real-sync
  * Query params:
  * - force: boolean (force refresh cache)
+ * - notify: boolean (send telegram notifications, default: true)
+ *
+ * POST /api/binance/alpha/real-sync
+ * Force refresh and sync
  */
 
 import { NextResponse } from "next/server";
-import { binanceAlphaRealService } from "@/lib/services/binance-alpha-real";
+import { alphaService } from "@/lib/services/alpha";
 import { prisma } from "@/lib/prisma";
 import { telegramService } from "@/lib/services/telegram";
 
@@ -19,115 +22,70 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const forceRefresh = searchParams.get("force") === "true";
+    const notifyNew = searchParams.get("notify") !== "false"; // Default: true
 
-    console.log("🔄 Starting real Binance Alpha sync...", { forceRefresh });
+    console.log("🔄 Starting Alpha sync...", {
+      forceRefresh,
+      notifyNew,
+    });
 
-    // Fetch from real Binance Alpha API
-    const response =
-      await binanceAlphaRealService.fetchAlphaProjects(forceRefresh);
+    // Use AlphaService to sync to database
+    const syncResult = await alphaService.syncToDatabase();
 
-    if (!response.success || !response.data || response.data.length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "No data received from Binance Alpha API",
-        },
-        { status: 500 },
-      );
+    if (!syncResult.success && syncResult.errors > 0) {
+      console.warn(`⚠️ Sync completed with ${syncResult.errors} errors`);
     }
 
-    console.log(
-      `📦 Received ${response.data.length} projects from Binance Alpha`,
-    );
+    // Get stats from service
+    const stats = await alphaService.getStats();
+    console.log("📊 Stats:", stats);
 
-    // Sync to database
-    const syncResults = {
-      created: 0,
-      updated: 0,
-      failed: 0,
-      notified: 0,
-      errors: [] as string[],
-    };
+    // Get tokens for notification
+    const response = await alphaService.getTokens(false);
+    const tokens = response.data;
 
-    // Store new airdrops for batch notification
-    const newAirdrops: Array<{
-      name: string;
-      symbol: string;
-      chain: string;
-      status: string;
-      claimStartDate?: Date;
-      claimEndDate?: Date;
-      estimatedValue?: number;
-      airdropAmount?: string;
-      requiredPoints?: number;
-      deductPoints?: number;
-      contractAddress?: string;
-    }> = [];
+    // Track notifications
+    let notified = 0;
 
-    for (const project of response.data) {
-      try {
-        const prismaData = binanceAlphaRealService.toPrismaFormat(project);
-
-        // Check if project exists
-        const existing = await prisma.airdrop.findUnique({
-          where: { token: prismaData.token },
-        });
-
-        if (existing) {
-          // Update existing
-          await prisma.airdrop.update({
-            where: { token: prismaData.token },
-            data: {
-              ...prismaData,
-              updatedAt: new Date(),
-            },
-          });
-          syncResults.updated++;
-          console.log(`✏️  Updated: ${prismaData.name} (${prismaData.token})`);
-        } else {
-          // Create new
-          const newAirdrop = await prisma.airdrop.create({
-            data: prismaData,
-          });
-          syncResults.created++;
-          console.log(`✨ Created: ${prismaData.name} (${prismaData.token})`);
-
-          // Add to new airdrops list for notification
-          newAirdrops.push({
-            name: newAirdrop.name,
-            symbol: newAirdrop.token,
-            chain: newAirdrop.chain,
-            status: newAirdrop.status,
-            claimStartDate: newAirdrop.claimStartDate || undefined,
-            claimEndDate: newAirdrop.claimEndDate || undefined,
-            estimatedValue: newAirdrop.estimatedValue || undefined,
-            airdropAmount: newAirdrop.airdropAmount || undefined,
-            requiredPoints: newAirdrop.requiredPoints || undefined,
-            deductPoints: newAirdrop.deductPoints || undefined,
-            contractAddress: newAirdrop.contractAddress || undefined,
-          });
-        }
-      } catch (error: any) {
-        syncResults.failed++;
-        const errorMsg = `Failed to sync ${project.symbol}: ${error.message}`;
-        syncResults.errors.push(errorMsg);
-        console.error(`❌ ${errorMsg}`);
-      }
-    }
-
-    // Send Telegram notifications for new airdrops
-    if (newAirdrops.length > 0) {
+    // Send Telegram notifications for newly created airdrops
+    if (syncResult.created > 0 && notifyNew) {
       console.log(
-        `📤 Sending Telegram notifications for ${newAirdrops.length} new airdrops...`,
+        `📤 Sending Telegram notifications for ${syncResult.created} new airdrops...`,
       );
 
-      for (const airdrop of newAirdrops) {
+      // Get recently created airdrops from database
+      const recentAirdrops = await prisma.airdrop.findMany({
+        where: {
+          createdAt: {
+            gte: new Date(Date.now() - 60000), // Created in last minute
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: syncResult.created,
+      });
+
+      for (const airdrop of recentAirdrops) {
         try {
-          const sent = await telegramService.sendAirdropAlert(airdrop);
+          const sent = await telegramService.sendAirdropAlert({
+            name: airdrop.name,
+            symbol: airdrop.token,
+            chain: airdrop.chain,
+            status: airdrop.status,
+            claimStartDate: airdrop.claimStartDate || undefined,
+            claimEndDate: airdrop.claimEndDate || undefined,
+            estimatedValue: airdrop.estimatedValue || undefined,
+            airdropAmount: airdrop.airdropAmount || undefined,
+            requiredPoints: airdrop.requiredPoints || undefined,
+            deductPoints: airdrop.deductPoints || undefined,
+            contractAddress: airdrop.contractAddress || undefined,
+          });
+
           if (sent) {
-            syncResults.notified++;
+            notified++;
             console.log(
-              `✅ Telegram notification sent for: ${airdrop.name} (${airdrop.symbol})`,
+              `✅ Telegram notification sent for: ${airdrop.name} (${airdrop.token})`,
             );
           } else {
             console.log(
@@ -137,34 +95,62 @@ export async function GET(request: Request) {
 
           // Add small delay between notifications to avoid rate limiting
           await new Promise((resolve) => setTimeout(resolve, 100));
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
           console.error(
-            `❌ Failed to send Telegram notification for ${airdrop.symbol}:`,
-            error.message,
+            `❌ Failed to send Telegram notification for ${airdrop.token}:`,
+            errorMessage,
           );
         }
       }
     }
 
-    console.log("✅ Sync completed:", syncResults);
+    console.log("✅ Sync completed:", {
+      ...syncResult,
+      notified,
+    });
+
+    // Get database counts
+    const dbCounts = await prisma.airdrop.groupBy({
+      by: ["status"],
+      _count: { status: true },
+    });
+
+    const dbStats = {
+      total: await prisma.airdrop.count(),
+      byStatus: Object.fromEntries(
+        dbCounts.map((item) => [item.status, item._count.status]),
+      ),
+    };
 
     return NextResponse.json({
       success: true,
       data: {
-        source: "binance-alpha",
-        lastUpdate: response.lastUpdate.toISOString(),
-        total: response.data.length,
-        ...syncResults,
+        source: syncResult.source,
+        lastUpdate: syncResult.timestamp.toISOString(),
+        duration: syncResult.duration,
+        apiStats: stats,
+        dbStats,
+        syncResults: {
+          total: tokens.length,
+          created: syncResult.created,
+          updated: syncResult.updated,
+          unchanged: syncResult.unchanged,
+          failed: syncResult.errors,
+          notified,
+        },
       },
     });
-  } catch (error: any) {
-    console.error("❌ Real sync error:", error);
+  } catch (error: unknown) {
+    console.error("❌ Sync error:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
 
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Failed to sync from Binance Alpha API",
-        details: error.toString(),
+        error: errorMessage || "Failed to sync from Alpha API",
+        details: String(error),
       },
       { status: 500 },
     );

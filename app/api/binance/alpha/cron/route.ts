@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { realAlphaFetcher } from "@/lib/services/real-alpha-fetcher";
+import { alphaService } from "@/lib/services/alpha";
 import { prisma } from "@/lib/prisma";
 import { telegramService } from "@/lib/services/telegram";
 
@@ -7,6 +7,8 @@ import { telegramService } from "@/lib/services/telegram";
  * API Route: Auto-Sync Cron Job
  *
  * GET /api/binance/alpha/cron
+ *
+ * Uses the new AlphaService with OOP pattern for data fetching
  *
  * This endpoint is designed to be called by:
  * 1. Vercel Cron Jobs (in production)
@@ -16,8 +18,9 @@ import { telegramService } from "@/lib/services/telegram";
  * Security: Protected by CRON_SECRET environment variable
  *
  * Features:
- * - Automatically syncs data from alpha123.uk
+ * - Automatically syncs data from Alpha data sources
  * - Sends Telegram notifications for new airdrops
+ * - Updates existing airdrops with latest data
  */
 export async function GET(request: Request) {
   try {
@@ -38,110 +41,62 @@ export async function GET(request: Request) {
     }
 
     console.log(
-      "⏰ Cron job triggered - Starting auto-sync from alpha123.uk...",
+      "⏰ Cron job triggered - Starting auto-sync from Alpha Service...",
     );
 
-    // Fetch latest data from alpha123.uk
-    const projects = await realAlphaFetcher.fetchAllProjects(true); // Force refresh
+    // Use AlphaService to sync to database
+    const syncResult = await alphaService.syncToDatabase();
 
-    if (!projects || projects.length === 0) {
-      console.warn("⚠️ No data received from alpha123.uk");
-      return NextResponse.json({
-        success: false,
-        error: "No data available",
-        timestamp: new Date().toISOString(),
-      });
+    if (!syncResult.success && syncResult.errors > 0) {
+      console.warn(`⚠️ Sync completed with ${syncResult.errors} errors`);
     }
 
-    console.log(`📦 Received ${projects.length} projects from alpha123.uk`);
+    // Get stats from service
+    const stats = await alphaService.getStats();
+    console.log("📊 Stats:", stats);
 
-    // Sync to database
-    const syncResults = {
-      created: 0,
-      updated: 0,
-      failed: 0,
-      notified: 0,
-      errors: [] as string[],
-    };
+    // Track notifications
+    let notified = 0;
 
-    // Store new airdrops for batch notification
-    const newAirdrops: Array<{
-      name: string;
-      symbol: string;
-      chain: string;
-      status: string;
-      claimStartDate?: Date;
-      claimEndDate?: Date;
-      estimatedValue?: number;
-      airdropAmount?: string;
-      requiredPoints?: number;
-      deductPoints?: number;
-      contractAddress?: string;
-    }> = [];
-
-    for (const project of projects) {
-      try {
-        const prismaData = realAlphaFetcher.toPrismaFormat(project);
-
-        // Check if project exists
-        const existing = await prisma.airdrop.findUnique({
-          where: { token: prismaData.token },
-        });
-
-        if (existing) {
-          // Update existing
-          await prisma.airdrop.update({
-            where: { token: prismaData.token },
-            data: {
-              ...prismaData,
-              updatedAt: new Date(),
-            },
-          });
-          syncResults.updated++;
-        } else {
-          // Create new
-          const newAirdrop = await prisma.airdrop.create({
-            data: prismaData,
-          });
-          syncResults.created++;
-          console.log(`✨ Created: ${prismaData.name} (${prismaData.token})`);
-
-          // Add to new airdrops list for notification
-          newAirdrops.push({
-            name: newAirdrop.name,
-            symbol: newAirdrop.token,
-            chain: newAirdrop.chain,
-            status: newAirdrop.status,
-            claimStartDate: newAirdrop.claimStartDate || undefined,
-            claimEndDate: newAirdrop.claimEndDate || undefined,
-            estimatedValue: newAirdrop.estimatedValue || undefined,
-            airdropAmount: newAirdrop.airdropAmount || undefined,
-            requiredPoints: newAirdrop.requiredPoints || undefined,
-            deductPoints: newAirdrop.deductPoints || undefined,
-            contractAddress: newAirdrop.contractAddress || undefined,
-          });
-        }
-      } catch (error: any) {
-        syncResults.failed++;
-        const errorMsg = `${project.token}: ${error.message}`;
-        syncResults.errors.push(errorMsg);
-        console.error(`❌ ${errorMsg}`);
-      }
-    }
-
-    // Send Telegram notifications for new airdrops
-    if (newAirdrops.length > 0) {
+    // Send Telegram notifications for newly created airdrops
+    if (syncResult.created > 0) {
       console.log(
-        `📤 Sending Telegram notifications for ${newAirdrops.length} new airdrops...`,
+        `📤 Sending Telegram notifications for ${syncResult.created} new airdrops...`,
       );
 
-      for (const airdrop of newAirdrops) {
+      // Get recently created airdrops from database
+      const recentAirdrops = await prisma.airdrop.findMany({
+        where: {
+          createdAt: {
+            gte: new Date(Date.now() - 60000), // Created in last minute
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: syncResult.created,
+      });
+
+      for (const airdrop of recentAirdrops) {
         try {
-          const sent = await telegramService.sendAirdropAlert(airdrop);
+          const sent = await telegramService.sendAirdropAlert({
+            name: airdrop.name,
+            symbol: airdrop.token,
+            chain: airdrop.chain,
+            status: airdrop.status,
+            claimStartDate: airdrop.claimStartDate || undefined,
+            claimEndDate: airdrop.claimEndDate || undefined,
+            estimatedValue: airdrop.estimatedValue || undefined,
+            airdropAmount: airdrop.airdropAmount || undefined,
+            requiredPoints: airdrop.requiredPoints || undefined,
+            deductPoints: airdrop.deductPoints || undefined,
+            contractAddress: airdrop.contractAddress || undefined,
+          });
+
           if (sent) {
-            syncResults.notified++;
+            notified++;
             console.log(
-              `✅ Telegram notification sent for: ${airdrop.name} (${airdrop.symbol})`,
+              `✅ Telegram notification sent for: ${airdrop.name} (${airdrop.token})`,
             );
           } else {
             console.log(
@@ -151,34 +106,62 @@ export async function GET(request: Request) {
 
           // Add small delay between notifications to avoid rate limiting
           await new Promise((resolve) => setTimeout(resolve, 100));
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
           console.error(
-            `❌ Failed to send Telegram notification for ${airdrop.symbol}:`,
-            error.message,
+            `❌ Failed to send Telegram notification for ${airdrop.token}:`,
+            errorMessage,
           );
         }
       }
     }
 
-    console.log("✅ Cron sync completed:", syncResults);
+    console.log("✅ Cron sync completed:", {
+      ...syncResult,
+      notified,
+    });
+
+    // Get database counts
+    const dbCounts = await prisma.airdrop.groupBy({
+      by: ["status"],
+      _count: { status: true },
+    });
+
+    const dbStats = {
+      total: await prisma.airdrop.count(),
+      byStatus: Object.fromEntries(
+        dbCounts.map((item) => [item.status, item._count.status]),
+      ),
+    };
 
     return NextResponse.json({
       success: true,
       data: {
-        source: "alpha123.uk",
-        lastUpdate: new Date().toISOString(),
-        total: projects.length,
-        ...syncResults,
+        source: syncResult.source,
+        lastUpdate: syncResult.timestamp.toISOString(),
+        duration: syncResult.duration,
+        apiStats: stats,
+        dbStats,
+        syncResults: {
+          total: stats.total,
+          created: syncResult.created,
+          updated: syncResult.updated,
+          unchanged: syncResult.unchanged,
+          failed: syncResult.errors,
+          notified,
+        },
       },
       timestamp: new Date().toISOString(),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("❌ Cron job error:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
 
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Cron job failed",
+        error: errorMessage || "Cron job failed",
         timestamp: new Date().toISOString(),
       },
       { status: 500 },

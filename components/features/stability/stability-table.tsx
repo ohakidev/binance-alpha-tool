@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useMemo } from "react";
+import { motion } from "framer-motion";
 import {
   useReactTable,
   getCoreRowModel,
@@ -12,18 +12,18 @@ import {
   createColumnHelper,
   SortingState,
   ColumnFiltersState,
-} from '@tanstack/react-table';
-import { useLanguage } from '@/lib/stores/language-store';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  AlertTriangle, 
-  CheckCircle2, 
+} from "@tanstack/react-table";
+import { useLanguage } from "@/lib/stores/language-store";
+import {
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  CheckCircle2,
   Search,
   ArrowUpDown,
   ChevronLeft,
-  ChevronRight
-} from 'lucide-react';
+  ChevronRight,
+} from "lucide-react";
 
 interface StabilityData {
   symbol: string;
@@ -31,25 +31,25 @@ interface StabilityData {
   change24h: number;
   volume24h: number;
   stabilityScore: number;
-  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  riskLevel: "LOW" | "MEDIUM" | "HIGH";
   volatilityIndex: number;
 }
 
 const columnHelper = createColumnHelper<StabilityData>();
 
 export function StabilityTable({ data }: { data: StabilityData[] }) {
-  const { t, language } = useLanguage();
+  const { language } = useLanguage();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [globalFilter, setGlobalFilter] = useState('');
+  const [globalFilter, setGlobalFilter] = useState("");
 
   // Ensure data is always an array
   const safeData = Array.isArray(data) ? data : [];
 
   const columns = useMemo(
     () => [
-      columnHelper.accessor('symbol', {
-        header: language === 'th' ? 'สัญลักษณ์' : 'Symbol',
+      columnHelper.accessor("symbol", {
+        header: language === "th" ? "สัญลักษณ์" : "Symbol",
         cell: (info) => (
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center shadow-lg">
@@ -58,16 +58,18 @@ export function StabilityTable({ data }: { data: StabilityData[] }) {
               </span>
             </div>
             <div>
-              <p className="font-bold text-slate-900 dark:text-white">{info.getValue()}</p>
+              <p className="font-bold text-slate-900 dark:text-white">
+                {info.getValue()}
+              </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {language === 'th' ? 'BNB Chain' : 'BNB Chain'}
+                {language === "th" ? "BNB Chain" : "BNB Chain"}
               </p>
             </div>
           </div>
         ),
       }),
-      columnHelper.accessor('price', {
-        header: language === 'th' ? 'ราคา' : 'Price',
+      columnHelper.accessor("price", {
+        header: language === "th" ? "ราคา" : "Price",
         cell: (info) => (
           <div className="text-right">
             <p className="font-bold text-lg text-slate-900 dark:text-white">
@@ -76,8 +78,8 @@ export function StabilityTable({ data }: { data: StabilityData[] }) {
           </div>
         ),
       }),
-      columnHelper.accessor('change24h', {
-        header: language === 'th' ? 'เปลี่ยนแปลง 24ชม.' : '24h Change',
+      columnHelper.accessor("change24h", {
+        header: language === "th" ? "เปลี่ยนแปลง 24ชม." : "24h Change",
         cell: (info) => {
           const value = info.getValue();
           const isPositive = value >= 0;
@@ -91,19 +93,19 @@ export function StabilityTable({ data }: { data: StabilityData[] }) {
               <span
                 className={`font-bold ${
                   isPositive
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-rose-600 dark:text-rose-400'
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-rose-600 dark:text-rose-400"
                 }`}
               >
-                {isPositive ? '+' : ''}
+                {isPositive ? "+" : ""}
                 {value.toFixed(2)}%
               </span>
             </div>
           );
         },
       }),
-      columnHelper.accessor('volume24h', {
-        header: language === 'th' ? 'ปริมาณ 24ชม.' : '24h Volume',
+      columnHelper.accessor("volume24h", {
+        header: language === "th" ? "ปริมาณ 24ชม." : "24h Volume",
         cell: (info) => (
           <div className="text-right">
             <p className="font-semibold text-slate-700 dark:text-slate-300">
@@ -112,15 +114,15 @@ export function StabilityTable({ data }: { data: StabilityData[] }) {
           </div>
         ),
       }),
-      columnHelper.accessor('stabilityScore', {
-        header: language === 'th' ? 'คะแนนความเสถียร' : 'Stability Score',
+      columnHelper.accessor("stabilityScore", {
+        header: language === "th" ? "คะแนนความเสถียร" : "Stability Score",
         cell: (info) => {
           const score = info.getValue();
           const getColor = () => {
-            if (score >= 80) return 'from-emerald-500 to-teal-500';
-            if (score >= 60) return 'from-cyan-500 to-blue-500';
-            if (score >= 40) return 'from-amber-500 to-orange-500';
-            return 'from-rose-500 to-pink-500';
+            if (score >= 80) return "from-emerald-500 to-teal-500";
+            if (score >= 60) return "from-cyan-500 to-blue-500";
+            if (score >= 40) return "from-amber-500 to-orange-500";
+            return "from-rose-500 to-pink-500";
           };
           return (
             <div className="flex items-center gap-3">
@@ -129,7 +131,7 @@ export function StabilityTable({ data }: { data: StabilityData[] }) {
                   className={`h-full bg-gradient-to-r ${getColor()} rounded-full`}
                   initial={{ width: 0 }}
                   animate={{ width: `${score}%` }}
-                  transition={{ duration: 0.5, ease: 'easeOut' }}
+                  transition={{ duration: 0.5, ease: "easeOut" }}
                 />
               </div>
               <span className="font-bold text-sm text-slate-900 dark:text-white w-12 text-right">
@@ -139,24 +141,27 @@ export function StabilityTable({ data }: { data: StabilityData[] }) {
           );
         },
       }),
-      columnHelper.accessor('riskLevel', {
-        header: language === 'th' ? 'ระดับความเสี่ยง' : 'Risk Level',
+      columnHelper.accessor("riskLevel", {
+        header: language === "th" ? "ระดับความเสี่ยง" : "Risk Level",
         cell: (info) => {
           const risk = info.getValue();
           const config = {
             LOW: {
-              label: language === 'th' ? 'ต่ำ' : 'Low',
-              color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700',
+              label: language === "th" ? "ต่ำ" : "Low",
+              color:
+                "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700",
               icon: <CheckCircle2 className="w-4 h-4" />,
             },
             MEDIUM: {
-              label: language === 'th' ? 'ปานกลาง' : 'Medium',
-              color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700',
+              label: language === "th" ? "ปานกลาง" : "Medium",
+              color:
+                "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700",
               icon: <AlertTriangle className="w-4 h-4" />,
             },
             HIGH: {
-              label: language === 'th' ? 'สูง' : 'High',
-              color: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-700',
+              label: language === "th" ? "สูง" : "High",
+              color:
+                "bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-700",
               icon: <AlertTriangle className="w-4 h-4" />,
             },
           };
@@ -175,7 +180,7 @@ export function StabilityTable({ data }: { data: StabilityData[] }) {
         },
       }),
     ],
-    [language]
+    [language],
   );
 
   const table = useReactTable({
@@ -211,17 +216,19 @@ export function StabilityTable({ data }: { data: StabilityData[] }) {
         <Search className="w-5 h-5 text-slate-400" />
         <input
           type="text"
-          value={globalFilter ?? ''}
+          value={globalFilter ?? ""}
           onChange={(e) => setGlobalFilter(e.target.value)}
-          placeholder={language === 'th' ? 'ค้นหาสัญลักษณ์...' : 'Search symbol...'}
+          placeholder={
+            language === "th" ? "ค้นหาสัญลักษณ์..." : "Search symbol..."
+          }
           className="flex-1 bg-transparent outline-none text-slate-900 dark:text-white placeholder-slate-400 font-medium"
         />
         {globalFilter && (
           <button
-            onClick={() => setGlobalFilter('')}
+            onClick={() => setGlobalFilter("")}
             className="text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 font-medium"
           >
-            {language === 'th' ? 'ล้าง' : 'Clear'}
+            {language === "th" ? "ล้าง" : "Clear"}
           </button>
         )}
       </motion.div>
@@ -252,7 +259,7 @@ export function StabilityTable({ data }: { data: StabilityData[] }) {
                         >
                           {flexRender(
                             header.column.columnDef.header,
-                            header.getContext()
+                            header.getContext(),
                           )}
                           <ArrowUpDown className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </button>
@@ -269,14 +276,14 @@ export function StabilityTable({ data }: { data: StabilityData[] }) {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.05 }}
-                  whileHover={{ backgroundColor: 'rgba(249, 115, 22, 0.05)' }}
+                  whileHover={{ backgroundColor: "rgba(249, 115, 22, 0.05)" }}
                   className="transition-colors"
                 >
                   {row.getVisibleCells().map((cell) => (
                     <td key={cell.id} className="px-6 py-4">
                       {flexRender(
                         cell.column.columnDef.cell,
-                        cell.getContext()
+                        cell.getContext(),
                       )}
                     </td>
                   ))}
@@ -289,7 +296,7 @@ export function StabilityTable({ data }: { data: StabilityData[] }) {
         {/* Pagination */}
         <div className="flex items-center justify-between px-6 py-4 bg-slate-50 dark:bg-slate-800/30 border-t-2 border-slate-200 dark:border-slate-700">
           <div className="text-sm text-slate-600 dark:text-slate-400 font-medium">
-            {language === 'th' 
+            {language === "th"
               ? `แสดง ${table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} ถึง ${Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, data.length)} จาก ${data.length} รายการ`
               : `Showing ${table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to ${Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, data.length)} of ${data.length} entries`}
           </div>
@@ -304,7 +311,8 @@ export function StabilityTable({ data }: { data: StabilityData[] }) {
               <ChevronLeft className="w-5 h-5" />
             </motion.button>
             <span className="px-4 py-2 text-sm font-bold text-slate-700 dark:text-slate-300">
-              {table.getState().pagination.pageIndex + 1} / {table.getPageCount()}
+              {table.getState().pagination.pageIndex + 1} /{" "}
+              {table.getPageCount()}
             </span>
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -326,17 +334,24 @@ export function StabilityTable({ data }: { data: StabilityData[] }) {
         className="grid grid-cols-1 md:grid-cols-3 gap-4"
       >
         <StatCard
-          label={language === 'th' ? 'คะแนนเฉลี่ย' : 'Average Score'}
-          value={safeData.length > 0 ? Math.round(safeData.reduce((sum, item) => sum + item.stabilityScore, 0) / safeData.length) : 0}
+          label={language === "th" ? "คะแนนเฉลี่ย" : "Average Score"}
+          value={
+            safeData.length > 0
+              ? Math.round(
+                  safeData.reduce((sum, item) => sum + item.stabilityScore, 0) /
+                    safeData.length,
+                )
+              : 0
+          }
           color="cyan"
         />
         <StatCard
-          label={language === 'th' ? 'ความเสี่ยงต่ำ' : 'Low Risk'}
-          value={safeData.filter((item) => item.riskLevel === 'LOW').length}
+          label={language === "th" ? "ความเสี่ยงต่ำ" : "Low Risk"}
+          value={safeData.filter((item) => item.riskLevel === "LOW").length}
           color="emerald"
         />
         <StatCard
-          label={language === 'th' ? 'โครงการทั้งหมด' : 'Total Projects'}
+          label={language === "th" ? "โครงการทั้งหมด" : "Total Projects"}
           value={safeData.length}
           color="orange"
         />
@@ -349,14 +364,14 @@ export function StabilityTable({ data }: { data: StabilityData[] }) {
 interface StatCardProps {
   label: string;
   value: number;
-  color: 'cyan' | 'emerald' | 'orange';
+  color: "cyan" | "emerald" | "orange";
 }
 
 function StatCard({ label, value, color }: StatCardProps) {
   const colors = {
-    cyan: 'from-cyan-500 to-blue-500',
-    emerald: 'from-emerald-500 to-teal-500',
-    orange: 'from-orange-500 to-amber-500',
+    cyan: "from-cyan-500 to-blue-500",
+    emerald: "from-emerald-500 to-teal-500",
+    orange: "from-orange-500 to-amber-500",
   };
 
   return (
@@ -364,8 +379,12 @@ function StatCard({ label, value, color }: StatCardProps) {
       whileHover={{ scale: 1.02, y: -2 }}
       className="p-5 rounded-xl bg-white dark:bg-slate-900/50 border-2 border-slate-200 dark:border-slate-700 shadow-lg"
     >
-      <p className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">{label}</p>
-      <p className={`text-4xl font-black bg-gradient-to-r ${colors[color]} bg-clip-text text-transparent`}>
+      <p className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">
+        {label}
+      </p>
+      <p
+        className={`text-4xl font-black bg-gradient-to-r ${colors[color]} bg-clip-text text-transparent`}
+      >
         {value}
       </p>
     </motion.div>

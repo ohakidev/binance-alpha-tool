@@ -50,6 +50,7 @@ const CACHE_CONFIG = {
 // Request Deduplication & Throttling
 // ============================================
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const pendingRequests = new Map<string, Promise<any>>();
 const lastFetchTime = new Map<string, number>();
 const MIN_FETCH_INTERVAL = 1000; // Minimum 1 second between identical requests

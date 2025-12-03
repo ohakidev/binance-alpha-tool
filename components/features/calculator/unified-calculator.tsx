@@ -15,15 +15,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { startOfMonth, endOfMonth, format } from "date-fns";
+import { endOfMonth } from "date-fns";
 
 interface CalculatorState {
   // Basic Settings
@@ -38,29 +30,29 @@ interface CalculatorState {
 }
 
 export function UnifiedCalculator() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState("calculator");
+  const [mounted, setMounted] = useState(false);
+
+  // Mount effect
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Get active user
   const activeUserId = useUserStore((state) => state.activeUserId);
-  const getEntriesByUserAndMonth = useIncomeStore((state) => state.getEntriesByUserAndMonth);
+  const getEntriesByUserAndMonth = useIncomeStore(
+    (state) => state.getEntriesByUserAndMonth,
+  );
 
-  // Get current month entries for the active user
-  const currentMonth = new Date();
-  const monthEntries = activeUserId ? getEntriesByUserAndMonth(activeUserId, currentMonth) : [];
+  // Memoize current month to prevent re-creation on every render
+  const currentMonth = useMemo(() => new Date(), []);
 
-  // Transaction options: 2^1 to 2^18
-  const transactionOptions = useMemo(() => {
-    return Array.from({ length: 18 }, (_, i) => {
-      const power = i + 1;
-      const value = Math.pow(2, power);
-      return {
-        power,
-        value,
-        label: `2^${power} = ${value.toLocaleString()}`
-      };
-    });
-  }, []);
+  // Memoize month entries to prevent infinite loop
+  const monthEntries = useMemo(() => {
+    if (!activeUserId) return [];
+    return getEntriesByUserAndMonth(activeUserId, currentMonth);
+  }, [activeUserId, getEntriesByUserAndMonth, currentMonth]);
 
   const [values, setValues] = useState<CalculatorState>({
     accountCost: 1000,
@@ -74,7 +66,7 @@ export function UnifiedCalculator() {
   // Calculations
   const calculations = useMemo(() => {
     const pointsPerDay = Math.floor(
-      (values.dailyTransactions / 1000) * (values.includeBSC ? 4 : 1)
+      (values.dailyTransactions / 1000) * (values.includeBSC ? 4 : 1),
     );
     const points15Days = pointsPerDay * 15;
     const maxAllocations = Math.floor(points15Days / values.pointsAllocated);
@@ -92,7 +84,8 @@ export function UnifiedCalculator() {
     const cost30Days = cost15Days * 2;
     const profit30Days = income30Days - cost30Days;
 
-    const transactionBonus = values.dailyTransactions * (values.includeBSC ? 4 : 1);
+    const transactionBonus =
+      values.dailyTransactions * (values.includeBSC ? 4 : 1);
 
     return {
       pointsPerDay,
@@ -127,16 +120,14 @@ export function UnifiedCalculator() {
     }
 
     // Group entries by day
-    const start = startOfMonth(currentMonth);
-    const end = endOfMonth(currentMonth);
-    const daysInMonth = end.getDate();
+    const monthEnd = endOfMonth(currentMonth);
+    const daysInMonth = monthEnd.getDate();
 
     return Array.from({ length: daysInMonth }, (_, i) => {
       const day = i + 1;
-      const dayDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
 
       // Filter entries for this day
-      const dayEntries = monthEntries.filter(entry => {
+      const dayEntries = monthEntries.filter((entry) => {
         const entryDate = new Date(entry.date);
         return entryDate.getDate() === day;
       });
@@ -145,7 +136,9 @@ export function UnifiedCalculator() {
       const volume = dayEntries.reduce((sum, entry) => sum + entry.amount, 0);
 
       // Calculate points based on transactions (using dailyTransactions value)
-      const points = Math.floor((values.dailyTransactions / 1000) * (values.includeBSC ? 4 : 1));
+      const points = Math.floor(
+        (values.dailyTransactions / 1000) * (values.includeBSC ? 4 : 1),
+      );
 
       return {
         day,
@@ -153,10 +146,52 @@ export function UnifiedCalculator() {
         volume: Math.round(volume),
       };
     });
-  }, [activeUserId, monthEntries, currentMonth, values.dailyTransactions, values.includeBSC]);
+  }, [
+    activeUserId,
+    monthEntries,
+    currentMonth,
+    values.dailyTransactions,
+    values.includeBSC,
+  ]);
+
+  // Show loading skeleton during hydration
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-[#fafbfc] dark:bg-gradient-to-br dark:from-slate-950 dark:via-blue-950 dark:to-slate-900 p-4 md:p-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="animate-pulse space-y-6">
+            {/* Header skeleton */}
+            <div className="flex justify-center">
+              <div className="h-12 w-64 bg-gradient-to-r from-amber-500/20 to-orange-500/20 rounded-full" />
+            </div>
+
+            {/* Tabs skeleton */}
+            <div className="flex justify-center">
+              <div className="h-12 w-80 bg-white/5 rounded-xl border border-white/10" />
+            </div>
+
+            {/* Content grid skeleton */}
+            <div className="grid lg:grid-cols-2 gap-6">
+              <div className="space-y-6">
+                <div className="h-64 bg-gradient-to-br from-amber-500/10 to-orange-500/10 rounded-2xl border border-amber-500/20" />
+                <div className="h-64 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 rounded-2xl border border-cyan-500/20" />
+              </div>
+              <div className="space-y-6">
+                <div className="h-64 bg-gradient-to-br from-emerald-500/10 to-green-500/10 rounded-2xl border border-emerald-500/20" />
+                <div className="h-64 bg-gradient-to-br from-rose-500/10 to-pink-500/10 rounded-2xl border border-rose-500/20" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 p-4 md:p-8">
+    <div
+      key={`calculator-${language}`}
+      className="min-h-screen bg-[#fafbfc] dark:bg-gradient-to-br dark:from-slate-950 dark:via-blue-950 dark:to-slate-900 p-4 md:p-8"
+    >
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -191,257 +226,260 @@ export function UnifiedCalculator() {
           </TabsList>
 
           <TabsContent value="calculator" className="mt-0">
+            <div className="grid lg:grid-cols-2 gap-6">
+              {/* Left Column: Settings */}
+              <div className="space-y-6">
+                {/* Basic Settings */}
+                <SectionCard
+                  title={t("calc.basicSettings")}
+                  icon={<DollarSign className="w-5 h-5" />}
+                  gradient="from-amber-500/20 to-orange-500/20"
+                  border="border-amber-500/30"
+                >
+                  <SliderControl
+                    label={t("calc.accountCost")}
+                    value={values.accountCost}
+                    onChange={(v) => updateValue("accountCost", v)}
+                    min={100}
+                    max={1000000}
+                    step={100}
+                    format={(v) => `$${v.toLocaleString()}`}
+                    hint={`${(values.accountCost / 365).toFixed(2)} ${t("common.perDay")}`}
+                    showTicks
+                    tickValues={[100, 1000, 10000, 100000, 1000000]}
+                  />
 
-        <div className="grid lg:grid-cols-2 gap-6">
-          {/* Left Column: Settings */}
-          <div className="space-y-6">
-            {/* Basic Settings */}
-            <SectionCard
-              title={t("calc.basicSettings")}
-              icon={<DollarSign className="w-5 h-5" />}
-              gradient="from-amber-500/20 to-orange-500/20"
-              border="border-amber-500/30"
-            >
-              <SliderControl
-                label={t("calc.accountCost")}
-                value={values.accountCost}
-                onChange={(v) => updateValue("accountCost", v)}
-                min={100}
-                max={1000000}
-                step={100}
-                format={(v) => `$${v.toLocaleString()}`}
-                hint={`${(values.accountCost / 365).toFixed(2)} ${t("common.perDay")}`}
-                showTicks
-                tickValues={[100, 1000, 10000, 100000, 1000000]}
-              />
+                  {/* Daily Transactions Slider - Changed from Dropdown */}
+                  <SliderControl
+                    label={t("calc.dailyTransactions")}
+                    value={values.dailyTransactions}
+                    onChange={(v) =>
+                      updateValue("dailyTransactions", Math.round(v))
+                    }
+                    min={2}
+                    max={262144}
+                    step={1}
+                    format={(v) => `$${v.toLocaleString()}`}
+                    hint={`${t("calc.transactionBonus")}: ${Math.floor((values.dailyTransactions / 1000) * (values.includeBSC ? 4 : 1))}`}
+                    showTicks
+                    tickValues={[2, 8192, 16384, 32768, 65536, 131072, 262144]}
+                  />
 
-              {/* Daily Transactions Slider - Changed from Dropdown */}
-              <SliderControl
-                label={t("calc.dailyTransactions")}
-                value={values.dailyTransactions}
-                onChange={(v) => updateValue("dailyTransactions", Math.round(v))}
-                min={2}
-                max={262144}
-                step={1}
-                format={(v) => `$${v.toLocaleString()}`}
-                hint={`${t("calc.transactionBonus")}: ${Math.floor((values.dailyTransactions / 1000) * (values.includeBSC ? 4 : 1))}`}
-                showTicks
-                tickValues={[2, 8192, 16384, 32768, 65536, 131072, 262144]}
-              />
+                  <CheckboxControl
+                    label={t("calc.includeBSC")}
+                    checked={values.includeBSC}
+                    onChange={(checked) => updateValue("includeBSC", checked)}
+                  />
 
-              <CheckboxControl
-                label={t("calc.includeBSC")}
-                checked={values.includeBSC}
-                onChange={(checked) => updateValue("includeBSC", checked)}
-              />
+                  <InfoRow
+                    label={t("calc.transactionBonus")}
+                    value={`${calculations.transactionBonus.toLocaleString()}`}
+                    hint={`${t("calc.bonusPerDay")}: ${calculations.transactionBonus / (values.includeBSC ? 4 : 1)} ${t("common.perDay")}`}
+                    color="blue"
+                  />
+                </SectionCard>
 
-              <InfoRow
-                label={t("calc.transactionBonus")}
-                value={`${calculations.transactionBonus.toLocaleString()}`}
-                hint={`${t("calc.bonusPerDay")}: ${calculations.transactionBonus / (values.includeBSC ? 4 : 1)} ${t("common.perDay")}`}
-                color="blue"
-              />
-            </SectionCard>
+                {/* AirDrop Settings */}
+                <SectionCard
+                  title={t("calc.airDropSettings")}
+                  icon={<Activity className="w-5 h-5" />}
+                  gradient="from-cyan-500/20 to-blue-500/20"
+                  border="border-cyan-500/30"
+                >
+                  <SliderControl
+                    label={t("calc.pointsAllocated")}
+                    value={values.pointsAllocated}
+                    onChange={(v) => updateValue("pointsAllocated", v)}
+                    min={50}
+                    max={5000}
+                    step={10}
+                    format={(v) => `${v} ${t("calc.points")}`}
+                    showTicks
+                    tickValues={[50, 500, 1000, 2000, 3000, 5000]}
+                  />
 
-            {/* AirDrop Settings */}
-            <SectionCard
-              title={t("calc.airDropSettings")}
-              icon={<Activity className="w-5 h-5" />}
-              gradient="from-cyan-500/20 to-blue-500/20"
-              border="border-cyan-500/30"
-            >
-              <SliderControl
-                label={t("calc.pointsAllocated")}
-                value={values.pointsAllocated}
-                onChange={(v) => updateValue("pointsAllocated", v)}
-                min={50}
-                max={5000}
-                step={10}
-                format={(v) => `${v} ${t("calc.points")}`}
-                showTicks
-                tickValues={[50, 500, 1000, 2000, 3000, 5000]}
-              />
+                  <SliderControl
+                    label={t("calc.singlePointValue")}
+                    value={values.singlePointValue}
+                    onChange={(v) => updateValue("singlePointValue", v)}
+                    min={10}
+                    max={500}
+                    step={10}
+                    format={(v) => `$${v}`}
+                    showTicks
+                    tickValues={[10, 50, 100, 200, 300, 500]}
+                  />
 
-              <SliderControl
-                label={t("calc.singlePointValue")}
-                value={values.singlePointValue}
-                onChange={(v) => updateValue("singlePointValue", v)}
-                min={10}
-                max={500}
-                step={10}
-                format={(v) => `$${v}`}
-                showTicks
-                tickValues={[10, 50, 100, 200, 300, 500]}
-              />
-
-              <SliderControl
-                label={t("calc.dailyCostPerUnit")}
-                value={values.dailyCostPerUnit}
-                onChange={(v) => updateValue("dailyCostPerUnit", v)}
-                min={0}
-                max={50}
-                step={1}
-                format={(v) => `$${v}`}
-                showTicks
-                tickValues={[0, 10, 20, 30, 40, 50]}
-              />
-            </SectionCard>
-          </div>
-
-          {/* Right Column: Results */}
-          <div className="space-y-6">
-            {/* Calculation Results */}
-            <SectionCard
-              title={t("calc.calculation")}
-              icon={<Calculator className="w-5 h-5" />}
-              gradient="from-emerald-500/20 to-teal-500/20"
-              border="border-emerald-500/30"
-            >
-              <ResultRow
-                label={t("calc.pointsPerDay")}
-                value={`${calculations.pointsPerDay} ${t("calc.points")}`}
-                hint={`${t("calc.bonusPerDay")} ${calculations.pointsPerDay / (values.includeBSC ? 4 : 1)}`}
-                color="blue"
-              />
-
-              <ResultRow
-                label={t("calc.pointsPerWeek")}
-                value={`${calculations.points15Days} ${t("calc.points")}`}
-                hint={`17 × ${calculations.pointsPerDay / 15}`}
-                color="purple"
-              />
-
-              <ResultRow
-                label={t("calc.maxAllocations")}
-                value={`${calculations.maxAllocations} ${t("calc.timesAllocation")}`}
-                color="amber"
-              />
-
-              <ResultRow
-                label={t("calc.totalPointsRemaining")}
-                value={`${calculations.totalPointsRemaining} ${t("calc.points")}`}
-                hint={t("calc.calculatedHint")}
-                color="emerald"
-                highlight
-              />
-            </SectionCard>
-
-            {/* Profit Calculation */}
-            <SectionCard
-              title={t("calc.profitCalc")}
-              icon={<TrendingUp className="w-5 h-5" />}
-              gradient="from-rose-500/20 to-pink-500/20"
-              border="border-rose-500/30"
-            >
-              <div className="overflow-hidden rounded-xl border border-white/10">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-white/5 border-b border-white/10">
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
-                        {t("calc.item")}
-                      </th>
-                      <th className="px-4 py-3 text-right text-sm font-medium text-cyan-300">
-                        {t("calc.period15Days")}
-                      </th>
-                      <th className="px-4 py-3 text-right text-sm font-medium text-purple-300">
-                        {t("calc.period30Days")}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    <tr className="hover:bg-white/5 transition-colors">
-                      <td className="px-4 py-3 text-sm text-slate-300">
-                        {t("calc.airdropIncome")}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-semibold text-emerald-400">
-                        +${calculations.income15Days.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-semibold text-emerald-400">
-                        +${calculations.income30Days.toLocaleString()}
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-white/5 transition-colors">
-                      <td className="px-4 py-3 text-sm text-slate-300">
-                        {t("calc.costOfSelling")}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-semibold text-rose-400">
-                        -${calculations.cost15Days.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-semibold text-rose-400">
-                        -${calculations.cost30Days.toLocaleString()}
-                      </td>
-                    </tr>
-                    <tr className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-t-2 border-amber-500/30">
-                      <td className="px-4 py-4 text-sm font-bold text-amber-200">
-                        {t("calc.netProfit")}
-                      </td>
-                      <td
-                        className={`px-4 py-4 text-right text-lg font-bold ${
-                          calculations.profit15Days >= 0
-                            ? "text-emerald-400"
-                            : "text-rose-400"
-                        }`}
-                      >
-                        ${calculations.profit15Days.toLocaleString()}
-                      </td>
-                      <td
-                        className={`px-4 py-4 text-right text-lg font-bold ${
-                          calculations.profit30Days >= 0
-                            ? "text-emerald-400"
-                            : "text-rose-400"
-                        }`}
-                      >
-                        ${calculations.profit30Days.toLocaleString()}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                  <SliderControl
+                    label={t("calc.dailyCostPerUnit")}
+                    value={values.dailyCostPerUnit}
+                    onChange={(v) => updateValue("dailyCostPerUnit", v)}
+                    min={0}
+                    max={50}
+                    step={1}
+                    format={(v) => `$${v}`}
+                    showTicks
+                    tickValues={[0, 10, 20, 30, 40, 50]}
+                  />
+                </SectionCard>
               </div>
 
-              {/* Strategy Info */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.3 }}
-                className={`mt-4 p-4 rounded-xl border ${
-                  isProfitable
-                    ? "bg-emerald-500/10 border-emerald-500/30"
-                    : "bg-rose-500/10 border-rose-500/30"
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`w-6 h-6 rounded-full ${
-                      isProfitable ? "bg-emerald-500/20" : "bg-rose-500/20"
-                    } flex items-center justify-center flex-shrink-0 mt-0.5`}
+              {/* Right Column: Results */}
+              <div className="space-y-6">
+                {/* Calculation Results */}
+                <SectionCard
+                  title={t("calc.calculation")}
+                  icon={<Calculator className="w-5 h-5" />}
+                  gradient="from-emerald-500/20 to-teal-500/20"
+                  border="border-emerald-500/30"
+                >
+                  <ResultRow
+                    label={t("calc.pointsPerDay")}
+                    value={`${calculations.pointsPerDay} ${t("calc.points")}`}
+                    hint={`${t("calc.bonusPerDay")} ${calculations.pointsPerDay / (values.includeBSC ? 4 : 1)}`}
+                    color="blue"
+                  />
+
+                  <ResultRow
+                    label={t("calc.pointsPerWeek")}
+                    value={`${calculations.points15Days} ${t("calc.points")}`}
+                    hint={`17 × ${calculations.pointsPerDay / 15}`}
+                    color="purple"
+                  />
+
+                  <ResultRow
+                    label={t("calc.maxAllocations")}
+                    value={`${calculations.maxAllocations} ${t("calc.timesAllocation")}`}
+                    color="amber"
+                  />
+
+                  <ResultRow
+                    label={t("calc.totalPointsRemaining")}
+                    value={`${calculations.totalPointsRemaining} ${t("calc.points")}`}
+                    hint={t("calc.calculatedHint")}
+                    color="emerald"
+                    highlight
+                  />
+                </SectionCard>
+
+                {/* Profit Calculation */}
+                <SectionCard
+                  title={t("calc.profitCalc")}
+                  icon={<TrendingUp className="w-5 h-5" />}
+                  gradient="from-rose-500/20 to-pink-500/20"
+                  border="border-rose-500/30"
+                >
+                  <div className="overflow-hidden rounded-xl border border-white/10">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-white/5 border-b border-white/10">
+                          <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                            {t("calc.item")}
+                          </th>
+                          <th className="px-4 py-3 text-right text-sm font-medium text-cyan-300">
+                            {t("calc.period15Days")}
+                          </th>
+                          <th className="px-4 py-3 text-right text-sm font-medium text-purple-300">
+                            {t("calc.period30Days")}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        <tr className="hover:bg-white/5 transition-colors">
+                          <td className="px-4 py-3 text-sm text-slate-300">
+                            {t("calc.airdropIncome")}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-semibold text-emerald-400">
+                            +${calculations.income15Days.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-semibold text-emerald-400">
+                            +${calculations.income30Days.toLocaleString()}
+                          </td>
+                        </tr>
+                        <tr className="hover:bg-white/5 transition-colors">
+                          <td className="px-4 py-3 text-sm text-slate-300">
+                            {t("calc.costOfSelling")}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-semibold text-rose-400">
+                            -${calculations.cost15Days.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-semibold text-rose-400">
+                            -${calculations.cost30Days.toLocaleString()}
+                          </td>
+                        </tr>
+                        <tr className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-t-2 border-amber-500/30">
+                          <td className="px-4 py-4 text-sm font-bold text-amber-200">
+                            {t("calc.netProfit")}
+                          </td>
+                          <td
+                            className={`px-4 py-4 text-right text-lg font-bold ${
+                              calculations.profit15Days >= 0
+                                ? "text-emerald-400"
+                                : "text-rose-400"
+                            }`}
+                          >
+                            ${calculations.profit15Days.toLocaleString()}
+                          </td>
+                          <td
+                            className={`px-4 py-4 text-right text-lg font-bold ${
+                              calculations.profit30Days >= 0
+                                ? "text-emerald-400"
+                                : "text-rose-400"
+                            }`}
+                          >
+                            ${calculations.profit30Days.toLocaleString()}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Strategy Info */}
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.3 }}
+                    className={`mt-4 p-4 rounded-xl border ${
+                      isProfitable
+                        ? "bg-emerald-500/10 border-emerald-500/30"
+                        : "bg-rose-500/10 border-rose-500/30"
+                    }`}
                   >
-                    {isProfitable ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    ) : (
-                      <AlertCircle className="w-4 h-4 text-rose-400" />
-                    )}
-                  </div>
-                  <div>
-                    <h4
-                      className={`text-sm font-semibold mb-1 ${
-                        isProfitable ? "text-emerald-300" : "text-rose-300"
-                      }`}
-                    >
-                      {t("calc.profitStrategy")}
-                    </h4>
-                    <p
-                      className={`text-xs leading-relaxed ${
-                        isProfitable ? "text-emerald-200/70" : "text-rose-200/70"
-                      }`}
-                    >
-                      {t("calc.strategyDesc")}
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            </SectionCard>
-          </div>
-        </div>
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`w-6 h-6 rounded-full ${
+                          isProfitable ? "bg-emerald-500/20" : "bg-rose-500/20"
+                        } flex items-center justify-center flex-shrink-0 mt-0.5`}
+                      >
+                        {isProfitable ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-rose-400" />
+                        )}
+                      </div>
+                      <div>
+                        <h4
+                          className={`text-sm font-semibold mb-1 ${
+                            isProfitable ? "text-emerald-300" : "text-rose-300"
+                          }`}
+                        >
+                          {t("calc.profitStrategy")}
+                        </h4>
+                        <p
+                          className={`text-xs leading-relaxed ${
+                            isProfitable
+                              ? "text-emerald-200/70"
+                              : "text-rose-200/70"
+                          }`}
+                        >
+                          {t("calc.strategyDesc")}
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+                </SectionCard>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="volume" className="mt-0">
@@ -456,18 +494,27 @@ export function UnifiedCalculator() {
                 <div className="p-6 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border-2 border-amber-500/40 shadow-lg">
                   <div className="flex items-center gap-3 mb-3">
                     <Activity className="w-6 h-6 text-amber-400" />
-                    <h3 className="text-lg font-bold text-amber-200">{t("calc.latestVolume")}</h3>
+                    <h3 className="text-lg font-bold text-amber-200">
+                      {t("calc.latestVolume")}
+                    </h3>
                   </div>
                   <div className="flex items-baseline gap-3">
                     <p className="text-5xl font-bold bg-gradient-to-r from-amber-200 to-orange-300 bg-clip-text text-transparent">
-                      ${dailyVolumeData[dailyVolumeData.length - 1]?.volume.toLocaleString()}
+                      $
+                      {dailyVolumeData[
+                        dailyVolumeData.length - 1
+                      ]?.volume.toLocaleString()}
                     </p>
                     <div className="flex flex-col">
                       <p className="text-sm text-amber-300">
-                        {dailyVolumeData[dailyVolumeData.length - 1]?.points.toLocaleString()} {t("calc.points")}
+                        {dailyVolumeData[
+                          dailyVolumeData.length - 1
+                        ]?.points.toLocaleString()}{" "}
+                        {t("calc.points")}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {t("calc.day")} {dailyVolumeData[dailyVolumeData.length - 1]?.day}
+                        {t("calc.day")}{" "}
+                        {dailyVolumeData[dailyVolumeData.length - 1]?.day}
                       </p>
                     </div>
                   </div>
@@ -476,21 +523,35 @@ export function UnifiedCalculator() {
                 {/* Summary Stats */}
                 <div className="grid grid-cols-3 gap-4">
                   <div className="p-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/30">
-                    <p className="text-xs text-blue-300 mb-1">{t("calc.totalPoints")}</p>
+                    <p className="text-xs text-blue-300 mb-1">
+                      {t("calc.totalPoints")}
+                    </p>
                     <p className="text-2xl font-bold text-blue-400">
-                      {dailyVolumeData.reduce((sum, d) => sum + d.points, 0).toLocaleString()}
+                      {dailyVolumeData
+                        .reduce((sum, d) => sum + d.points, 0)
+                        .toLocaleString()}
                     </p>
                   </div>
                   <div className="p-4 rounded-xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30">
-                    <p className="text-xs text-purple-300 mb-1">{t("calc.totalVolume")}</p>
+                    <p className="text-xs text-purple-300 mb-1">
+                      {t("calc.totalVolume")}
+                    </p>
                     <p className="text-2xl font-bold text-purple-400">
-                      ${dailyVolumeData.reduce((sum, d) => sum + d.volume, 0).toLocaleString()}
+                      $
+                      {dailyVolumeData
+                        .reduce((sum, d) => sum + d.volume, 0)
+                        .toLocaleString()}
                     </p>
                   </div>
                   <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-500/10 to-green-500/10 border border-emerald-500/30">
-                    <p className="text-xs text-emerald-300 mb-1">{t("calc.avgDaily")}</p>
+                    <p className="text-xs text-emerald-300 mb-1">
+                      {t("calc.avgDaily")}
+                    </p>
                     <p className="text-2xl font-bold text-emerald-400">
-                      {Math.floor(dailyVolumeData.reduce((sum, d) => sum + d.points, 0) / dailyVolumeData.length).toLocaleString()}
+                      {Math.floor(
+                        dailyVolumeData.reduce((sum, d) => sum + d.points, 0) /
+                          dailyVolumeData.length,
+                      ).toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -538,7 +599,10 @@ export function UnifiedCalculator() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <span className="text-sm font-medium text-emerald-400">
-                              {data.volume > 0 ? (data.points / data.volume * 100).toFixed(2) : '0.00'}%
+                              {data.volume > 0
+                                ? ((data.points / data.volume) * 100).toFixed(2)
+                                : "0.00"}
+                              %
                             </span>
                           </td>
                         </motion.tr>
@@ -578,7 +642,9 @@ function SectionCard({
       transition={{ duration: 0.5 }}
       className="backdrop-blur-xl bg-white/5 rounded-2xl border border-white/10 overflow-hidden shadow-2xl hover:shadow-3xl transition-shadow"
     >
-      <div className={`px-6 py-4 bg-gradient-to-r ${gradient} border-b ${border}`}>
+      <div
+        className={`px-6 py-4 bg-gradient-to-r ${gradient} border-b ${border}`}
+      >
         <div className="flex items-center gap-3">
           <div className="text-white">{icon}</div>
           <h3 className="text-lg font-bold text-white">{title}</h3>
@@ -625,7 +691,7 @@ function SliderControl({
 
   const handleInputBlur = () => {
     setIsEditing(false);
-    const numValue = Number(inputValue.replace(/[^0-9.-]/g, ''));
+    const numValue = Number(inputValue.replace(/[^0-9.-]/g, ""));
     if (!isNaN(numValue)) {
       const clampedValue = Math.min(Math.max(numValue, min), max);
       onChange(clampedValue);
@@ -641,7 +707,7 @@ function SliderControl({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       (e.target as HTMLInputElement).blur();
     }
   };
@@ -656,14 +722,17 @@ function SliderControl({
   // Format tick value for display
   const formatTick = (val: number) => {
     if (val >= 1000000) return `$${(val / 1000000).toFixed(0)}M`;
-    if (val >= 1000) return `$${(val / 1000).toFixed(val >= 10000 ? 0 : 3).replace(/\.?0+$/, '')}K`;
+    if (val >= 1000)
+      return `$${(val / 1000).toFixed(val >= 10000 ? 0 : 3).replace(/\.?0+$/, "")}K`;
     return `$${val}`;
   };
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <label className="text-sm font-medium text-slate-300 flex-shrink-0">{label}</label>
+        <label className="text-sm font-medium text-slate-300 flex-shrink-0">
+          {label}
+        </label>
         <input
           type="text"
           value={isEditing ? inputValue : format(value)}
@@ -704,7 +773,7 @@ function SliderControl({
       {/* Tick marks with values */}
       {showTicks && tickValues.length > 0 && (
         <div className="relative h-6">
-          {tickValues.map((tickVal, index) => {
+          {tickValues.map((tickVal) => {
             const tickPercentage = ((tickVal - min) / (max - min)) * 100;
             return (
               <div
@@ -801,7 +870,9 @@ function InfoRow({ label, value, hint, color }: InfoRowProps) {
         <p className="text-sm font-medium text-slate-300">{label}</p>
         {hint && <p className="text-xs text-slate-500 mt-1">{hint}</p>}
       </div>
-      <p className={`text-xl font-bold ${colors[color].split(" ")[0]}`}>{value}</p>
+      <p className={`text-xl font-bold ${colors[color].split(" ")[0]}`}>
+        {value}
+      </p>
     </motion.div>
   );
 }

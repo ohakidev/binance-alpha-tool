@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { Language, translations } from "../i18n/translations";
 
 interface LanguageStore {
@@ -13,7 +13,13 @@ export const useLanguage = create<LanguageStore>()(
     (set, get) => ({
       language: "th",
 
-      setLanguage: (lang: Language) => set({ language: lang }),
+      setLanguage: (lang: Language) => {
+        set({ language: lang });
+        // Update document language attribute
+        if (typeof document !== "undefined") {
+          document.documentElement.lang = lang;
+        }
+      },
 
       t: (key: string): string => {
         const lang = get().language;
@@ -24,7 +30,20 @@ export const useLanguage = create<LanguageStore>()(
           if (value && typeof value === "object" && k in value) {
             value = (value as Record<string, unknown>)[k];
           } else {
-            return key; // Return key if translation not found
+            // Fallback to English if key not found in current language
+            let fallbackValue: unknown = translations["en"];
+            for (const fk of keys) {
+              if (
+                fallbackValue &&
+                typeof fallbackValue === "object" &&
+                fk in fallbackValue
+              ) {
+                fallbackValue = (fallbackValue as Record<string, unknown>)[fk];
+              } else {
+                return key; // Return key if not found in fallback either
+              }
+            }
+            return typeof fallbackValue === "string" ? fallbackValue : key;
           }
         }
 
@@ -33,6 +52,12 @@ export const useLanguage = create<LanguageStore>()(
     }),
     {
       name: "language-storage",
-    }
-  )
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({ language: state.language }),
+    },
+  ),
 );
+
+// Selector hooks for better performance
+export const useCurrentLanguage = () => useLanguage((state) => state.language);
+export const useTranslation = () => useLanguage((state) => state.t);

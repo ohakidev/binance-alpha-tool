@@ -1143,3 +1143,170 @@
         border: 1px solid #ddd !important;
     }
 }
+
+/* ============================================
+   MagicUI Animations
+   ============================================ */
+
+/* Shine Border Animation */
+@keyframes shine {
+    0% {
+        background-position: 0% 0%;
+    }
+    50% {
+        background-position: 100% 100%;
+    }
+    100% {
+        background-position: 0% 0%;
+    }
+}
+
+/* Gradient Shift Animation */
+@keyframes gradient-shift {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* Shiny Text Animation */
+@keyframes shiny-text {
+    0%,
+    90%,
+    100% {
+        background-position: calc(-100% - var(--shiny-width, 100px)) 0;
+    }
+    30%,
+    60% {
+        background-position: calc(100% + var(--shiny-width, 100px)) 0;
+    }
+}
+
+/* Shimmer Animation */
+@keyframes shimmer {
+    0% {
+        background-position: -100% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+/* Border Beam Animation */
+@keyframes border-beam {
+    0% {
+        offset-distance: 0%;
+        opacity: 0;
+    }
+    10% {
+        opacity: 1;
+    }
+    90% {
+        opacity: 1;
+    }
+    100% {
+        offset-distance: 100%;
+        opacity: 0;
+    }
+}
+
+/* Pulse Border Animation */
+@keyframes pulse-border {
+    0%,
+    100% {
+        opacity: 0.5;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.8;
+        transform: scale(1.01);
+    }
+}
+
+/* Slot Spin Animation */
+@keyframes slot-spin {
+    0% {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    50% {
+        opacity: 0.5;
+    }
+    100% {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Glow Pulse Animation */
+@keyframes glow-pulse {
+    0%,
+    100% {
+        opacity: 0.3;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.6;
+        transform: scale(1.1);
+    }
+}
+
+/* Float Animation */
+@keyframes float {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+/* Utility Classes for Animations */
+@utility animate-shine {
+    animation: shine var(--duration, 14s) infinite linear;
+}
+
+@utility animate-gradient {
+    animation: gradient-shift var(--duration, 3s) linear infinite;
+    background-size: 200% 100%;
+}
+
+@utility animate-shimmer {
+    animation: shimmer var(--duration, 2s) infinite linear;
+}
+
+@utility animate-border-beam {
+    animation: border-beam var(--duration, 6s) linear infinite;
+}
+
+@utility animate-pulse-border {
+    animation: pulse-border 2s ease-in-out infinite;
+}
+
+@utility animate-float {
+    animation: float 3s ease-in-out infinite;
+}
+
+@utility animate-glow-pulse {
+    animation: glow-pulse 4s ease-in-out infinite;
+}
+
+/* Motion Safe Animations */
+.motion-safe\:animate-shine {
+    animation: shine var(--duration, 14s) infinite linear;
+}
+
+.motion-safe\:animate-gradient {
+    animation: gradient-shift var(--duration, 3s) linear infinite;
+}
+
+/* Number Ticker Tabular Nums */
+.tabular-nums {
+    font-variant-numeric: tabular-nums;
+}

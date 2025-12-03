@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   useReactTable,
   getCoreRowModel,
@@ -12,11 +12,10 @@ import {
   createColumnHelper,
   SortingState,
   ColumnFiltersState,
-} from '@tanstack/react-table';
-import { useLanguage } from '@/lib/stores/language-store';
+} from "@tanstack/react-table";
+import { useLanguage } from "@/lib/stores/language-store";
 import {
   TrendingUp,
-  TrendingDown,
   AlertTriangle,
   CheckCircle2,
   Search,
@@ -27,7 +26,7 @@ import {
   X,
   Download,
   RefreshCw,
-} from 'lucide-react';
+} from "lucide-react";
 
 interface StabilityData {
   symbol?: string;
@@ -39,41 +38,45 @@ interface StabilityData {
   change24h: number;
   volume24h: number;
   stabilityScore: number;
-  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  riskLevel: "LOW" | "MEDIUM" | "HIGH";
   volatilityIndex: number;
   spreadBps: number;
   hasAbnormalSpike?: boolean;
   volumeSwing?: number;
-  trend: 'UP' | 'DOWN' | 'STABLE';
+  trend: "UP" | "DOWN" | "STABLE";
   fourXDays?: number; // Number of days with 4x multiplier
 }
 
 const columnHelper = createColumnHelper<StabilityData>();
 
 export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
-  const { t, language } = useLanguage();
+  const { language } = useLanguage();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [globalFilter, setGlobalFilter] = useState('');
-  const [riskFilter, setRiskFilter] = useState<'ALL' | 'LOW' | 'MEDIUM' | 'HIGH'>('ALL');
+  const [globalFilter, setGlobalFilter] = useState("");
+  const [riskFilter, setRiskFilter] = useState<
+    "ALL" | "LOW" | "MEDIUM" | "HIGH"
+  >("ALL");
 
-  // Ensure data is always an array
-  const safeData = Array.isArray(data) ? data : [];
+  // Ensure data is always an array - memoize to prevent infinite loop
+  const safeData = useMemo(() => {
+    return Array.isArray(data) ? data : [];
+  }, [data]);
 
   // Filter by risk level
   const filteredData = useMemo(() => {
-    if (riskFilter === 'ALL') return safeData;
-    return safeData.filter(item => item.riskLevel === riskFilter);
+    if (riskFilter === "ALL") return safeData;
+    return safeData.filter((item) => item.riskLevel === riskFilter);
   }, [safeData, riskFilter]);
 
   const columns = useMemo(
     () => [
       columnHelper.accessor((row) => row.symbol || row.token, {
-        id: 'project',
-        header: language === 'th' ? 'โปรเจกต์' : 'PROJECT',
+        id: "project",
+        header: language === "th" ? "โปรเจกต์" : "PROJECT",
         cell: (info) => {
           const row = info.row.original;
-          const tokenSymbol = row.symbol || row.token || 'N/A';
+          const tokenSymbol = row.symbol || row.token || "N/A";
           return (
             <motion.div
               whileHover={{ scale: 1.03 }}
@@ -93,25 +96,25 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
           );
         },
       }),
-      columnHelper.accessor('riskLevel', {
-        header: language === 'th' ? 'ความเสถียร' : 'STABILITY',
+      columnHelper.accessor("riskLevel", {
+        header: language === "th" ? "ความเสถียร" : "STABILITY",
         cell: (info) => {
           const level = info.getValue();
           const config = {
             LOW: {
-              label: language === 'th' ? 'เสถียร' : 'Stable',
-              bg: 'bg-emerald-500/20',
-              text: 'text-emerald-400',
+              label: language === "th" ? "เสถียร" : "Stable",
+              bg: "bg-emerald-500/20",
+              text: "text-emerald-400",
             },
             MEDIUM: {
-              label: language === 'th' ? 'ปานกลาง' : 'Moderate',
-              bg: 'bg-amber-500/20',
-              text: 'text-amber-400',
+              label: language === "th" ? "ปานกลาง" : "Moderate",
+              bg: "bg-amber-500/20",
+              text: "text-amber-400",
             },
             HIGH: {
-              label: language === 'th' ? 'ไม่เสถียร' : 'Unstable',
-              bg: 'bg-rose-500/20',
-              text: 'text-rose-400',
+              label: language === "th" ? "ไม่เสถียร" : "Unstable",
+              bg: "bg-rose-500/20",
+              text: "text-rose-400",
             },
           };
 
@@ -119,18 +122,22 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
 
           return (
             <div className="flex justify-center">
-              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full ${bg} ${text} font-semibold text-sm`}>
-                <span className={`w-2 h-2 rounded-full ${level === 'LOW' ? 'bg-emerald-500' : level === 'MEDIUM' ? 'bg-amber-500' : 'bg-rose-500'}`} />
+              <span
+                className={`inline-flex items-center gap-1 px-3 py-1 rounded-full ${bg} ${text} font-semibold text-sm`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${level === "LOW" ? "bg-emerald-500" : level === "MEDIUM" ? "bg-amber-500" : "bg-rose-500"}`}
+                />
                 {label}
               </span>
             </div>
           );
         },
       }),
-      columnHelper.accessor('spreadBps', {
+      columnHelper.accessor("spreadBps", {
         header: () => (
           <div className="flex items-center justify-center gap-2">
-            <span>{language === 'th' ? 'Spread bps' : 'SPREAD BPS'}</span>
+            <span>{language === "th" ? "Spread bps" : "SPREAD BPS"}</span>
           </div>
         ),
         cell: (info) => {
@@ -139,7 +146,9 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
           const isModerate = bps >= 0.5 && bps < 1.5;
           return (
             <div className="flex items-center justify-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${isGood ? 'bg-emerald-500' : isModerate ? 'bg-amber-500' : 'bg-rose-500'}`} />
+              <span
+                className={`w-2 h-2 rounded-full ${isGood ? "bg-emerald-500" : isModerate ? "bg-amber-500" : "bg-rose-500"}`}
+              />
               <span className="font-semibold text-slate-900 dark:text-white">
                 {bps.toFixed(2)}
               </span>
@@ -147,8 +156,8 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
           );
         },
       }),
-      columnHelper.accessor('fourXDays', {
-        header: language === 'th' ? '4X วัน' : '4X DAYS',
+      columnHelper.accessor("fourXDays", {
+        header: language === "th" ? "4X วัน" : "4X DAYS",
         cell: (info) => {
           const days = info.getValue() || 0;
           return (
@@ -161,7 +170,7 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
         },
       }),
     ],
-    [language]
+    [language],
   );
 
   const table = useReactTable({
@@ -188,12 +197,16 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
 
   const stats = useMemo(() => {
     return {
-      avgScore: safeData.length > 0
-        ? Math.round(safeData.reduce((sum, item) => sum + item.stabilityScore, 0) / safeData.length)
-        : 0,
-      lowRisk: safeData.filter(item => item.riskLevel === 'LOW').length,
-      mediumRisk: safeData.filter(item => item.riskLevel === 'MEDIUM').length,
-      highRisk: safeData.filter(item => item.riskLevel === 'HIGH').length,
+      avgScore:
+        safeData.length > 0
+          ? Math.round(
+              safeData.reduce((sum, item) => sum + item.stabilityScore, 0) /
+                safeData.length,
+            )
+          : 0,
+      lowRisk: safeData.filter((item) => item.riskLevel === "LOW").length,
+      mediumRisk: safeData.filter((item) => item.riskLevel === "MEDIUM").length,
+      highRisk: safeData.filter((item) => item.riskLevel === "HIGH").length,
       total: safeData.length,
     };
   }, [safeData]);
@@ -213,24 +226,39 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
           </div>
           <div className="flex-1">
             <h3 className="text-lg font-black text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-              {language === 'th' ? '⚙️ เกณฑ์การประเมิน' : '⚙️ Evaluation Criteria'}
+              {language === "th"
+                ? "⚙️ เกณฑ์การประเมิน"
+                : "⚙️ Evaluation Criteria"}
             </h3>
             <div className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
               <p className="flex items-center gap-2">
                 <span className="font-bold">📊</span>
-                <span><strong>Criteria:</strong> price range, volume swings, abnormal spikes, short-term trend</span>
+                <span>
+                  <strong>Criteria:</strong> price range, volume swings,
+                  abnormal spikes, short-term trend
+                </span>
               </p>
               <p className="flex items-center gap-2">
                 <span className="font-bold">💡</span>
-                <span><strong>Spread bps:</strong> discrepancy across trade records; smaller is steadier, prefer double green 🟢🟢. 1 bps = 1 USDT wear per 10,000 USDT</span>
+                <span>
+                  <strong>Spread bps:</strong> discrepancy across trade records;
+                  smaller is steadier, prefer double green 🟢🟢. 1 bps = 1 USDT
+                  wear per 10,000 USDT
+                </span>
               </p>
               <p className="flex items-center gap-2">
                 <span className="font-bold">📊</span>
-                <span><strong>Baseline:</strong> KOGE (1x) as reference; above is usually steadier</span>
+                <span>
+                  <strong>Baseline:</strong> KOGE (1x) as reference; above is
+                  usually steadier
+                </span>
               </p>
               <p className="flex items-center gap-2 mt-3 p-3 bg-rose-500/10 rounded-lg border border-rose-500/30">
                 <span className="font-bold text-lg">⚠️</span>
-                <span className="font-semibold text-rose-700 dark:text-rose-400"><strong>Disclaimer:</strong> Markets are unpredictable. DYOR; no liability for losses.</span>
+                <span className="font-semibold text-rose-700 dark:text-rose-400">
+                  <strong>Disclaimer:</strong> Markets are unpredictable. DYOR;
+                  no liability for losses.
+                </span>
               </p>
             </div>
           </div>
@@ -245,25 +273,25 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
         className="grid grid-cols-1 md:grid-cols-4 gap-4"
       >
         <StatCard
-          label={language === 'th' ? 'คะแนนเฉลี่ย' : 'Avg Score'}
+          label={language === "th" ? "คะแนนเฉลี่ย" : "Avg Score"}
           value={stats.avgScore.toString()}
           color="cyan"
           icon={<TrendingUp className="w-5 h-5" />}
         />
         <StatCard
-          label={language === 'th' ? 'ความเสี่ยงต่ำ' : 'Low Risk'}
+          label={language === "th" ? "ความเสี่ยงต่ำ" : "Low Risk"}
           value={stats.lowRisk.toString()}
           color="emerald"
           icon={<CheckCircle2 className="w-5 h-5" />}
         />
         <StatCard
-          label={language === 'th' ? 'ความเสี่ยงปานกลาง' : 'Med Risk'}
+          label={language === "th" ? "ความเสี่ยงปานกลาง" : "Med Risk"}
           value={stats.mediumRisk.toString()}
           color="amber"
           icon={<AlertTriangle className="w-5 h-5" />}
         />
         <StatCard
-          label={language === 'th' ? 'โครงการ 4x' : '4x Projects'}
+          label={language === "th" ? "โครงการ 4x" : "4x Projects"}
           value={(stats.total - 1).toString()}
           color="orange"
           icon={<Filter className="w-5 h-5" />}
@@ -285,12 +313,14 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
               type="text"
               value={globalFilter}
               onChange={(e) => setGlobalFilter(e.target.value)}
-              placeholder={language === 'th' ? 'ค้นหาโครงการ...' : 'Search projects...'}
+              placeholder={
+                language === "th" ? "ค้นหาโครงการ..." : "Search projects..."
+              }
               className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/50 transition-all"
             />
             {globalFilter && (
               <button
-                onClick={() => setGlobalFilter('')}
+                onClick={() => setGlobalFilter("")}
                 className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
               >
                 <X className="w-4 h-4" />
@@ -300,7 +330,7 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
 
           {/* Risk Filter Buttons */}
           <div className="flex gap-2">
-            {(['ALL', 'LOW', 'MEDIUM', 'HIGH'] as const).map((level) => (
+            {(["ALL", "LOW", "MEDIUM", "HIGH"] as const).map((level) => (
               <motion.button
                 key={level}
                 whileHover={{ scale: 1.05 }}
@@ -308,14 +338,14 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
                 onClick={() => setRiskFilter(level)}
                 className={`px-4 py-2.5 rounded-xl font-medium text-sm transition-all ${
                   riskFilter === level
-                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                    ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30"
+                    : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
                 }`}
               >
-                {level === 'ALL'
-                  ? language === 'th'
-                    ? 'ทั้งหมด'
-                    : 'All'
+                {level === "ALL"
+                  ? language === "th"
+                    ? "ทั้งหมด"
+                    : "All"
                   : level.charAt(0) + level.slice(1).toLowerCase()}
               </motion.button>
             ))}
@@ -327,7 +357,7 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               className="p-2.5 rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-              title={language === 'th' ? 'รีเฟรช' : 'Refresh'}
+              title={language === "th" ? "รีเฟรช" : "Refresh"}
             >
               <RefreshCw className="w-5 h-5" />
             </motion.button>
@@ -335,7 +365,7 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               className="p-2.5 rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-              title={language === 'th' ? 'ดาวน์โหลด' : 'Download'}
+              title={language === "th" ? "ดาวน์โหลด" : "Download"}
             >
               <Download className="w-5 h-5" />
             </motion.button>
@@ -367,7 +397,7 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
                       <div className="flex items-center gap-2">
                         {flexRender(
                           header.column.columnDef.header,
-                          header.getContext()
+                          header.getContext(),
                         )}
                         {header.column.getIsSorted() && (
                           <motion.div
@@ -398,7 +428,7 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
                       <td key={cell.id} className="px-6 py-4">
                         {flexRender(
                           cell.column.columnDef.cell,
-                          cell.getContext()
+                          cell.getContext(),
                         )}
                       </td>
                     ))}
@@ -412,21 +442,21 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
         {/* Pagination */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
           <div className="text-sm text-slate-600 dark:text-slate-400">
-            {language === 'th' ? 'แสดง' : 'Showing'}{' '}
+            {language === "th" ? "แสดง" : "Showing"}{" "}
             <span className="font-bold text-slate-900 dark:text-white">
               {table.getState().pagination.pageIndex *
                 table.getState().pagination.pageSize +
                 1}
-            </span>{' '}
-            {language === 'th' ? 'ถึง' : 'to'}{' '}
+            </span>{" "}
+            {language === "th" ? "ถึง" : "to"}{" "}
             <span className="font-bold text-slate-900 dark:text-white">
               {Math.min(
                 (table.getState().pagination.pageIndex + 1) *
                   table.getState().pagination.pageSize,
-                filteredData.length
+                filteredData.length,
               )}
-            </span>{' '}
-            {language === 'th' ? 'จากทั้งหมด' : 'of'}{' '}
+            </span>{" "}
+            {language === "th" ? "จากทั้งหมด" : "of"}{" "}
             <span className="font-bold text-slate-900 dark:text-white">
               {filteredData.length}
             </span>
@@ -444,21 +474,23 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
             </motion.button>
 
             <div className="flex items-center gap-1">
-              {Array.from({ length: table.getPageCount() }, (_, i) => i).map((pageIndex) => (
-                <motion.button
-                  key={pageIndex}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => table.setPageIndex(pageIndex)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    table.getState().pagination.pageIndex === pageIndex
-                      ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30'
-                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                  }`}
-                >
-                  {pageIndex + 1}
-                </motion.button>
-              ))}
+              {Array.from({ length: table.getPageCount() }, (_, i) => i).map(
+                (pageIndex) => (
+                  <motion.button
+                    key={pageIndex}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => table.setPageIndex(pageIndex)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      table.getState().pagination.pageIndex === pageIndex
+                        ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30"
+                        : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    {pageIndex + 1}
+                  </motion.button>
+                ),
+              )}
             </div>
 
             <motion.button
@@ -481,35 +513,35 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
 interface StatCardProps {
   label: string;
   value: string;
-  color: 'cyan' | 'emerald' | 'amber' | 'orange';
+  color: "cyan" | "emerald" | "amber" | "orange";
   icon: React.ReactNode;
 }
 
 function StatCard({ label, value, color, icon }: StatCardProps) {
   const colors = {
     cyan: {
-      bg: 'from-cyan-500/20 to-blue-500/20',
-      border: 'border-cyan-500/30',
-      text: 'text-cyan-600 dark:text-cyan-400',
-      icon: 'bg-cyan-500/20 text-cyan-500',
+      bg: "from-cyan-500/20 to-blue-500/20",
+      border: "border-cyan-500/30",
+      text: "text-cyan-600 dark:text-cyan-400",
+      icon: "bg-cyan-500/20 text-cyan-500",
     },
     emerald: {
-      bg: 'from-emerald-500/20 to-green-500/20',
-      border: 'border-emerald-500/30',
-      text: 'text-emerald-600 dark:text-emerald-400',
-      icon: 'bg-emerald-500/20 text-emerald-500',
+      bg: "from-emerald-500/20 to-green-500/20",
+      border: "border-emerald-500/30",
+      text: "text-emerald-600 dark:text-emerald-400",
+      icon: "bg-emerald-500/20 text-emerald-500",
     },
     amber: {
-      bg: 'from-amber-500/20 to-orange-500/20',
-      border: 'border-amber-500/30',
-      text: 'text-amber-600 dark:text-amber-400',
-      icon: 'bg-amber-500/20 text-amber-500',
+      bg: "from-amber-500/20 to-orange-500/20",
+      border: "border-amber-500/30",
+      text: "text-amber-600 dark:text-amber-400",
+      icon: "bg-amber-500/20 text-amber-500",
     },
     orange: {
-      bg: 'from-orange-500/20 to-red-500/20',
-      border: 'border-orange-500/30',
-      text: 'text-orange-600 dark:text-orange-400',
-      icon: 'bg-orange-500/20 text-orange-500',
+      bg: "from-orange-500/20 to-red-500/20",
+      border: "border-orange-500/30",
+      text: "text-orange-600 dark:text-orange-400",
+      icon: "bg-orange-500/20 text-orange-500",
     },
   };
 
@@ -528,9 +560,7 @@ function StatCard({ label, value, color, icon }: StatCardProps) {
       />
       <div className="relative z-10">
         <div className="flex items-start justify-between mb-3">
-          <div className={`p-2.5 rounded-xl ${config.icon}`}>
-            {icon}
-          </div>
+          <div className={`p-2.5 rounded-xl ${config.icon}`}>{icon}</div>
         </div>
         <p className="text-3xl font-black text-slate-900 dark:text-white mb-1">
           {value}

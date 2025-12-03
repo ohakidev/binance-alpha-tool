@@ -2,10 +2,13 @@ import { prisma } from "@/lib/db/prisma";
 import { moralisClient } from "@/lib/api/moralis-client";
 import { telegramService } from "./telegram";
 import { AirdropStatus, AlertType } from "@prisma/client";
+import { determineAirdropStatus } from "@/lib/constants/alpha.constants";
+
+// ============= Types =============
 
 interface AirdropData {
   name: string;
-  token: string;  // Changed from symbol to token to match Prisma schema
+  token: string;
   chain: string;
   description?: string;
   eligibility: string[];
@@ -18,15 +21,48 @@ interface AirdropData {
   twitterUrl?: string;
 }
 
+interface AirdropScoreInput {
+  estimatedValue?: number;
+  participantCount?: number;
+  verified: boolean;
+  requirements: string[];
+  claimEndDate?: Date | null;
+}
+
+interface EligibilityResult {
+  isEligible: boolean;
+  metRequirements: string[];
+  missedRequirements: string[];
+}
+
+// ============= Helper Functions =============
+
+/**
+ * Parse JSON string to array safely
+ */
+function parseJsonArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+// ============= Airdrop Calculator Service =============
+
+/**
+ * Airdrop Calculator Service
+ * Handles airdrop scoring, eligibility checks, and status management
+ */
 export class AirdropCalculator {
-  // คำนวณคะแนนความน่าสนใจของ airdrop (0-100)
-  calculateAirdropScore(airdrop: {
-    estimatedValue?: number;
-    participantCount?: number;
-    verified: boolean;
-    requirements: string[];
-    claimEndDate?: Date | null;
-  }): number {
+  /**
+   * Calculate airdrop interest score (0-100)
+   */
+  calculateAirdropScore(airdrop: AirdropScoreInput): number {
     let score = 0;
 
     // Estimated value score (0-40)
@@ -34,11 +70,11 @@ export class AirdropCalculator {
       score += Math.min(40, (airdrop.estimatedValue / 1000) * 40);
     }
 
-    // Participant count (inverse - fewer = better) (0-20)
+    // Participant count - fewer is better (0-20)
     if (airdrop.participantCount) {
       const participantScore = Math.max(
         0,
-        20 - (airdrop.participantCount / 100000) * 20
+        20 - (airdrop.participantCount / 100000) * 20,
       );
       score += participantScore;
     }
@@ -48,14 +84,13 @@ export class AirdropCalculator {
       score += 20;
     }
 
-    // Requirement complexity (fewer = better) (0-10)
-    const requirementScore = Math.max(0, 10 - airdrop.requirements.length * 2);
-    score += requirementScore;
+    // Requirement complexity - fewer is better (0-10)
+    score += Math.max(0, 10 - airdrop.requirements.length * 2);
 
     // Time urgency (0-10)
     if (airdrop.claimEndDate) {
       const daysLeft = Math.ceil(
-        (airdrop.claimEndDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+        (airdrop.claimEndDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
       );
       if (daysLeft <= 7) {
         score += 10;
@@ -67,19 +102,16 @@ export class AirdropCalculator {
     return Math.min(100, Math.round(score));
   }
 
-  // ตรวจสอบความสามารถในการรับ airdrop
+  /**
+   * Check user eligibility for airdrop
+   */
   async checkUserEligibility(
     walletAddress: string,
-    requirements: string[]
-  ): Promise<{
-    isEligible: boolean;
-    metRequirements: string[];
-    missedRequirements: string[];
-  }> {
+    requirements: string[],
+  ): Promise<EligibilityResult> {
     try {
-      const eligibilityData = await moralisClient.checkAirdropEligibility(
-        walletAddress
-      );
+      const eligibilityData =
+        await moralisClient.checkAirdropEligibility(walletAddress);
 
       const metRequirements: string[] = [];
       const missedRequirements: string[] = [];
@@ -87,19 +119,13 @@ export class AirdropCalculator {
       for (const req of requirements) {
         const reqLower = req.toLowerCase();
 
-        if (reqLower.includes("nft") && eligibilityData.hasNFTs) {
-          metRequirements.push(req);
-        } else if (
-          reqLower.includes("token") &&
-          eligibilityData.tokenCount > 0
-        ) {
-          metRequirements.push(req);
-        } else if (
-          reqLower.includes("transaction") &&
-          eligibilityData.isActive
-        ) {
-          metRequirements.push(req);
-        } else if (reqLower.includes("active") && eligibilityData.isActive) {
+        const isMet =
+          (reqLower.includes("nft") && eligibilityData.hasNFTs) ||
+          (reqLower.includes("token") && eligibilityData.tokenCount > 0) ||
+          (reqLower.includes("transaction") && eligibilityData.isActive) ||
+          (reqLower.includes("active") && eligibilityData.isActive);
+
+        if (isMet) {
           metRequirements.push(req);
         } else {
           missedRequirements.push(req);
@@ -121,21 +147,25 @@ export class AirdropCalculator {
     }
   }
 
-  // สร้าง airdrop ใหม่
+  /**
+   * Create a new airdrop
+   */
   async createAirdrop(data: AirdropData) {
+    const status = this.determineStatus(data);
+
     const airdrop = await prisma.airdrop.create({
       data: {
         ...data,
         eligibility: JSON.stringify(data.eligibility),
         requirements: JSON.stringify(data.requirements),
-        status: this.determineStatus(data),
+        status,
       },
     });
 
-    // ส่งการแจ้งเตือนไปยัง Telegram
+    // Send Telegram notification
     await telegramService.sendAirdropAlert({
       name: airdrop.name,
-      symbol: airdrop.token,  // Use token field from schema
+      symbol: airdrop.token,
       chain: airdrop.chain,
       status: airdrop.status,
       claimStartDate: airdrop.claimStartDate || undefined,
@@ -146,7 +176,9 @@ export class AirdropCalculator {
     return airdrop;
   }
 
-  // กำหนดสถานะของ airdrop
+  /**
+   * Determine airdrop status based on dates
+   */
   private determineStatus(data: AirdropData): AirdropStatus {
     const now = new Date();
 
@@ -160,7 +192,7 @@ export class AirdropCalculator {
 
     if (data.snapshotDate) {
       const daysDiff = Math.ceil(
-        (data.snapshotDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+        (data.snapshotDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
       );
       if (daysDiff <= 0) {
         return AirdropStatus.SNAPSHOT;
@@ -170,7 +202,9 @@ export class AirdropCalculator {
     return AirdropStatus.UPCOMING;
   }
 
-  // อัพเดทสถานะ airdrops ทั้งหมด
+  /**
+   * Update all airdrop statuses
+   */
   async updateAllAirdropStatuses() {
     const airdrops = await prisma.airdrop.findMany({
       where: {
@@ -181,37 +215,7 @@ export class AirdropCalculator {
     });
 
     for (const airdrop of airdrops) {
-      // Parse JSON strings to arrays
-      const eligibility = (() => {
-        try {
-          return typeof airdrop.eligibility === "string"
-            ? JSON.parse(airdrop.eligibility)
-            : airdrop.eligibility;
-        } catch {
-          return [];
-        }
-      })();
-
-      const requirements = (() => {
-        try {
-          return typeof airdrop.requirements === "string"
-            ? JSON.parse(airdrop.requirements)
-            : airdrop.requirements;
-        } catch {
-          return [];
-        }
-      })();
-
-      const newStatus = this.determineStatus({
-        name: airdrop.name,
-        token: airdrop.token,  // Use token field from schema
-        chain: airdrop.chain,
-        eligibility,
-        requirements,
-        snapshotDate: airdrop.snapshotDate || undefined,
-        claimStartDate: airdrop.claimStartDate || undefined,
-        claimEndDate: airdrop.claimEndDate || undefined,
-      });
+      const newStatus = determineAirdropStatus(airdrop.claimStartDate);
 
       if (newStatus !== airdrop.status) {
         await prisma.airdrop.update({
@@ -219,17 +223,17 @@ export class AirdropCalculator {
           data: { status: newStatus },
         });
 
-        // ส่งการแจ้งเตือนเมื่อสถานะเปลี่ยน
+        // Send notifications for status changes
         if (newStatus === AirdropStatus.SNAPSHOT) {
           await telegramService.sendSnapshotAlert({
             name: airdrop.name,
-            symbol: airdrop.token,  // Use token field from schema
+            symbol: airdrop.token,
             snapshotDate: airdrop.snapshotDate || undefined,
           });
         } else if (newStatus === AirdropStatus.CLAIMABLE) {
           await telegramService.sendClaimableAlert({
             name: airdrop.name,
-            symbol: airdrop.token,  // Use token field from schema
+            symbol: airdrop.token,
             claimEndDate: airdrop.claimEndDate || undefined,
           });
         }
@@ -237,13 +241,15 @@ export class AirdropCalculator {
     }
   }
 
-  // สร้าง alert สำหรับผู้ใช้
+  /**
+   * Create user alert
+   */
   async createUserAlert(
     userId: string,
     airdropId: string | null,
     type: AlertType,
     title: string,
-    message: string
+    message: string,
   ) {
     return prisma.alert.create({
       data: {
@@ -256,7 +262,9 @@ export class AirdropCalculator {
     });
   }
 
-  // ดึง airdrops ที่กำลังจะมาถึง
+  /**
+   * Get upcoming airdrops
+   */
   async getUpcomingAirdrops(limit = 10) {
     return prisma.airdrop.findMany({
       where: {
@@ -273,11 +281,13 @@ export class AirdropCalculator {
     });
   }
 
-  // ติดตาม airdrop สำหรับผู้ใช้
+  /**
+   * Track airdrop for user
+   */
   async trackAirdropForUser(
     userId: string,
     airdropId: string,
-    walletAddress?: string
+    walletAddress?: string,
   ) {
     const airdrop = await prisma.airdrop.findUnique({
       where: { id: airdropId },
@@ -290,20 +300,10 @@ export class AirdropCalculator {
     let isEligible = false;
 
     if (walletAddress) {
-      // Parse requirements from JSON string
-      const requirements = (() => {
-        try {
-          return typeof airdrop.requirements === "string"
-            ? JSON.parse(airdrop.requirements)
-            : airdrop.requirements;
-        } catch {
-          return [];
-        }
-      })();
-
+      const requirements = parseJsonArray(airdrop.requirements);
       const eligibility = await this.checkUserEligibility(
         walletAddress,
-        requirements
+        requirements,
       );
       isEligible = eligibility.isEligible;
     }
@@ -326,5 +326,7 @@ export class AirdropCalculator {
     });
   }
 }
+
+// ============= Singleton Export =============
 
 export const airdropCalculator = new AirdropCalculator();

@@ -1,7 +1,15 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { AirdropType, AirdropStatus } from '@prisma/client';
+import { useState, useEffect, useCallback } from "react";
+import { AirdropType, AirdropStatus } from "@prisma/client";
+import {
+  normalizeChainName,
+  mapAirdropType,
+  determineAirdropStatus,
+  parseDateTime,
+  DEFAULT_API_HEADERS,
+  API_URLS,
+} from "@/lib/constants/alpha.constants";
 
 interface Alpha123Project {
   token: string;
@@ -34,96 +42,70 @@ interface ProcessedProject {
   estimatedValue: number | null;
 }
 
+interface UseAlphaDataOptions {
+  autoRefresh?: boolean;
+  interval?: number;
+}
+
+interface UseAlphaDataReturn {
+  data: ProcessedProject[];
+  loading: boolean;
+  error: string | null;
+  lastUpdate: Date | null;
+  refetch: () => Promise<void>;
+}
+
+/**
+ * Transform raw Alpha123 project to processed format
+ */
+function transformProject(project: Alpha123Project): ProcessedProject {
+  const claimDate = parseDateTime(project.date, project.time);
+  const type = mapAirdropType(project.type);
+  const status = determineAirdropStatus(claimDate);
+
+  return {
+    token: project.token,
+    name: project.name || project.token,
+    chain: normalizeChainName(project.chain_id),
+    airdropAmount: project.amount || "TBA",
+    claimStartDate: claimDate,
+    contractAddress: project.contract_address || null,
+    requiredPoints: project.points || 0,
+    deductPoints: Math.floor((project.points || 0) * 0.1),
+    type,
+    status,
+    estimatedValue: project.price || null,
+  };
+}
+
 /**
  * Client-side hook to fetch real data from alpha123.uk
  * Fetches directly from browser to bypass server-side bot detection
  */
-export function useAlphaData(autoRefresh: boolean = true, interval: number = 7000) {
+export function useAlphaData(
+  options: UseAlphaDataOptions = {},
+): UseAlphaDataReturn {
+  const { autoRefresh = true, interval = 7000 } = options;
+
   const [data, setData] = useState<ProcessedProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-
-  const mapChain = (chainId?: string): string => {
-    if (!chainId) return 'BSC';
-    const chainMap: Record<string, string> = {
-      '56': 'BSC',
-      'bsc': 'BSC',
-      '1': 'Ethereum',
-      'eth': 'Ethereum',
-      '137': 'Polygon',
-      'polygon': 'Polygon',
-      'matic': 'Polygon',
-      '42161': 'Arbitrum',
-      'arbitrum': 'Arbitrum',
-      '10': 'Optimism',
-      'optimism': 'Optimism',
-      '43114': 'Avalanche',
-      'avalanche': 'Avalanche',
-    };
-    return chainMap[chainId.toLowerCase()] || 'BSC';
-  };
-
-  const mapType = (type?: string): AirdropType => {
-    if (!type) return 'AIRDROP';
-    const typeMap: Record<string, AirdropType> = {
-      'tge': 'TGE',
-      'pretge': 'PRETGE',
-      'pre-tge': 'PRETGE',
-      'grab': 'AIRDROP',
-      'airdrop': 'AIRDROP',
-    };
-    return typeMap[type.toLowerCase()] || 'AIRDROP';
-  };
-
-  const parseDateTime = (date?: string, time?: string): Date | null => {
-    if (!date) return null;
-    try {
-      let dateStr = date;
-      if (time) {
-        dateStr += ` ${time}`;
-      }
-      const parsed = new Date(dateStr);
-      if (!isNaN(parsed.getTime())) {
-        return parsed;
-      }
-      return null;
-    } catch (error) {
-      console.error('Failed to parse date:', date, time);
-      return null;
-    }
-  };
-
-  const determineStatus = (claimDate: Date | null): AirdropStatus => {
-    if (!claimDate) return 'UPCOMING';
-    const now = new Date();
-    const diffDays = Math.ceil((claimDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (diffDays < -7) {
-      return 'ENDED';
-    } else if (diffDays < 0) {
-      return 'CLAIMABLE';
-    } else if (diffDays <= 7) {
-      return 'SNAPSHOT';
-    }
-    return 'UPCOMING';
-  };
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      console.log('🔍 Fetching from alpha123.uk (client-side)...');
+      console.log("🔍 Fetching from alpha123.uk (client-side)...");
 
-      // Fetch directly from browser - this bypasses server-side bot detection
-      const response = await fetch('https://alpha123.uk/api/data?fresh=1', {
-        method: 'GET',
+      const response = await fetch(`${API_URLS.ALPHA123}/api/data?fresh=1`, {
+        method: "GET",
         headers: {
-          'Accept': 'application/json, text/plain, */*',
-          'Accept-Language': 'en-US,en;q=0.9',
+          Accept: DEFAULT_API_HEADERS.Accept,
+          "Accept-Language": DEFAULT_API_HEADERS["Accept-Language"],
         },
-        cache: 'no-store',
+        cache: "no-store",
       });
 
       if (!response.ok) {
@@ -131,7 +113,7 @@ export function useAlphaData(autoRefresh: boolean = true, interval: number = 700
       }
 
       const rawData = await response.json();
-      console.log('✅ Received data from alpha123.uk:', rawData);
+      console.log("✅ Received data from alpha123.uk:", rawData);
 
       // Handle different response formats
       let projects: Alpha123Project[] = [];
@@ -141,32 +123,18 @@ export function useAlphaData(autoRefresh: boolean = true, interval: number = 700
         projects = rawData.data;
       }
 
-      // Process the data
-      const processed: ProcessedProject[] = projects.map((project) => {
-        const claimDate = parseDateTime(project.date, project.time);
-        return {
-          token: project.token,
-          name: project.name || project.token,
-          chain: mapChain(project.chain_id),
-          airdropAmount: project.amount || 'TBA',
-          claimStartDate: claimDate,
-          contractAddress: project.contract_address || null,
-          requiredPoints: project.points || 0,
-          deductPoints: Math.floor((project.points || 0) * 0.1),
-          type: mapType(project.type),
-          status: determineStatus(claimDate),
-          estimatedValue: project.price || null,
-        };
-      });
+      // Transform projects using shared logic
+      const processed = projects.map(transformProject);
 
       console.log(`✅ Processed ${processed.length} projects`);
 
       setData(processed);
       setLastUpdate(new Date());
-      setLoading(false);
-    } catch (err: any) {
-      console.error('❌ Failed to fetch from alpha123.uk:', err);
-      setError(err.message);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      console.error("❌ Failed to fetch from alpha123.uk:", errorMessage);
+      setError(errorMessage);
+    } finally {
       setLoading(false);
     }
   }, []);
@@ -180,10 +148,7 @@ export function useAlphaData(autoRefresh: boolean = true, interval: number = 700
   useEffect(() => {
     if (!autoRefresh) return;
 
-    const intervalId = setInterval(() => {
-      fetchData();
-    }, interval);
-
+    const intervalId = setInterval(fetchData, interval);
     return () => clearInterval(intervalId);
   }, [autoRefresh, interval, fetchData]);
 

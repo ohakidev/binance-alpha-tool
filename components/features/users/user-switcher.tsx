@@ -1,16 +1,16 @@
-'use client';
+"use client";
 
 /**
  * User Switcher Component
  * Character selection-style user carousel
  */
 
-import { motion } from 'framer-motion';
-import { Plus, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useState } from 'react';
-import { useUserStore } from '@/lib/stores/user-store';
-import { format } from 'date-fns';
-import { cardVariants } from '@/lib/animations';
+import { motion } from "framer-motion";
+import { Plus, Edit2, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { useUserStore } from "@/lib/stores/user-store";
+import { format } from "date-fns";
+import { cardVariants } from "@/lib/animations";
 
 interface UserSwitcherProps {
   onAddUser: () => void;
@@ -23,7 +23,7 @@ export function UserSwitcher({ onAddUser, onEditUser }: UserSwitcherProps) {
 
   const handleDelete = (userId: string, username: string) => {
     if (users.length <= 1) {
-      alert('Cannot delete the last user');
+      alert("Cannot delete the last user");
       return;
     }
 
@@ -34,12 +34,12 @@ export function UserSwitcher({ onAddUser, onEditUser }: UserSwitcherProps) {
 
   // Avatar colors based on user
   const avatarColors = [
-    'from-[#FFD700] to-[#FFA500]', // Gold
-    'from-[#00CED1] to-[#4FD5D7]', // Cyan
-    'from-[#9B59B6] to-[#B985C5]', // Purple
-    'from-[#10B981] to-[#059669]', // Green
-    'from-[#F59E0B] to-[#D97706]', // Orange
-    'from-[#EF4444] to-[#DC2626]', // Red
+    "from-[#FFD700] to-[#FFA500]", // Gold
+    "from-[#00CED1] to-[#4FD5D7]", // Cyan
+    "from-[#9B59B6] to-[#B985C5]", // Purple
+    "from-[#10B981] to-[#059669]", // Green
+    "from-[#F59E0B] to-[#D97706]", // Orange
+    "from-[#EF4444] to-[#DC2626]", // Red
   ];
 
   return (
@@ -78,9 +78,10 @@ export function UserSwitcher({ onAddUser, onEditUser }: UserSwitcherProps) {
                 className={`
                   relative overflow-hidden rounded-xl p-4 cursor-pointer
                   transition-all duration-300
-                  ${isActive
-                    ? 'border-2 border-primary glow-gold glass'
-                    : 'border-2 border-transparent glass hover:border-white/20'
+                  ${
+                    isActive
+                      ? "border-2 border-primary glow-gold glass"
+                      : "border-2 border-transparent glass hover:border-white/20"
                   }
                 `}
               >
@@ -102,7 +103,7 @@ export function UserSwitcher({ onAddUser, onEditUser }: UserSwitcherProps) {
                       w-20 h-20 rounded-full bg-gradient-to-br ${avatarColors[colorIndex]}
                       flex items-center justify-center text-3xl font-bold text-black
                       mb-2 shadow-lg
-                      ${isActive ? 'animate-pulse-glow' : ''}
+                      ${isActive ? "animate-pulse-glow" : ""}
                     `}
                   >
                     {user.username.charAt(0).toUpperCase()}
@@ -126,7 +127,7 @@ export function UserSwitcher({ onAddUser, onEditUser }: UserSwitcherProps) {
                     {user.entryCount} entries
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {format(user.lastActive, 'MMM d')}
+                    {format(user.lastActive, "MMM d")}
                   </p>
                 </div>
 

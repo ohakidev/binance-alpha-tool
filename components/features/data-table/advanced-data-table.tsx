@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * Advanced Data Table Component
@@ -11,7 +11,7 @@
  * - Responsive design
  */
 
-import { useState, useMemo } from 'react';
+import { useState } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -24,8 +24,8 @@ import {
   ColumnFiltersState,
   VisibilityState,
   RowSelectionState,
-} from '@tanstack/react-table';
-import { motion, AnimatePresence } from 'framer-motion';
+} from "@tanstack/react-table";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowUpDown,
   ChevronLeft,
@@ -39,7 +39,7 @@ import {
   Filter,
   Eye,
   EyeOff,
-} from 'lucide-react';
+} from "lucide-react";
 
 interface DataTableProps<T> {
   data: T[];
@@ -57,14 +57,14 @@ export function AdvancedDataTable<T>({
   enableRowSelection = false,
   enableExport = true,
   enableColumnVisibility = true,
-  searchPlaceholder = 'Search...',
+  searchPlaceholder = "Search...",
   pageSizes = [10, 20, 50, 100],
 }: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [globalFilter, setGlobalFilter] = useState('');
+  const [globalFilter, setGlobalFilter] = useState("");
   const [showColumnSettings, setShowColumnSettings] = useState(false);
 
   const table = useReactTable({
@@ -97,25 +97,28 @@ export function AdvancedDataTable<T>({
   // Export functions
   const exportToCSV = () => {
     const rows = table.getFilteredRowModel().rows;
-    const headers = table.getAllColumns()
-      .filter(col => col.getIsVisible())
-      .map(col => col.id);
+    const headers = table
+      .getAllColumns()
+      .filter((col) => col.getIsVisible())
+      .map((col) => col.id);
 
     const csvContent = [
-      headers.join(','),
-      ...rows.map(row =>
-        headers.map(header => {
-          const cell = row.getValue(header);
-          return typeof cell === 'string' && cell.includes(',')
-            ? `"${cell}"`
-            : cell;
-        }).join(',')
-      )
-    ].join('\n');
+      headers.join(","),
+      ...rows.map((row) =>
+        headers
+          .map((header) => {
+            const cell = row.getValue(header);
+            return typeof cell === "string" && cell.includes(",")
+              ? `"${cell}"`
+              : cell;
+          })
+          .join(","),
+      ),
+    ].join("\n");
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const blob = new Blob([csvContent], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `export-${Date.now()}.csv`;
     a.click();
@@ -123,11 +126,13 @@ export function AdvancedDataTable<T>({
 
   const exportToJSON = () => {
     const rows = table.getFilteredRowModel().rows;
-    const jsonData = rows.map(row => row.original);
+    const jsonData = rows.map((row) => row.original);
 
-    const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(jsonData, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `export-${Date.now()}.json`;
     a.click();
@@ -149,7 +154,7 @@ export function AdvancedDataTable<T>({
           />
           {globalFilter && (
             <button
-              onClick={() => setGlobalFilter('')}
+              onClick={() => setGlobalFilter("")}
               className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
             >
               <X className="w-4 h-4" />
@@ -265,13 +270,15 @@ export function AdvancedDataTable<T>({
                       {header.isPlaceholder ? null : (
                         <div
                           className={`flex items-center gap-2 ${
-                            header.column.getCanSort() ? 'cursor-pointer select-none hover:text-orange-500' : ''
+                            header.column.getCanSort()
+                              ? "cursor-pointer select-none hover:text-orange-500"
+                              : ""
                           }`}
                           onClick={header.column.getToggleSortingHandler()}
                         >
                           {flexRender(
                             header.column.columnDef.header,
-                            header.getContext()
+                            header.getContext(),
                           )}
                           {header.column.getIsSorted() && (
                             <motion.div
@@ -301,14 +308,16 @@ export function AdvancedDataTable<T>({
                       exit={{ opacity: 0, y: -20 }}
                       transition={{ delay: index * 0.03 }}
                       className={`border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${
-                        row.getIsSelected() ? 'bg-cyan-50 dark:bg-cyan-900/20' : ''
+                        row.getIsSelected()
+                          ? "bg-cyan-50 dark:bg-cyan-900/20"
+                          : ""
                       }`}
                     >
                       {row.getVisibleCells().map((cell) => (
                         <td key={cell.id} className="px-6 py-4">
                           {flexRender(
                             cell.column.columnDef.cell,
-                            cell.getContext()
+                            cell.getContext(),
                           )}
                         </td>
                       ))}
@@ -339,18 +348,21 @@ export function AdvancedDataTable<T>({
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex-wrap gap-4">
           {/* Page info */}
           <div className="text-sm text-slate-600 dark:text-slate-400">
-            Showing{' '}
+            Showing{" "}
             <span className="font-bold text-slate-900 dark:text-white">
-              {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}
-            </span>{' '}
-            to{' '}
+              {table.getState().pagination.pageIndex *
+                table.getState().pagination.pageSize +
+                1}
+            </span>{" "}
+            to{" "}
             <span className="font-bold text-slate-900 dark:text-white">
               {Math.min(
-                (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-                table.getFilteredRowModel().rows.length
+                (table.getState().pagination.pageIndex + 1) *
+                  table.getState().pagination.pageSize,
+                table.getFilteredRowModel().rows.length,
               )}
-            </span>{' '}
-            of{' '}
+            </span>{" "}
+            of{" "}
             <span className="font-bold text-slate-900 dark:text-white">
               {table.getFilteredRowModel().rows.length}
             </span>
@@ -375,34 +387,37 @@ export function AdvancedDataTable<T>({
 
             {/* Page numbers */}
             <div className="hidden sm:flex items-center gap-1">
-              {Array.from({ length: Math.min(table.getPageCount(), 5) }, (_, i) => {
-                const pageIndex = table.getState().pagination.pageIndex;
-                let displayPage = i;
+              {Array.from(
+                { length: Math.min(table.getPageCount(), 5) },
+                (_, i) => {
+                  const pageIndex = table.getState().pagination.pageIndex;
+                  let displayPage = i;
 
-                if (table.getPageCount() > 5) {
-                  if (pageIndex < 3) {
-                    displayPage = i;
-                  } else if (pageIndex >= table.getPageCount() - 2) {
-                    displayPage = table.getPageCount() - 5 + i;
-                  } else {
-                    displayPage = pageIndex - 2 + i;
+                  if (table.getPageCount() > 5) {
+                    if (pageIndex < 3) {
+                      displayPage = i;
+                    } else if (pageIndex >= table.getPageCount() - 2) {
+                      displayPage = table.getPageCount() - 5 + i;
+                    } else {
+                      displayPage = pageIndex - 2 + i;
+                    }
                   }
-                }
 
-                return (
-                  <button
-                    key={i}
-                    onClick={() => table.setPageIndex(displayPage)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                      table.getState().pagination.pageIndex === displayPage
-                        ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30'
-                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
-                    }`}
-                  >
-                    {displayPage + 1}
-                  </button>
-                );
-              })}
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => table.setPageIndex(displayPage)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                        table.getState().pagination.pageIndex === displayPage
+                          ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30"
+                          : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
+                      }`}
+                    >
+                      {displayPage + 1}
+                    </button>
+                  );
+                },
+              )}
             </div>
 
             <button

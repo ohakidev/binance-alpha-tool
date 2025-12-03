@@ -77,13 +77,17 @@ const nextConfig: NextConfig = {
     ],
     // Enable CSS optimization
     optimizeCss: true,
-    // Turbo mode for faster development
-    turbo: {
-      rules: {
-        "*.svg": {
-          loaders: ["@svgr/webpack"],
-          as: "*.js",
-        },
+  },
+
+  // ============================================
+  // Turbopack Configuration
+  // ============================================
+
+  turbopack: {
+    rules: {
+      "*.svg": {
+        loaders: ["@svgr/webpack"],
+        as: "*.js",
       },
     },
   },

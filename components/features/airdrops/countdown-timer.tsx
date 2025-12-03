@@ -6,7 +6,7 @@
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 interface TimeLeft {
   days: number;
@@ -69,6 +69,14 @@ export function CountdownTimer({ targetDate, onComplete }: CountdownTimerProps) 
   });
   const [isComplete, setIsComplete] = useState(false);
 
+  // Use ref to store onComplete callback to prevent infinite loop
+  const onCompleteRef = useRef(onComplete);
+
+  // Update ref when callback changes
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
   useEffect(() => {
     const calculateTimeLeft = () => {
       const now = new Date().getTime();
@@ -77,7 +85,7 @@ export function CountdownTimer({ targetDate, onComplete }: CountdownTimerProps) 
 
       if (difference <= 0) {
         setIsComplete(true);
-        if (onComplete) onComplete();
+        if (onCompleteRef.current) onCompleteRef.current();
         return {
           days: 0,
           hours: 0,
@@ -103,7 +111,7 @@ export function CountdownTimer({ targetDate, onComplete }: CountdownTimerProps) 
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [targetDate, onComplete]);
+  }, [targetDate]);
 
   if (isComplete) {
     return (

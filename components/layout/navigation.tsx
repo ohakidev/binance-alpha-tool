@@ -5,15 +5,10 @@
  * Luxurious animations and smooth transitions
  */
 
-import {
-  motion,
-  AnimatePresence,
-  useScroll,
-  useTransform,
-} from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   Sparkles,
   TrendingUp,
@@ -23,6 +18,7 @@ import {
   Menu,
   X,
   ChevronRight,
+  LucideIcon,
 } from "lucide-react";
 import { useUIStore } from "@/lib/stores/ui-store";
 import { LanguageSwitcher } from "./language-switcher";
@@ -33,13 +29,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  navItemVariants,
-  navIndicatorVariants,
-  fadeUpVariants,
-  springConfigs,
-  easings,
-} from "@/lib/animations";
+import { springConfigs, easings } from "@/lib/animations";
 
 // Navigation items configuration
 const getNavItems = (t: (key: string) => string) => [
@@ -80,7 +70,7 @@ function DesktopNavLink({
 }: {
   href: string;
   label: string;
-  icon: any;
+  icon: LucideIcon;
   color: string;
   isActive: boolean;
 }) {
@@ -202,7 +192,7 @@ function MobileNavLink({
 }: {
   href: string;
   label: string;
-  icon: any;
+  icon: LucideIcon;
   color: string;
   isActive: boolean;
 }) {
@@ -307,15 +297,12 @@ export function Navigation() {
   const pathname = usePathname();
   const { setSidebarOpen, sidebarOpen } = useUIStore();
   const { t } = useLanguage();
-  const [mounted, setMounted] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
   const navItems = getNavItems(t);
 
   // Handle scroll for navbar blur effect
   useEffect(() => {
-    setMounted(true);
-
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 10);
     };

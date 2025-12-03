@@ -1,15 +1,15 @@
-'use client';
+"use client";
 
 /**
  * Activity Feed Component
  * Real-time feed of recent income entries and activities
  */
 
-import { motion, AnimatePresence } from 'framer-motion';
-import { useIncomeStore } from '@/lib/stores/income-store';
-import { useUserStore } from '@/lib/stores/user-store';
-import { format } from 'date-fns';
-import { TrendingUp, TrendingDown, DollarSign, Calendar, Award } from 'lucide-react';
+import { motion, AnimatePresence } from "framer-motion";
+import { useIncomeStore } from "@/lib/stores/income-store";
+import { useUserStore } from "@/lib/stores/user-store";
+import { format } from "date-fns";
+import { TrendingUp, DollarSign, Calendar, Award } from "lucide-react";
 
 const categoryIcons = {
   Airdrop: Award,
@@ -19,10 +19,10 @@ const categoryIcons = {
 };
 
 const categoryColors = {
-  Airdrop: 'text-[#FFD700]',
-  Trading: 'text-[#10B981]',
-  Staking: 'text-[#00CED1]',
-  Other: 'text-[#9B59B6]',
+  Airdrop: "text-[#FFD700]",
+  Trading: "text-[#10B981]",
+  Staking: "text-[#00CED1]",
+  Other: "text-[#9B59B6]",
 };
 
 export function ActivityFeed() {
@@ -60,8 +60,12 @@ export function ActivityFeed() {
       <div className="space-y-3">
         <AnimatePresence mode="popLayout">
           {recentEntries.map((entry, index) => {
-            const Icon = categoryIcons[entry.category as keyof typeof categoryIcons] || Calendar;
-            const colorClass = categoryColors[entry.category as keyof typeof categoryColors] || 'text-muted-foreground';
+            const Icon =
+              categoryIcons[entry.category as keyof typeof categoryIcons] ||
+              Calendar;
+            const colorClass =
+              categoryColors[entry.category as keyof typeof categoryColors] ||
+              "text-muted-foreground";
 
             return (
               <motion.div
@@ -73,20 +77,26 @@ export function ActivityFeed() {
                 className="group relative flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 transition-colors"
               >
                 {/* Icon */}
-                <div className={`p-2 rounded-lg bg-white/5 ${colorClass} group-hover:scale-110 transition-transform`}>
+                <div
+                  className={`p-2 rounded-lg bg-white/5 ${colorClass} group-hover:scale-110 transition-transform`}
+                >
                   <Icon className="w-4 h-4" />
                 </div>
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="font-medium text-sm truncate">{entry.projectName}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full bg-white/5 ${colorClass}`}>
+                    <p className="font-medium text-sm truncate">
+                      {entry.projectName}
+                    </p>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full bg-white/5 ${colorClass}`}
+                    >
                       {entry.category}
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {format(new Date(entry.date), 'MMM dd, yyyy')}
+                    {format(new Date(entry.date), "MMM dd, yyyy")}
                   </p>
                   {entry.notes && (
                     <p className="text-xs text-muted-foreground mt-1 truncate">
@@ -97,8 +107,10 @@ export function ActivityFeed() {
 
                 {/* Amount */}
                 <div className="text-right">
-                  <p className={`font-bold ${entry.amount >= 0 ? 'text-[#10B981]' : 'text-[#EF4444]'}`}>
-                    {entry.amount >= 0 ? '+' : ''}${entry.amount.toFixed(2)}
+                  <p
+                    className={`font-bold ${entry.amount >= 0 ? "text-[#10B981]" : "text-[#EF4444]"}`}
+                  >
+                    {entry.amount >= 0 ? "+" : ""}${entry.amount.toFixed(2)}
                   </p>
                 </div>
 
@@ -115,7 +127,7 @@ export function ActivityFeed() {
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
         className="w-full mt-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-sm font-medium"
-        onClick={() => window.location.href = '/calendar'}
+        onClick={() => (window.location.href = "/calendar")}
       >
         View All Entries →
       </motion.button>

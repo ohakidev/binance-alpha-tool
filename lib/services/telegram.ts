@@ -1,13 +1,62 @@
+/**
+ * Telegram Notification Service
+ * Clean OOP implementation with proper type safety
+ */
+
 import TelegramBot from "node-telegram-bot-api";
 
-type Language = "th" | "en";
+// ============= Types =============
 
-interface Translations {
-  th: Record<string, string>;
-  en: Record<string, string>;
+type Language = "th" | "en";
+type MessageType = "info" | "warning" | "success" | "error";
+
+interface AirdropAlertData {
+  name: string;
+  symbol: string;
+  chain: string;
+  status: string;
+  claimStartDate?: Date;
+  claimEndDate?: Date;
+  estimatedValue?: number;
+  airdropAmount?: string;
+  requirements?: string[];
+  requiredPoints?: number;
+  deductPoints?: number;
+  contractAddress?: string;
 }
 
-const translations: Translations = {
+interface SnapshotAlertData {
+  name: string;
+  symbol: string;
+  snapshotDate?: Date;
+  requiredPoints?: number;
+  requirements?: string[];
+}
+
+interface ClaimableAlertData {
+  name: string;
+  symbol: string;
+  claimEndDate?: Date;
+  claimAmount?: string;
+  requiredPoints?: number;
+}
+
+interface StabilityWarningData {
+  stabilityScore: number;
+  riskLevel: string;
+  volatilityIndex: number;
+  priceChange: number;
+}
+
+interface TelegramConfig {
+  token?: string;
+  chatId?: string;
+  language?: Language;
+}
+
+// ============= Translations =============
+
+const TRANSLATIONS: Record<Language, Record<string, string>> = {
   th: {
     newAirdrop: "Airdrop ใหม่มาแล้ว",
     snapshot: "การ Snapshot กำลังจะมาถึง",
@@ -27,8 +76,7 @@ const translations: Translations = {
     claimNow: "รีบ Claim เลย!",
     makeReady: "เตรียมตัวให้พร้อม!",
     snapshotSoon: "Snapshot เร็วๆ นี้!",
-    dex: "DEX",
-    mexc: "MEXC",
+    hours: "ชั่วโมง",
   },
   en: {
     newAirdrop: "New Alpha Drop Available",
@@ -49,20 +97,32 @@ const translations: Translations = {
     claimNow: "Claim Now!",
     makeReady: "Get Ready!",
     snapshotSoon: "Snapshot Soon!",
-    dex: "DEX",
-    mexc: "MEXC",
+    hours: "hours",
   },
 };
 
+const MESSAGE_EMOJIS: Record<MessageType, string> = {
+  info: "ℹ️",
+  warning: "⚠️",
+  success: "✅",
+  error: "❌",
+};
+
+// ============= Telegram Service =============
+
+/**
+ * Telegram Notification Service
+ * Provides methods for sending various types of notifications via Telegram
+ */
 class TelegramService {
   private bot: TelegramBot | null = null;
   private chatId: string;
-  private isEnabled: boolean;
   private language: Language;
+  private isEnabled: boolean;
 
-  constructor() {
-    const token = process.env.TELEGRAM_BOT_TOKEN;
-    let chatId = process.env.TELEGRAM_CHAT_ID || "";
+  constructor(config?: TelegramConfig) {
+    const token = config?.token || process.env.TELEGRAM_BOT_TOKEN;
+    let chatId = config?.chatId || process.env.TELEGRAM_CHAT_ID || "";
 
     // Auto-add @ prefix if chatId is username without @
     if (
@@ -72,11 +132,11 @@ class TelegramService {
       isNaN(Number(chatId))
     ) {
       chatId = "@" + chatId;
-      console.log(`ℹ️  Auto-added @ prefix to chat ID: ${chatId}`);
     }
 
     this.chatId = chatId;
-    this.language = (process.env.TELEGRAM_LANGUAGE as Language) || "th";
+    this.language =
+      config?.language || (process.env.TELEGRAM_LANGUAGE as Language) || "th";
     this.isEnabled = !!(token && this.chatId);
 
     if (this.isEnabled && token) {
@@ -84,23 +144,77 @@ class TelegramService {
       console.log(`✅ Telegram bot initialized - Chat ID: ${this.chatId}`);
     } else {
       console.warn(
-        "⚠️  Telegram bot disabled: Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID",
+        "⚠️ Telegram bot disabled: Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID",
       );
     }
   }
 
+  /**
+   * Get translation for key
+   */
   private t(key: string): string {
-    return translations[this.language][key] || key;
+    return TRANSLATIONS[this.language][key] || key;
   }
 
-  setLanguage(lang: Language) {
+  /**
+   * Set notification language
+   */
+  setLanguage(lang: Language): void {
     this.language = lang;
   }
 
+  /**
+   * Check if service is enabled
+   */
+  getIsEnabled(): boolean {
+    return this.isEnabled;
+  }
+
+  /**
+   * Format date to Thai timezone string
+   */
+  private formatDateThai(date: Date): string {
+    const thaiTime = new Date(date.getTime() + 7 * 60 * 60 * 1000);
+    return (
+      thaiTime.toLocaleString("en-US", {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        timeZone: "UTC",
+      }) + " UTC"
+    );
+  }
+
+  /**
+   * Format date based on language
+   */
+  private formatDate(date: Date): string {
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    };
+
+    if (this.language === "th") {
+      return date.toLocaleDateString("th-TH", options);
+    }
+    return date.toLocaleDateString("en-US", options) + " UTC";
+  }
+
+  /**
+   * Send a generic message
+   */
   async sendMessage(
     title: string,
     message: string,
-    type: "info" | "warning" | "success" | "error" = "info",
+    type: MessageType = "info",
   ): Promise<boolean> {
     if (!this.isEnabled || !this.bot) {
       console.log("Telegram notification (disabled):", title, "-", message);
@@ -108,148 +222,32 @@ class TelegramService {
     }
 
     try {
-      const emojis = {
-        info: "ℹ️",
-        warning: "⚠️",
-        success: "✅",
-        error: "❌",
-      };
-      const formattedMessage = `${emojis[type]} *${title}*\n\n${message}`;
-
-      console.log(`📤 Sending to Telegram (${this.chatId}):`, title);
+      const formattedMessage = `${MESSAGE_EMOJIS[type]} *${title}*\n\n${message}`;
 
       await this.bot.sendMessage(this.chatId, formattedMessage, {
         parse_mode: "Markdown",
       });
 
-      console.log(`✅ Message sent successfully to ${this.chatId}`);
+      console.log(`✅ Message sent to ${this.chatId}`);
       return true;
-    } catch (error: unknown) {
-      const err = error as { message?: string; response?: { body?: unknown } };
-      console.error("❌ Telegram send error:", {
-        chatId: this.chatId,
-        error: err.message,
-        response: err.response?.body,
-      });
+    } catch (error) {
+      this.logError("sendMessage", error);
       return false;
     }
   }
 
-  // แจ้งเตือน Airdrop ใหม่ (แบบในรูป - รูปแบบสวย)
-  async sendAirdropAlert(airdrop: {
-    name: string;
-    symbol: string;
-    chain: string;
-    status: string;
-    claimStartDate?: Date;
-    claimEndDate?: Date;
-    estimatedValue?: number;
-    airdropAmount?: string;
-    requirements?: string[];
-    requiredPoints?: number;
-    deductPoints?: number;
-    contractAddress?: string;
-  }): Promise<boolean> {
+  /**
+   * Send airdrop alert notification
+   */
+  async sendAirdropAlert(airdrop: AirdropAlertData): Promise<boolean> {
     if (!this.isEnabled || !this.bot) {
       console.log("Telegram airdrop alert (disabled):", airdrop.name);
       return false;
     }
 
     try {
-      // Header
-      let message = `🎁 *Binance Alpha Airdrop Tracker*\n`;
-      message += `${this.t("newAirdrop")} 🎉\n\n`;
-
-      // Airdrop details
-      message += `🍄 ${this.t("airdrop")}: *${airdrop.name}*\n`;
-      message += `💎 ${this.t("symbol")}: $${airdrop.symbol}\n`;
-
-      // Timeline - แปลงเป็นเวลาไทย (UTC+7)
-      if (airdrop.claimStartDate) {
-        const startDate = new Date(airdrop.claimStartDate);
-        // แปลงเป็นเวลาไทย
-        const thaiTime = new Date(startDate.getTime() + 7 * 60 * 60 * 1000);
-        const dateStr =
-          thaiTime.toLocaleString("en-US", {
-            weekday: "short",
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            timeZone: "UTC",
-          }) + " UTC";
-        message += `📅 ${this.t("start")}: ${dateStr}\n`;
-      }
-
-      if (airdrop.claimEndDate) {
-        const endDate = new Date(airdrop.claimEndDate);
-        // แปลงเป็นเวลาไทย
-        const thaiTime = new Date(endDate.getTime() + 7 * 60 * 60 * 1000);
-        const dateStr =
-          thaiTime.toLocaleString("en-US", {
-            weekday: "short",
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            timeZone: "UTC",
-          }) + " UTC";
-        message += `🏆 ${this.t("end")}: ${dateStr}\n`;
-      }
-
-      message += `\n`;
-
-      // Requirements
-      if (airdrop.requiredPoints) {
-        message += `🎯 ${this.t("threshold")}: ${airdrop.requiredPoints} pts\n`;
-      }
-
-      if (airdrop.deductPoints) {
-        message += `⚖️ ${this.t("deductPoints")}: -${airdrop.deductPoints} pts\n`;
-      }
-
-      // Airdrop amount
-      if (airdrop.airdropAmount) {
-        const valueText = airdrop.estimatedValue
-          ? ` ($${airdrop.estimatedValue})`
-          : "";
-        message += `🎁 ${this.t("airdrop")}: ${airdrop.airdropAmount}${valueText}\n`;
-      }
-
-      message += `\n`;
-
-      // Chain info
-      message += `🔗 ${this.t("chain")}: #${airdrop.chain}\n`;
-
-      if (airdrop.contractAddress) {
-        message += `📦 ${this.t("contract")}:\n`;
-        message += `\`${airdrop.contractAddress}\``;
-      }
-
-      console.log(
-        `📤 Sending airdrop alert to Telegram (${this.chatId}):`,
-        airdrop.name,
-      );
-
-      // สร้าง inline keyboard buttons
-      const keyboard = {
-        inline_keyboard: [
-          [
-            {
-              text: "🌐 DEX",
-              url: `https://www.binance.com/en/trade/${airdrop.symbol}_USDT`,
-            },
-            {
-              text: "📊 MEXC",
-              url: `https://www.mexc.com/exchange/${airdrop.symbol}_USDT`,
-            },
-          ],
-        ],
-      };
+      const message = this.buildAirdropMessage(airdrop);
+      const keyboard = this.buildAirdropKeyboard(airdrop.symbol);
 
       await this.bot.sendMessage(this.chatId, message, {
         parse_mode: "Markdown",
@@ -257,114 +255,156 @@ class TelegramService {
         reply_markup: keyboard,
       });
 
-      console.log(`✅ Airdrop alert sent successfully to ${this.chatId}`);
+      console.log(`✅ Airdrop alert sent for: ${airdrop.name}`);
       return true;
-    } catch (error: unknown) {
-      const err = error as { message?: string; response?: { body?: unknown } };
-      console.error("❌ Telegram airdrop alert error:", {
-        chatId: this.chatId,
-        airdrop: airdrop.name,
-        error: err.message,
-        response: err.response?.body,
-      });
+    } catch (error) {
+      this.logError("sendAirdropAlert", error, airdrop.name);
       return false;
     }
   }
 
-  async sendSnapshotAlert(airdrop: {
-    name: string;
-    symbol: string;
-    snapshotDate?: Date;
-    requiredPoints?: number;
-    requirements?: string[];
-  }): Promise<boolean> {
+  /**
+   * Build airdrop message content
+   */
+  private buildAirdropMessage(airdrop: AirdropAlertData): string {
+    const lines: string[] = [
+      `🎁 *Binance Alpha Airdrop Tracker*`,
+      `${this.t("newAirdrop")} 🎉\n`,
+      `🍄 ${this.t("airdrop")}: *${airdrop.name}*`,
+      `💎 ${this.t("symbol")}: $${airdrop.symbol}`,
+    ];
+
+    // Timeline
+    if (airdrop.claimStartDate) {
+      lines.push(
+        `📅 ${this.t("start")}: ${this.formatDateThai(new Date(airdrop.claimStartDate))}`,
+      );
+    }
+
+    if (airdrop.claimEndDate) {
+      lines.push(
+        `🏆 ${this.t("end")}: ${this.formatDateThai(new Date(airdrop.claimEndDate))}`,
+      );
+    }
+
+    lines.push("");
+
+    // Requirements
+    if (airdrop.requiredPoints) {
+      lines.push(`🎯 ${this.t("threshold")}: ${airdrop.requiredPoints} pts`);
+    }
+
+    if (airdrop.deductPoints) {
+      lines.push(`⚖️ ${this.t("deductPoints")}: -${airdrop.deductPoints} pts`);
+    }
+
+    // Airdrop amount
+    if (airdrop.airdropAmount) {
+      const valueText = airdrop.estimatedValue
+        ? ` ($${airdrop.estimatedValue})`
+        : "";
+      lines.push(
+        `🎁 ${this.t("airdrop")}: ${airdrop.airdropAmount}${valueText}`,
+      );
+    }
+
+    lines.push("");
+
+    // Chain info
+    lines.push(`🔗 ${this.t("chain")}: #${airdrop.chain}`);
+
+    if (airdrop.contractAddress) {
+      lines.push(`📦 ${this.t("contract")}:`);
+      lines.push(`\`${airdrop.contractAddress}\``);
+    }
+
+    return lines.join("\n");
+  }
+
+  /**
+   * Build inline keyboard for airdrop message
+   */
+  private buildAirdropKeyboard(symbol: string) {
+    return {
+      inline_keyboard: [
+        [
+          {
+            text: "🌐 DEX",
+            url: `https://www.binance.com/en/trade/${symbol}_USDT`,
+          },
+          {
+            text: "📊 MEXC",
+            url: `https://www.mexc.com/exchange/${symbol}_USDT`,
+          },
+        ],
+      ],
+    };
+  }
+
+  /**
+   * Send snapshot alert notification
+   */
+  async sendSnapshotAlert(airdrop: SnapshotAlertData): Promise<boolean> {
     if (!this.isEnabled || !this.bot) {
       console.log("Telegram snapshot alert (disabled):", airdrop.name);
       return false;
     }
 
     try {
-      const lang = this.language;
-
-      let message = `📸 *Binance Alpha Airdrop Tracker*\n`;
-      message += `${this.t("snapshot")} ⏰\n\n`;
-
-      message += `🍄 ${this.t("airdrop")}: *${airdrop.name}*\n`;
-      message += `💎 ${this.t("symbol")}: $${airdrop.symbol}\n\n`;
+      const lines: string[] = [
+        `📸 *Binance Alpha Airdrop Tracker*`,
+        `${this.t("snapshot")} ⏰\n`,
+        `🍄 ${this.t("airdrop")}: *${airdrop.name}*`,
+        `💎 ${this.t("symbol")}: $${airdrop.symbol}\n`,
+      ];
 
       if (airdrop.snapshotDate) {
-        const snapDate = new Date(airdrop.snapshotDate);
-        const dateStr =
-          lang === "th"
-            ? snapDate.toLocaleDateString("th-TH", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : snapDate.toLocaleDateString("en-US", {
-                weekday: "short",
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              }) + " UTC";
-        message += `📸 Snapshot: ${dateStr}\n\n`;
+        lines.push(
+          `📸 Snapshot: ${this.formatDate(new Date(airdrop.snapshotDate))}\n`,
+        );
       }
 
       if (airdrop.requiredPoints) {
-        message += `🎯 ${this.t("threshold")}: ${
-          airdrop.requiredPoints
-        } pts\n\n`;
+        lines.push(
+          `🎯 ${this.t("threshold")}: ${airdrop.requiredPoints} pts\n`,
+        );
       }
 
-      message += `⚠️ ${this.t("makeReady")}\n`;
-      message += `👁 ${
-        Math.floor(Math.random() * 5000) + 1000
-      }   ${new Date().toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-      })}`;
+      lines.push(`⚠️ ${this.t("makeReady")}`);
 
-      await this.bot.sendMessage(this.chatId, message, {
+      await this.bot.sendMessage(this.chatId, lines.join("\n"), {
         parse_mode: "Markdown",
       });
 
       return true;
     } catch (error) {
-      console.error("❌ Telegram snapshot alert error:", error);
+      this.logError("sendSnapshotAlert", error, airdrop.name);
       return false;
     }
   }
 
-  async sendClaimableAlert(airdrop: {
-    name: string;
-    symbol: string;
-    claimEndDate?: Date;
-    claimAmount?: string;
-    requiredPoints?: number;
-  }): Promise<boolean> {
+  /**
+   * Send claimable alert notification
+   */
+  async sendClaimableAlert(airdrop: ClaimableAlertData): Promise<boolean> {
     if (!this.isEnabled || !this.bot) {
       console.log("Telegram claimable alert (disabled):", airdrop.name);
       return false;
     }
 
     try {
-      const lang = this.language;
-
-      let message = `💰 *Binance Alpha Airdrop Tracker*\n`;
-      message += `${this.t("claimable")} 🎯\n\n`;
-
-      message += `🍄 ${airdrop.symbol} ${this.t("claimNow")}\n`;
+      const lines: string[] = [
+        `💰 *Binance Alpha Airdrop Tracker*`,
+        `${this.t("claimable")} 🎯\n`,
+        `🍄 ${airdrop.symbol} ${this.t("claimNow")}`,
+      ];
 
       if (airdrop.claimAmount) {
-        message += `🎁 ${this.t("airdrop")}: ${airdrop.claimAmount}\n`;
+        lines.push(`🎁 ${this.t("airdrop")}: ${airdrop.claimAmount}`);
       }
 
       if (airdrop.requiredPoints) {
-        message += `🎯 Minimum ${airdrop.requiredPoints} pts\n`;
+        lines.push(`🎯 Minimum ${airdrop.requiredPoints} pts`);
       }
 
       if (airdrop.claimEndDate) {
@@ -374,73 +414,47 @@ class TelegramService {
           (endDate.getTime() - now.getTime()) / (1000 * 60 * 60),
         );
 
-        const dateStr =
-          lang === "th"
-            ? endDate.toLocaleDateString("th-TH", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : endDate.toLocaleDateString("en-US", {
-                weekday: "short",
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              }) + " UTC";
+        lines.push(
+          `\n⏰ ${this.t("claimBefore")}: ${this.formatDate(endDate)}`,
+        );
 
-        message += `\n⏰ ${this.t("claimBefore")}: ${dateStr}\n`;
-
-        if (hoursLeft <= 24) {
-          message += `⚠️ เหลือเวลา ${hoursLeft} ${
-            lang === "th" ? "ชั่วโมง" : "hours"
-          }!\n`;
+        if (hoursLeft <= 24 && hoursLeft > 0) {
+          lines.push(`⚠️ ${hoursLeft} ${this.t("hours")} left!`);
         }
       }
 
-      message += `\n👁 ${
-        Math.floor(Math.random() * 5000) + 1000
-      }   ${new Date().toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-      })}`;
-
-      await this.bot.sendMessage(this.chatId, message, {
+      await this.bot.sendMessage(this.chatId, lines.join("\n"), {
         parse_mode: "Markdown",
       });
 
       return true;
     } catch (error) {
-      console.error("❌ Telegram claimable alert error:", error);
+      this.logError("sendClaimableAlert", error, airdrop.name);
       return false;
     }
   }
 
+  /**
+   * Send stability warning notification
+   */
   async sendStabilityWarning(
     symbol: string,
-    data: {
-      stabilityScore: number;
-      riskLevel: string;
-      volatilityIndex: number;
-      priceChange: number;
-    },
+    data: StabilityWarningData,
   ): Promise<boolean> {
     const message = [
       `*Symbol:* ${symbol}`,
       `*Stability Score:* ${data.stabilityScore.toFixed(2)}/100`,
       `*Risk Level:* ${data.riskLevel}`,
       `*Volatility:* ${data.volatilityIndex.toFixed(2)}`,
-      `*Price Change:* ${
-        data.priceChange > 0 ? "+" : ""
-      }${data.priceChange.toFixed(2)}%`,
+      `*Price Change:* ${data.priceChange > 0 ? "+" : ""}${data.priceChange.toFixed(2)}%`,
     ].join("\n");
 
     return this.sendMessage("⚠️ Stability Warning", message, "warning");
   }
 
+  /**
+   * Send price alert notification
+   */
   async sendPriceAlert(
     symbol: string,
     price: number,
@@ -456,6 +470,34 @@ class TelegramService {
 
     return this.sendMessage("💹 Price Alert", message, "info");
   }
+
+  /**
+   * Log error with context
+   */
+  private logError(method: string, error: unknown, context?: string): void {
+    const err = error as { message?: string; response?: { body?: unknown } };
+    console.error(`❌ Telegram ${method} error:`, {
+      chatId: this.chatId,
+      context,
+      error: err.message,
+      response: err.response?.body,
+    });
+  }
 }
 
+// Export singleton instance
 export const telegramService = new TelegramService();
+
+// Export class for testing or custom instances
+export { TelegramService };
+
+// Export types
+export type {
+  Language,
+  MessageType,
+  AirdropAlertData,
+  SnapshotAlertData,
+  ClaimableAlertData,
+  StabilityWarningData,
+  TelegramConfig,
+};
