@@ -39,6 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MagicCard } from "@/components/ui/magic-card";
 
 interface IncomeCalendarProps {
   onDateSelect: (date: Date) => void;
@@ -136,39 +137,38 @@ export function IncomeCalendar({
   const monthNames =
     language === "th"
       ? [
-          "มกราคม",
-          "กุมภาพันธ์",
-          "มีนาคม",
-          "เมษายน",
-          "พฤษภาคม",
-          "มิถุนายน",
-          "กรกฎาคม",
-          "สิงหาคม",
-          "กันยายน",
-          "ตุลาคม",
-          "พฤศจิกายน",
-          "ธันวาคม",
-        ]
+        "มกราคม",
+        "กุมภาพันธ์",
+        "มีนาคม",
+        "เมษายน",
+        "พฤษภาคม",
+        "มิถุนายน",
+        "กรกฎาคม",
+        "สิงหาคม",
+        "กันยายน",
+        "ตุลาคม",
+        "พฤศจิกายน",
+        "ธันวาคม",
+      ]
       : [
-          "January",
-          "February",
-          "March",
-          "April",
-          "May",
-          "June",
-          "July",
-          "August",
-          "September",
-          "October",
-          "November",
-          "December",
-        ];
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+      ];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="backdrop-blur-xl bg-gradient-to-br from-white/10 to-white/5 rounded-2xl border border-white/20 overflow-hidden shadow-2xl"
+    <MagicCard
+      className="rounded-2xl border-white/20 overflow-hidden shadow-2xl"
+      gradientColor="rgba(255, 255, 255, 0.05)"
     >
       {/* Modern Header with Stats */}
       <div className="p-6 border-b border-white/10 bg-gradient-to-br from-primary/10 to-transparent">
@@ -343,14 +343,14 @@ export function IncomeCalendar({
                     "relative aspect-square rounded-xl transition-all flex flex-col items-center justify-center gap-0.5 p-2",
                     "hover:shadow-lg",
                     hasInc &&
-                      "bg-gradient-to-br from-emerald-500/20 to-green-500/20 border-2 border-emerald-500/40 hover:border-emerald-500/60",
+                    "bg-gradient-to-br from-emerald-500/20 to-green-500/20 border-2 border-emerald-500/40 hover:border-emerald-500/60",
                     isToday &&
-                      "ring-2 ring-amber-500 ring-offset-2 ring-offset-background",
+                    "ring-2 ring-amber-500 ring-offset-2 ring-offset-background",
                     isSelected &&
-                      "bg-gradient-to-br from-amber-500 to-orange-500 border-2 border-amber-600 text-white font-bold shadow-xl shadow-amber-500/50",
+                    "bg-gradient-to-br from-amber-500 to-orange-500 border-2 border-amber-600 text-white font-bold shadow-xl shadow-amber-500/50",
                     !hasInc &&
-                      !isSelected &&
-                      "hover:bg-white/10 border-2 border-transparent hover:border-white/20",
+                    !isSelected &&
+                    "hover:bg-white/10 border-2 border-transparent hover:border-white/20",
                     !isCurrentMonth && "opacity-30 cursor-not-allowed",
                   )}
                   disabled={!isCurrentMonth}
@@ -416,6 +416,6 @@ export function IncomeCalendar({
           </div>
         </div>
       </div>
-    </motion.div>
+    </MagicCard>
   );
 }

@@ -30,6 +30,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { springConfigs, easings } from "@/lib/animations";
+import { BorderBeam } from "@/components/ui/border-beam";
+import { MagicCard } from "@/components/ui/magic-card";
 
 // Navigation items configuration
 const getNavItems = (t: (key: string) => string) => [
@@ -81,93 +83,68 @@ function DesktopNavLink({
       <TooltipTrigger asChild>
         <Link
           href={href}
-          className="relative px-4 py-2.5 rounded-xl transition-all group"
+          className="relative group"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
-          {/* Background glow effect */}
-          <motion.div
-            className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100"
-            style={{
-              background: `radial-gradient(circle at center, ${color}15 0%, transparent 70%)`,
-            }}
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{
-              opacity: isHovered || isActive ? 1 : 0,
-              scale: isHovered || isActive ? 1 : 0.8,
-            }}
-            transition={{ duration: 0.3, ease: easings.premium }}
-          />
-
-          {/* Content */}
-          <motion.div
-            className="relative flex items-center gap-2.5"
-            animate={{
-              x: isHovered ? 2 : 0,
-            }}
-            transition={{ duration: 0.2 }}
-          >
-            <motion.div
-              animate={{
-                scale: isHovered || isActive ? 1.1 : 1,
-                rotate: isHovered ? [0, -10, 10, 0] : 0,
-              }}
-              transition={{
-                scale: { duration: 0.2 },
-                rotate: { duration: 0.4, ease: "easeInOut" },
-              }}
-            >
-              <Icon
-                className="w-5 h-5 transition-all duration-300"
-                style={{
-                  color: isActive || isHovered ? color : "rgb(156 163 175)",
-                  filter: isActive ? `drop-shadow(0 0 8px ${color}80)` : "none",
-                }}
-              />
-            </motion.div>
-            <span
-              className="font-medium transition-all duration-300"
-              style={{
-                color: isActive
-                  ? color
-                  : isHovered
-                    ? "#f0f0f5"
-                    : "rgb(156 163 175)",
-              }}
-              suppressHydrationWarning
-            >
-              {label}
-            </span>
-          </motion.div>
-
-          {/* Active indicator line */}
-          <AnimatePresence>
+          <div className="relative px-4 py-2.5 rounded-xl overflow-hidden">
+            {/* Background & Border Beam for active state */}
             {isActive && (
-              <motion.div
-                layoutId="activeNavIndicator"
-                className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full"
-                style={{
-                  background: `linear-gradient(90deg, transparent, ${color}, transparent)`,
-                }}
-                initial={{ opacity: 0, scaleX: 0 }}
-                animate={{ opacity: 1, scaleX: 1 }}
-                exit={{ opacity: 0, scaleX: 0 }}
-                transition={springConfigs.stiff}
-              />
+              <div className="absolute inset-0 bg-white/5 rounded-xl">
+                <BorderBeam
+                  size={40}
+                  duration={4}
+                  delay={0}
+                  colorFrom={color}
+                  colorTo={`${color}00`}
+                  borderWidth={1.5}
+                />
+              </div>
             )}
-          </AnimatePresence>
 
-          {/* Hover underline effect */}
-          <motion.div
-            className="absolute bottom-0 left-2 right-2 h-px rounded-full"
-            style={{ backgroundColor: color }}
-            initial={{ scaleX: 0, opacity: 0 }}
-            animate={{
-              scaleX: isHovered && !isActive ? 1 : 0,
-              opacity: isHovered && !isActive ? 0.5 : 0,
-            }}
-            transition={{ duration: 0.2 }}
-          />
+            {/* Hover Background */}
+            <motion.div
+              className="absolute inset-0 rounded-xl bg-white/5"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: isHovered && !isActive ? 1 : 0 }}
+              transition={{ duration: 0.2 }}
+            />
+
+            {/* Content */}
+            <div className="relative flex items-center gap-2.5 z-10">
+              <motion.div
+                animate={{
+                  scale: isHovered || isActive ? 1.1 : 1,
+                  rotate: isHovered ? [0, -10, 10, 0] : 0,
+                }}
+                transition={{
+                  scale: { duration: 0.2 },
+                  rotate: { duration: 0.4, ease: "easeInOut" },
+                }}
+              >
+                <Icon
+                  className="w-5 h-5 transition-all duration-300"
+                  style={{
+                    color: isActive || isHovered ? color : "rgb(156 163 175)",
+                    filter: isActive ? `drop-shadow(0 0 8px ${color}80)` : "none",
+                  }}
+                />
+              </motion.div>
+              <span
+                className="font-medium transition-all duration-300"
+                style={{
+                  color: isActive
+                    ? color
+                    : isHovered
+                      ? "#f0f0f5"
+                      : "rgb(156 163 175)",
+                }}
+                suppressHydrationWarning
+              >
+                {label}
+              </span>
+            </div>
+          </div>
         </Link>
       </TooltipTrigger>
       <TooltipContent

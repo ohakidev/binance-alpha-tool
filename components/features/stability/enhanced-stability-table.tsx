@@ -27,6 +27,7 @@ import {
   Download,
   RefreshCw,
 } from "lucide-react";
+import { MagicCard, StatsCard } from "@/components/ui/magic-card";
 
 interface StabilityData {
   symbol?: string;
@@ -213,11 +214,45 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
 
   return (
     <div className="space-y-6">
-      {/* Disclaimer Banner */}
+      {/* Page Header */}
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-rose-500/10 via-orange-500/10 to-amber-500/10 border-2 border-orange-500/30 p-6 backdrop-blur-xl"
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.5 }}
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-orange-500/20 via-amber-500/10 to-yellow-500/10 p-8 border border-orange-500/20"
+      >
+        <div className="relative z-10">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center shadow-lg shadow-orange-500/30">
+              <TrendingUp className="w-7 h-7 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-orange-400 to-amber-300 bg-clip-text text-transparent">
+                {language === "th"
+                  ? "ความเสถียรของโครงการ"
+                  : "Project Stability"}
+              </h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                {language === "th"
+                  ? "ตรวจสอบความเสถียรและความเสี่ยงของโครงการ Binance Alpha"
+                  : "Check stability and risk of Binance Alpha projects"}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-orange-500/20 to-transparent rounded-full blur-3xl" />
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+          initial={{ x: "-100%" }}
+          animate={{ x: "200%" }}
+          transition={{ duration: 3, repeat: Infinity, repeatDelay: 5 }}
+        />
+      </motion.div>
+
+      {/* Disclaimer Banner */}
+      <MagicCard
+        className="relative overflow-hidden rounded-2xl border-orange-500/30 p-6 backdrop-blur-xl"
+        gradientColor="rgba(249, 115, 22, 0.15)"
       >
         <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
         <div className="relative z-10 flex items-start gap-4">
@@ -263,7 +298,7 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
             </div>
           </div>
         </div>
-      </motion.div>
+      </MagicCard>
 
       {/* Stats Cards */}
       <motion.div
@@ -272,29 +307,33 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
         transition={{ delay: 0.1 }}
         className="grid grid-cols-1 md:grid-cols-4 gap-4"
       >
-        <StatCard
-          label={language === "th" ? "คะแนนเฉลี่ย" : "Avg Score"}
+        <StatsCard
+          title={language === "th" ? "คะแนนเฉลี่ย" : "Avg Score"}
           value={stats.avgScore.toString()}
-          color="cyan"
-          icon={<TrendingUp className="w-5 h-5" />}
+          gradientFrom="cyan-500"
+          gradientTo="blue-500"
+          icon={<TrendingUp className="w-5 h-5 text-cyan-500" />}
         />
-        <StatCard
-          label={language === "th" ? "ความเสี่ยงต่ำ" : "Low Risk"}
+        <StatsCard
+          title={language === "th" ? "ความเสี่ยงต่ำ" : "Low Risk"}
           value={stats.lowRisk.toString()}
-          color="emerald"
-          icon={<CheckCircle2 className="w-5 h-5" />}
+          gradientFrom="emerald-500"
+          gradientTo="green-500"
+          icon={<CheckCircle2 className="w-5 h-5 text-emerald-500" />}
         />
-        <StatCard
-          label={language === "th" ? "ความเสี่ยงปานกลาง" : "Med Risk"}
+        <StatsCard
+          title={language === "th" ? "ความเสี่ยงปานกลาง" : "Med Risk"}
           value={stats.mediumRisk.toString()}
-          color="amber"
-          icon={<AlertTriangle className="w-5 h-5" />}
+          gradientFrom="amber-500"
+          gradientTo="orange-500"
+          icon={<AlertTriangle className="w-5 h-5 text-amber-500" />}
         />
-        <StatCard
-          label={language === "th" ? "โครงการ 4x" : "4x Projects"}
+        <StatsCard
+          title={language === "th" ? "โครงการ 4x" : "4x Projects"}
           value={(stats.total - 1).toString()}
-          color="orange"
-          icon={<Filter className="w-5 h-5" />}
+          gradientFrom="orange-500"
+          gradientTo="red-500"
+          icon={<Filter className="w-5 h-5 text-orange-500" />}
         />
       </motion.div>
 
@@ -374,11 +413,9 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
       </motion.div>
 
       {/* Table */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="glass-card overflow-hidden"
+      <MagicCard
+        className="overflow-hidden rounded-2xl border-white/10"
+        gradientColor="rgba(255, 255, 255, 0.05)"
       >
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -504,71 +541,7 @@ export function EnhancedStabilityTable({ data }: { data: StabilityData[] }) {
             </motion.button>
           </div>
         </div>
-      </motion.div>
+      </MagicCard>
     </div>
-  );
-}
-
-// Stat Card Component
-interface StatCardProps {
-  label: string;
-  value: string;
-  color: "cyan" | "emerald" | "amber" | "orange";
-  icon: React.ReactNode;
-}
-
-function StatCard({ label, value, color, icon }: StatCardProps) {
-  const colors = {
-    cyan: {
-      bg: "from-cyan-500/20 to-blue-500/20",
-      border: "border-cyan-500/30",
-      text: "text-cyan-600 dark:text-cyan-400",
-      icon: "bg-cyan-500/20 text-cyan-500",
-    },
-    emerald: {
-      bg: "from-emerald-500/20 to-green-500/20",
-      border: "border-emerald-500/30",
-      text: "text-emerald-600 dark:text-emerald-400",
-      icon: "bg-emerald-500/20 text-emerald-500",
-    },
-    amber: {
-      bg: "from-amber-500/20 to-orange-500/20",
-      border: "border-amber-500/30",
-      text: "text-amber-600 dark:text-amber-400",
-      icon: "bg-amber-500/20 text-amber-500",
-    },
-    orange: {
-      bg: "from-orange-500/20 to-red-500/20",
-      border: "border-orange-500/30",
-      text: "text-orange-600 dark:text-orange-400",
-      icon: "bg-orange-500/20 text-orange-500",
-    },
-  };
-
-  const config = colors[color];
-
-  return (
-    <motion.div
-      whileHover={{ scale: 1.02, y: -5 }}
-      className={`glass-card bg-gradient-to-br ${config.bg} border ${config.border} relative overflow-hidden`}
-    >
-      <motion.div
-        className="absolute inset-0 bg-gradient-to-br from-white/30 to-transparent"
-        initial={{ opacity: 0 }}
-        whileHover={{ opacity: 1 }}
-        transition={{ duration: 0.3 }}
-      />
-      <div className="relative z-10">
-        <div className="flex items-start justify-between mb-3">
-          <div className={`p-2.5 rounded-xl ${config.icon}`}>{icon}</div>
-        </div>
-        <p className="text-3xl font-black text-slate-900 dark:text-white mb-1">
-          {value}
-        </p>
-        <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
-          {label}
-        </p>
-      </div>
-    </motion.div>
   );
 }

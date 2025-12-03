@@ -14,6 +14,7 @@ import { useUserStore } from "@/lib/stores/user-store";
 import { useToast } from "@/lib/hooks/use-toast";
 import { sidePanelVariants, overlayVariants } from "@/lib/animations";
 import { IncomeEntry } from "@/lib/types";
+import { MagicCard } from "@/components/ui/magic-card";
 
 interface EntryPanelProps {
   isOpen: boolean;
@@ -164,8 +165,11 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
 
               {/* User Info */}
               {activeUser && (
-                <div className="glass rounded-lg p-4 mb-6">
-                  <div className="flex items-center gap-3">
+                <MagicCard
+                  className="rounded-lg p-4 mb-6 border-white/10"
+                  gradientColor="rgba(251, 191, 36, 0.15)"
+                >
+                  <div className="flex items-center gap-3 relative z-10">
                     <div className="w-10 h-10 rounded-full gradient-gold flex items-center justify-center font-bold text-black">
                       {activeUser.username.charAt(0).toUpperCase()}
                     </div>
@@ -176,7 +180,7 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
                       </p>
                     </div>
                   </div>
-                </div>
+                </MagicCard>
               )}
 
               {/* Existing Entries */}
@@ -187,46 +191,47 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
                   </h3>
                   <div className="space-y-2">
                     {dateEntries.map((entry) => (
-                      <motion.div
+                      <MagicCard
                         key={entry.id}
-                        layout
-                        className="glass rounded-lg p-4"
+                        className="rounded-lg p-4 border-white/10"
+                        gradientColor="rgba(255, 255, 255, 0.05)"
                       >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1">
-                            <p className="font-medium">{entry.projectName}</p>
-                            <span
-                              className={`inline-block px-2 py-0.5 rounded-full text-xs mt-1 ${
-                                categoryColors[entry.category]
-                              }`}
-                            >
-                              {entry.category}
-                            </span>
+                        <div className="relative z-10">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <p className="font-medium">{entry.projectName}</p>
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded-full text-xs mt-1 ${categoryColors[entry.category]
+                                  }`}
+                              >
+                                {entry.category}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleEdit(entry)}
+                                className="p-1 hover:bg-white/10 rounded transition-colors"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(entry.id)}
+                                className="p-1 hover:bg-[#EF4444]/20 text-[#EF4444] rounded transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleEdit(entry)}
-                              className="p-1 hover:bg-white/10 rounded transition-colors"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(entry.id)}
-                              className="p-1 hover:bg-[#EF4444]/20 text-[#EF4444] rounded transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                        <p className="text-2xl font-bold gradient-text-gold">
-                          ${entry.amount.toFixed(2)}
-                        </p>
-                        {entry.notes && (
-                          <p className="text-sm text-muted-foreground mt-2">
-                            {entry.notes}
+                          <p className="text-2xl font-bold gradient-text-gold">
+                            ${entry.amount.toFixed(2)}
                           </p>
-                        )}
-                      </motion.div>
+                          {entry.notes && (
+                            <p className="text-sm text-muted-foreground mt-2">
+                              {entry.notes}
+                            </p>
+                          )}
+                        </div>
+                      </MagicCard>
                     ))}
                   </div>
                 </div>

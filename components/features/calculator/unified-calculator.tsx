@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { endOfMonth } from "date-fns";
+import { MagicCard } from "@/components/ui/magic-card";
 
 interface CalculatorState {
   // Basic Settings
@@ -246,7 +247,7 @@ export function UnifiedCalculator() {
                     format={(v) => `$${v.toLocaleString()}`}
                     hint={`${(values.accountCost / 365).toFixed(2)} ${t("common.perDay")}`}
                     showTicks
-                    tickValues={[100, 1000, 10000, 100000, 1000000]}
+                    tickValues={[100, 1000, 100000, 500000, 1000000]}
                   />
 
                   {/* Daily Transactions Slider - Changed from Dropdown */}
@@ -262,7 +263,7 @@ export function UnifiedCalculator() {
                     format={(v) => `$${v.toLocaleString()}`}
                     hint={`${t("calc.transactionBonus")}: ${Math.floor((values.dailyTransactions / 1000) * (values.includeBSC ? 4 : 1))}`}
                     showTicks
-                    tickValues={[2, 8192, 16384, 32768, 65536, 131072, 262144]}
+                    tickValues={[2, 16000, 65000, 131000, 262000]}
                   />
 
                   <CheckboxControl
@@ -635,12 +636,23 @@ function SectionCard({
   border,
   children,
 }: SectionCardProps) {
+  // Extract color from gradient string for MagicCard
+  const colorMatch = gradient.match(/from-([a-z]+)-/);
+  const colorName = colorMatch ? colorMatch[1] : "slate";
+
+  const colorMap: Record<string, string> = {
+    amber: "rgba(251, 191, 36, 0.15)",
+    cyan: "rgba(6, 182, 212, 0.15)",
+    emerald: "rgba(16, 185, 129, 0.15)",
+    rose: "rgba(244, 63, 94, 0.15)",
+    purple: "rgba(168, 85, 247, 0.15)",
+    blue: "rgba(59, 130, 246, 0.15)",
+  };
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="backdrop-blur-xl bg-white/5 rounded-2xl border border-white/10 overflow-hidden shadow-2xl hover:shadow-3xl transition-shadow"
+    <MagicCard
+      className={`overflow-hidden rounded-2xl border ${border}`}
+      gradientColor={colorMap[colorName] || "rgba(255, 255, 255, 0.1)"}
     >
       <div
         className={`px-6 py-4 bg-gradient-to-r ${gradient} border-b ${border}`}
@@ -650,8 +662,8 @@ function SectionCard({
           <h3 className="text-lg font-bold text-white">{title}</h3>
         </div>
       </div>
-      <div className="p-6 space-y-6">{children}</div>
-    </motion.div>
+      <div className="p-6 space-y-6 relative z-10">{children}</div>
+    </MagicCard>
   );
 }
 
@@ -719,17 +731,16 @@ function SliderControl({
     }
   }, [value, isEditing]);
 
-  // Format tick value for display
+  // Format tick value for display - shorter format
   const formatTick = (val: number) => {
-    if (val >= 1000000) return `$${(val / 1000000).toFixed(0)}M`;
-    if (val >= 1000)
-      return `$${(val / 1000).toFixed(val >= 10000 ? 0 : 3).replace(/\.?0+$/, "")}K`;
-    return `$${val}`;
+    if (val >= 1000000) return `${(val / 1000000).toFixed(0)}M`;
+    if (val >= 1000) return `${(val / 1000).toFixed(0)}K`;
+    return `${val}`;
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <label className="text-sm font-medium text-slate-300 flex-shrink-0">
           {label}
         </label>
@@ -740,11 +751,11 @@ function SliderControl({
           onBlur={handleInputBlur}
           onFocus={handleInputFocus}
           onKeyDown={handleKeyDown}
-          className="text-lg font-bold text-white px-4 py-2 bg-white/10 border-2 border-white/20 hover:border-orange-500/50 focus:border-orange-500 rounded-xl backdrop-blur-sm transition-all outline-none text-right min-w-[140px]"
+          className="text-lg font-bold text-white px-4 py-2 bg-white/10 border-2 border-white/20 hover:border-orange-500/50 focus:border-orange-500 rounded-xl backdrop-blur-sm transition-all outline-none text-right w-full sm:w-auto sm:min-w-[140px]"
         />
       </div>
 
-      <div className="relative">
+      <div className="relative pt-1">
         <div className="h-3 bg-slate-700/50 rounded-full overflow-hidden backdrop-blur-sm">
           <motion.div
             className="h-full bg-gradient-to-r from-amber-400 via-orange-500 to-orange-600 shadow-lg shadow-orange-500/30"
@@ -764,30 +775,31 @@ function SliderControl({
         />
         <motion.div
           className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 shadow-xl shadow-orange-500/60 pointer-events-none border-2 border-white/20"
-          style={{ left: `calc(${percentage}% - 12px)` }}
+          style={{
+            left: `calc(${percentage}% - 12px)`,
+            top: "calc(50% + 2px)",
+          }}
           whileHover={{ scale: 1.2 }}
           transition={{ type: "spring", stiffness: 400, damping: 25 }}
         />
       </div>
 
-      {/* Tick marks with values */}
+      {/* Tick marks with values - improved spacing */}
       {showTicks && tickValues.length > 0 && (
-        <div className="relative h-6">
-          {tickValues.map((tickVal) => {
-            const tickPercentage = ((tickVal - min) / (max - min)) * 100;
+        <div className="flex justify-between items-center px-1 mt-1">
+          {tickValues.slice(0, 5).map((tickVal, index) => {
+            const isFirst = index === 0;
+            const isLast = index === tickValues.slice(0, 5).length - 1;
             return (
-              <div
+              <button
                 key={tickVal}
-                className="absolute transform -translate-x-1/2"
-                style={{ left: `${tickPercentage}%` }}
+                onClick={() => onChange(tickVal)}
+                className={`text-[10px] text-slate-400 hover:text-cyan-400 font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                  isFirst ? "text-left" : isLast ? "text-right" : "text-center"
+                }`}
               >
-                <button
-                  onClick={() => onChange(tickVal)}
-                  className="text-[10px] text-blue-300 hover:text-blue-400 font-medium transition-colors cursor-pointer"
-                >
-                  {formatTick(tickVal)}
-                </button>
-              </div>
+                {formatTick(tickVal)}
+              </button>
             );
           })}
         </div>
@@ -795,8 +807,10 @@ function SliderControl({
 
       {/* Hint text */}
       {hint && (
-        <div className="text-center">
-          <span className="text-xs text-cyan-400 font-medium">{hint}</span>
+        <div className="text-center mt-2">
+          <span className="text-xs text-cyan-400 font-medium px-3 py-1 bg-cyan-500/10 rounded-full">
+            {hint}
+          </span>
         </div>
       )}
     </div>

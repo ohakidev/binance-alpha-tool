@@ -27,6 +27,7 @@ import {
   Moon,
   Sun,
   Check,
+  Send,
 } from "lucide-react";
 import { useSettingsStore } from "@/lib/stores/settings-store";
 import { useLanguage } from "@/lib/stores/language-store";
@@ -65,17 +66,28 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { MagicCard } from "@/components/ui/magic-card";
 
 export default function SettingsPage() {
   const { t, language, setLanguage } = useLanguage();
   const [mounted, setMounted] = useState(false);
+
+  // API Keys State
   const [apiKey, setApiKey] = useState("");
   const [secretKey, setSecretKey] = useState("");
+  const [tempApiKey, setTempApiKey] = useState("");
+  const [tempApiSecret, setTempApiSecret] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
-  const [showSecretKey, setShowSecretKey] = useState(false);
+  const [showApiSecret, setShowApiSecret] = useState(false);
+
+  // Telegram State
   const [telegramToken, setTelegramToken] = useState("");
   const [telegramChatId, setTelegramChatId] = useState("");
+  const [tempTelegramToken, setTempTelegramToken] = useState("");
+  const [tempTelegramChatId, setTempTelegramChatId] = useState("");
+
   const [activeTab, setActiveTab] = useState("general");
+  const [isSaving, setIsSaving] = useState(false);
 
   // Get settings after mount to avoid hydration mismatch
   const app = useSettingsStore((state) => state.app);
@@ -95,10 +107,16 @@ export default function SettingsPage() {
     const savedSecretKey = localStorage.getItem("binance_secret_key") || "";
     const savedTelegramToken = localStorage.getItem("telegram_bot_token") || "";
     const savedTelegramChatId = localStorage.getItem("telegram_chat_id") || "";
+
     setApiKey(savedApiKey);
     setSecretKey(savedSecretKey);
+    setTempApiKey(savedApiKey);
+    setTempApiSecret(savedSecretKey);
+
     setTelegramToken(savedTelegramToken);
     setTelegramChatId(savedTelegramChatId);
+    setTempTelegramToken(savedTelegramToken);
+    setTempTelegramChatId(savedTelegramChatId);
   }, []);
 
   if (!mounted) {
@@ -124,31 +142,39 @@ export default function SettingsPage() {
   }
 
   const handleSaveApiKeys = () => {
-    if (!apiKey || !secretKey) {
+    if (!tempApiKey || !tempApiSecret) {
       toast.error(t("common.error"));
       return;
     }
-    localStorage.setItem("binance_api_key", apiKey);
-    localStorage.setItem("binance_secret_key", secretKey);
-    toast.success(t("common.success"));
+    setIsSaving(true);
+    setTimeout(() => {
+      localStorage.setItem("binance_api_key", tempApiKey);
+      localStorage.setItem("binance_secret_key", tempApiSecret);
+      setApiKey(tempApiKey);
+      setSecretKey(tempApiSecret);
+      toast.success(t("common.success"));
+      setIsSaving(false);
+    }, 1000);
   };
 
   const handleSaveTelegram = () => {
-    if (!telegramToken || !telegramChatId) {
+    if (!tempTelegramToken || !tempTelegramChatId) {
       toast.error(t("common.error"));
       return;
     }
-    localStorage.setItem("telegram_bot_token", telegramToken);
-    localStorage.setItem("telegram_chat_id", telegramChatId);
+    localStorage.setItem("telegram_bot_token", tempTelegramToken);
+    localStorage.setItem("telegram_chat_id", tempTelegramChatId);
+    setTelegramToken(tempTelegramToken);
+    setTelegramChatId(tempTelegramChatId);
     toast.success(t("common.success"));
   };
 
-  const handleReset = () => {
+  const handleResetData = () => {
     resetToDefaults();
     toast.success(t("common.success"));
   };
 
-  const handleExport = async () => {
+  const handleExportData = async () => {
     try {
       const response = await fetch("/api/backup/export");
       const data = await response.json();
@@ -167,7 +193,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -192,20 +218,6 @@ export default function SettingsPage() {
       }
     };
     reader.readAsText(file);
-  };
-
-  const handleClearCache = async () => {
-    try {
-      localStorage.clear();
-      if ("caches" in window) {
-        const cacheNames = await caches.keys();
-        await Promise.all(cacheNames.map((name) => caches.delete(name)));
-      }
-      toast.success(t("common.success"));
-      setTimeout(() => window.location.reload(), 1000);
-    } catch {
-      toast.error(t("common.error"));
-    }
   };
 
   const handleLanguageChange = (lang: "th" | "en") => {
@@ -265,631 +277,468 @@ export default function SettingsPage() {
 
         {/* Settings Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 gap-2 bg-white/5 p-2 rounded-xl mb-6">
-            {tabItems.map((tab) => (
-              <TabsTrigger
-                key={tab.value}
-                value={tab.value}
-                className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/20 data-[state=active]:to-cyan-500/20 data-[state=active]:border-primary/30 rounded-lg transition-all"
-              >
-                <tab.icon className="w-4 h-4" />
-                <span className="hidden md:inline">{tab.label}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          <div className="relative z-50">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 gap-2 bg-white/5 p-2 rounded-xl mb-6">
+              {tabItems.map((tab) => (
+                <TabsTrigger
+                  key={tab.value}
+                  value={tab.value}
+                  className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/20 data-[state=active]:to-cyan-500/20 data-[state=active]:border-primary/30 rounded-lg transition-all"
+                >
+                  <tab.icon className="w-4 h-4" />
+                  <span className="hidden md:inline">{tab.label}</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
 
           {/* General Settings */}
-          <TabsContent value="general">
-            <motion.div
-              variants={containerVariants}
-              initial="initial"
-              animate="animate"
-              className="space-y-6"
+          <TabsContent value="general" className="space-y-6">
+            <MagicCard
+              className="rounded-xl border-white/10 overflow-hidden"
+              gradientColor="rgba(251, 191, 36, 0.15)"
             >
-              {/* Language Selection */}
-              <motion.div variants={cardVariants}>
-                <Card className="bg-white/5 border-white/10 backdrop-blur-xl overflow-hidden">
-                  <CardHeader className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border-b border-white/5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-                        <Globe className="w-6 h-6 text-cyan-400" />
-                      </div>
-                      <div>
-                        <CardTitle>{t("settings.language")}</CardTitle>
-                        <CardDescription>
-                          {t("settings.languageDesc")}
-                        </CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => handleLanguageChange("th")}
-                        className={`relative p-4 rounded-xl border-2 transition-all ${
-                          language === "th"
-                            ? "border-cyan-500 bg-cyan-500/10"
-                            : "border-white/10 bg-white/5 hover:border-white/20"
+              <div className="p-6 border-b border-white/10 bg-white/5">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-amber-500" />
+                  {t("settings.language")}
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {t("settings.languageDesc")}
+                </p>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[
+                    { code: "en", label: "English", flag: "🇺🇸" },
+                    { code: "th", label: "ไทย", flag: "🇹🇭" },
+                    { code: "zh", label: "中文", flag: "🇨🇳" },
+                  ].map((lang) => (
+                    <motion.button
+                      key={lang.code}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setLanguage(lang.code as any)}
+                      className={`relative p-4 rounded-xl border-2 transition-all ${language === lang.code
+                        ? "border-amber-500 bg-amber-500/10"
+                        : "border-white/10 hover:border-white/20 hover:bg-white/5"
                         }`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <span className="text-4xl">🇹🇭</span>
-                          <div className="text-left">
-                            <p className="font-semibold">ไทย</p>
-                            <p className="text-sm text-muted-foreground">
-                              Thai Language
-                            </p>
-                          </div>
-                          {language === "th" && (
-                            <motion.div
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              className="absolute top-2 right-2"
-                            >
-                              <div className="w-6 h-6 rounded-full bg-cyan-500 flex items-center justify-center">
-                                <Check className="w-4 h-4 text-white" />
-                              </div>
-                            </motion.div>
-                          )}
-                        </div>
-                      </motion.button>
-
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => handleLanguageChange("en")}
-                        className={`relative p-4 rounded-xl border-2 transition-all ${
-                          language === "en"
-                            ? "border-cyan-500 bg-cyan-500/10"
-                            : "border-white/10 bg-white/5 hover:border-white/20"
-                        }`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <span className="text-4xl">🇬🇧</span>
-                          <div className="text-left">
-                            <p className="font-semibold">English</p>
-                            <p className="text-sm text-muted-foreground">
-                              English Language
-                            </p>
-                          </div>
-                          {language === "en" && (
-                            <motion.div
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              className="absolute top-2 right-2"
-                            >
-                              <div className="w-6 h-6 rounded-full bg-cyan-500 flex items-center justify-center">
-                                <Check className="w-4 h-4 text-white" />
-                              </div>
-                            </motion.div>
-                          )}
-                        </div>
-                      </motion.button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-
-              {/* About Section */}
-              <motion.div variants={cardVariants}>
-                <Card className="bg-white/5 border-white/10 backdrop-blur-xl overflow-hidden">
-                  <CardHeader className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-b border-white/5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                        <Shield className="w-6 h-6 text-purple-400" />
-                      </div>
-                      <div>
-                        <CardTitle>{t("settings.about")}</CardTitle>
-                        <CardDescription>
-                          {t("settings.aboutDesc")}
-                        </CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-6">
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center p-3 rounded-lg bg-white/5">
-                        <span className="text-muted-foreground">
-                          {t("settings.version")}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{lang.flag}</span>
+                        <span
+                          className={`font-medium ${language === lang.code
+                            ? "text-amber-500"
+                            : "text-slate-300"
+                            }`}
+                        >
+                          {lang.label}
                         </span>
-                        <Badge variant="secondary">v1.0.0</Badge>
                       </div>
-                      <div className="flex justify-between items-center p-3 rounded-lg bg-white/5">
-                        <span className="text-muted-foreground">
-                          {t("settings.developer")}
-                        </span>
-                        <span className="font-medium">Binance Alpha Tool</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </motion.div>
+                      {language === lang.code && (
+                        <div className="absolute top-4 right-4 text-amber-500">
+                          <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]" />
+                        </div>
+                      )}
+                    </motion.button>
+                  ))}
+                </div>
+              </div>
+            </MagicCard>
           </TabsContent>
 
           {/* API Keys */}
-          <TabsContent value="api">
-            <motion.div
-              variants={containerVariants}
-              initial="initial"
-              animate="animate"
-              className="space-y-6"
+          <TabsContent value="api" className="space-y-6">
+            <MagicCard
+              className="rounded-xl border-white/10 overflow-hidden"
+              gradientColor="rgba(6, 182, 212, 0.15)"
             >
-              <motion.div variants={cardVariants}>
-                <Card className="bg-white/5 border-white/10 backdrop-blur-xl overflow-hidden">
-                  <CardHeader className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-b border-white/5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                        <Key className="w-6 h-6 text-amber-400" />
-                      </div>
-                      <div>
-                        <CardTitle>{t("settings.apiKeys")}</CardTitle>
-                        <CardDescription>
-                          {t("settings.apiKeysDesc")}
-                        </CardDescription>
-                      </div>
+              <div className="p-6 border-b border-white/10 bg-white/5">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <Key className="w-5 h-5 text-cyan-500" />
+                  {t("settings.apiKeys")}
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {t("settings.apiKeysDesc")}
+                </p>
+              </div>
+              <div className="p-6 space-y-6">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-300">
+                      Binance API Key
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showApiKey ? "text" : "password"}
+                        value={tempApiKey}
+                        onChange={(e) => setTempApiKey(e.target.value)}
+                        className="w-full pl-10 pr-12 py-2.5 bg-black/20 border border-white/10 rounded-xl focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
+                        placeholder="Enter your Binance API Key"
+                      />
+                      <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                      <button
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                      >
+                        {showApiKey ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
                     </div>
-                  </CardHeader>
-                  <CardContent className="p-6 space-y-4">
-                    <div>
-                      <Label htmlFor="apiKey">{t("settings.apiKey")}</Label>
-                      <div className="flex gap-2 mt-1">
-                        <Input
-                          id="apiKey"
-                          type={showApiKey ? "text" : "password"}
-                          placeholder={t("settings.apiKey")}
-                          value={apiKey}
-                          onChange={(e) => setApiKey(e.target.value)}
-                          className="flex-1 bg-white/5 border-white/10"
-                        />
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => setShowApiKey(!showApiKey)}
-                          className="bg-white/5 border-white/10"
-                        >
-                          {showApiKey ? (
-                            <EyeOff className="w-4 h-4" />
-                          ) : (
-                            <Eye className="w-4 h-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
+                  </div>
 
-                    <div>
-                      <Label htmlFor="secretKey">
-                        {t("settings.secretKey")}
-                      </Label>
-                      <div className="flex gap-2 mt-1">
-                        <Input
-                          id="secretKey"
-                          type={showSecretKey ? "text" : "password"}
-                          placeholder={t("settings.secretKey")}
-                          value={secretKey}
-                          onChange={(e) => setSecretKey(e.target.value)}
-                          className="flex-1 bg-white/5 border-white/10"
-                        />
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => setShowSecretKey(!showSecretKey)}
-                          className="bg-white/5 border-white/10"
-                        >
-                          {showSecretKey ? (
-                            <EyeOff className="w-4 h-4" />
-                          ) : (
-                            <Eye className="w-4 h-4" />
-                          )}
-                        </Button>
-                      </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-300">
+                      Binance Secret Key
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showApiSecret ? "text" : "password"}
+                        value={tempApiSecret}
+                        onChange={(e) => setTempApiSecret(e.target.value)}
+                        className="w-full pl-10 pr-12 py-2.5 bg-black/20 border border-white/10 rounded-xl focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
+                        placeholder="Enter your Binance Secret Key"
+                      />
+                      <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                      <button
+                        onClick={() => setShowApiSecret(!showApiSecret)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                      >
+                        {showApiSecret ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
                     </div>
+                  </div>
 
-                    <Button
+                  <div className="flex justify-end pt-4">
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
                       onClick={handleSaveApiKeys}
-                      className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600"
+                      disabled={isSaving}
+                      className="px-6 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
-                      <Save className="w-4 h-4 mr-2" />
-                      {t("settings.saveApiKeys")}
-                    </Button>
-
-                    <p className="text-xs text-muted-foreground mt-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                      {t("settings.apiKeysWarning")}
-                    </p>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </motion.div>
+                      {isSaving ? (
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                      {t("common.save")}
+                    </motion.button>
+                  </div>
+                </div>
+              </div>
+            </MagicCard>
           </TabsContent>
 
           {/* Notifications */}
-          <TabsContent value="notifications">
-            <motion.div
-              variants={containerVariants}
-              initial="initial"
-              animate="animate"
-              className="space-y-6"
+          <TabsContent value="notifications" className="space-y-6">
+            <MagicCard
+              className="rounded-xl border-white/10 overflow-hidden"
+              gradientColor="rgba(168, 85, 247, 0.15)"
             >
-              {/* Telegram Settings */}
-              <motion.div variants={cardVariants}>
-                <Card className="bg-white/5 border-white/10 backdrop-blur-xl overflow-hidden">
-                  <CardHeader className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border-b border-white/5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-                        <Bell className="w-6 h-6 text-cyan-400" />
-                      </div>
-                      <div>
-                        <CardTitle>{t("settings.telegram")}</CardTitle>
-                        <CardDescription>
-                          {t("settings.telegramDesc")}
-                        </CardDescription>
-                      </div>
+              <div className="p-6 border-b border-white/10 bg-white/5">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-purple-500" />
+                  {t("settings.notifications")}
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {t("settings.notificationsDesc")}
+                </p>
+              </div>
+              <div className="p-6 space-y-6">
+                {/* Telegram Settings */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <label className="text-base font-medium text-slate-200">
+                        Telegram Integration
+                      </label>
+                      <p className="text-sm text-muted-foreground">
+                        Receive alerts directly to your Telegram
+                      </p>
                     </div>
-                  </CardHeader>
-                  <CardContent className="p-6 space-y-4">
-                    <div>
-                      <Label htmlFor="telegramToken">
-                        {t("settings.botToken")}
-                      </Label>
-                      <Input
-                        id="telegramToken"
-                        type="text"
-                        placeholder="xxxxxxxx:xxxxxxxxxxxxxxxxxxxxxxxxx"
-                        value={telegramToken}
-                        onChange={(e) => setTelegramToken(e.target.value)}
-                        className="mt-1 bg-white/5 border-white/10"
-                      />
+                    <div className="p-2 bg-blue-500/20 rounded-lg">
+                      <Send className="w-5 h-5 text-blue-400" />
                     </div>
+                  </div>
 
-                    <div>
-                      <Label htmlFor="telegramChatId">
-                        {t("settings.chatId")}
-                      </Label>
-                      <Input
-                        id="telegramChatId"
-                        type="text"
-                        placeholder="123456789"
-                        value={telegramChatId}
-                        onChange={(e) => setTelegramChatId(e.target.value)}
-                        className="mt-1 bg-white/5 border-white/10"
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-300">
+                      Telegram Bot Token
+                    </label>
+                    <input
+                      type="password"
+                      value={tempTelegramToken}
+                      onChange={(e) => setTempTelegramToken(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
+                      placeholder="Enter Bot Token"
+                    />
+                  </div>
 
-                    <Button
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-300">
+                      Telegram Chat ID
+                    </label>
+                    <input
+                      type="text"
+                      value={tempTelegramChatId}
+                      onChange={(e) => setTempTelegramChatId(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
+                      placeholder="Enter Chat ID"
+                    />
+                  </div>
+
+                  <div className="flex justify-end pt-4">
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
                       onClick={handleSaveTelegram}
-                      variant="outline"
-                      className="w-full bg-white/5 border-white/10"
+                      className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium rounded-xl shadow-lg shadow-purple-500/20 hover:shadow-purple-500/40 transition-all flex items-center gap-2"
                     >
-                      <Save className="w-4 h-4 mr-2" />
-                      {t("settings.saveTelegram")}
-                    </Button>
+                      <Save className="w-4 h-4" />
+                      {t("common.save")}
+                    </motion.button>
+                  </div>
+                </div>
 
-                    <Separator className="my-4 bg-white/10" />
+                <div className="h-px bg-white/10" />
 
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-white/5">
-                        <div>
-                          <Label htmlFor="airdrop-alerts">
-                            {t("settings.airdropAlerts")}
-                          </Label>
-                          <p className="text-xs text-muted-foreground">
-                            {t("settings.airdropAlertsDesc")}
-                          </p>
-                        </div>
-                        <Switch
-                          id="airdrop-alerts"
-                          checked={notifications.airdropAlerts}
-                          onCheckedChange={(checked) =>
-                            updateNotificationSettings({
-                              airdropAlerts: checked,
-                            })
-                          }
-                        />
+                {/* Notification Toggles */}
+                <div className="space-y-4">
+                  {[
+                    {
+                      id: "price-alerts",
+                      label: "Price Alerts",
+                      desc: "Get notified when price moves significantly",
+                    },
+                    {
+                      id: "stability-alerts",
+                      label: "Stability Alerts",
+                      desc: "Alerts for stability score changes",
+                    },
+                    {
+                      id: "new-listings",
+                      label: "New Listings",
+                      desc: "Notification for new token listings",
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors"
+                    >
+                      <div className="space-y-0.5">
+                        <label className="text-sm font-medium text-slate-200">
+                          {item.label}
+                        </label>
+                        <p className="text-xs text-muted-foreground">
+                          {item.desc}
+                        </p>
                       </div>
-
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-white/5">
-                        <div>
-                          <Label
-                            htmlFor="sound-effects"
-                            className="flex items-center gap-2"
-                          >
-                            <Volume2 className="w-4 h-4" />
-                            {t("settings.soundEffects")}
-                          </Label>
-                          <p className="text-xs text-muted-foreground">
-                            {t("settings.soundEffectsDesc")}
-                          </p>
-                        </div>
-                        <Switch
-                          id="sound-effects"
-                          checked={notifications.soundEffects}
-                          onCheckedChange={(checked) =>
-                            updateNotificationSettings({
-                              soundEffects: checked,
-                            })
-                          }
-                        />
-                      </div>
-
-                      {notifications.soundEffects && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="p-3 rounded-lg bg-white/5"
-                        >
-                          <div className="flex justify-between mb-2">
-                            <Label>{t("settings.volume")}</Label>
-                            <span className="text-sm text-muted-foreground">
-                              {notifications.volume}%
-                            </span>
-                          </div>
-                          <Slider
-                            value={[notifications.volume]}
-                            onValueChange={([value]) =>
-                              updateNotificationSettings({ volume: value })
-                            }
-                            max={100}
-                            step={10}
-                            className="w-full"
-                          />
-                        </motion.div>
-                      )}
+                      <Switch defaultChecked className="data-[state=checked]:bg-purple-500" />
                     </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </motion.div>
+                  ))}
+                </div>
+              </div>
+            </MagicCard>
           </TabsContent>
 
           {/* Display Settings */}
-          <TabsContent value="display">
-            <motion.div
-              variants={containerVariants}
-              initial="initial"
-              animate="animate"
-              className="space-y-6"
+          <TabsContent value="display" className="space-y-6">
+            <MagicCard
+              className="rounded-xl border-white/10 overflow-hidden"
+              gradientColor="rgba(244, 63, 94, 0.15)"
             >
-              <motion.div variants={cardVariants}>
-                <Card className="bg-white/5 border-white/10 backdrop-blur-xl overflow-hidden">
-                  <CardHeader className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-b border-white/5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                        <Palette className="w-6 h-6 text-purple-400" />
-                      </div>
-                      <div>
-                        <CardTitle>{t("settings.display")}</CardTitle>
-                        <CardDescription>
-                          {t("settings.displayDesc")}
-                        </CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-6 space-y-6">
-                    {/* Theme Selection */}
-                    <div>
-                      <Label className="mb-3 block">
-                        {t("settings.theme")}
-                      </Label>
-                      <div className="grid grid-cols-3 gap-3">
-                        {[
-                          {
-                            value: "dark",
-                            icon: Moon,
-                            label: t("common.dark"),
-                          },
-                          {
-                            value: "light",
-                            icon: Sun,
-                            label: t("common.light"),
-                          },
-                          {
-                            value: "auto",
-                            icon: Monitor,
-                            label: t("common.system"),
-                          },
-                        ].map((theme) => (
-                          <motion.button
-                            key={theme.value}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            onClick={() =>
-                              updateAppSettings({
-                                theme: theme.value as "dark" | "light" | "auto",
-                              })
-                            }
-                            className={`relative p-4 rounded-xl border-2 transition-all ${
-                              app.theme === theme.value
-                                ? "border-purple-500 bg-purple-500/10"
-                                : "border-white/10 bg-white/5 hover:border-white/20"
-                            }`}
-                          >
-                            <div className="flex flex-col items-center gap-2">
-                              <theme.icon className="w-6 h-6" />
-                              <span className="text-sm font-medium">
-                                {theme.label}
-                              </span>
-                            </div>
-                            {app.theme === theme.value && (
-                              <motion.div
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                className="absolute top-2 right-2"
-                              >
-                                <div className="w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center">
-                                  <Check className="w-3 h-3 text-white" />
-                                </div>
-                              </motion.div>
-                            )}
-                          </motion.button>
-                        ))}
-                      </div>
-                    </div>
+              <div className="p-6 border-b border-white/10 bg-white/5">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <Monitor className="w-5 h-5 text-rose-500" />
+                  {t("settings.display")}
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {t("settings.displayDesc")}
+                </p>
+              </div>
+              <div className="p-6 space-y-6">
+                <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium text-slate-200">
+                      {t("settings.theme")}
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.themeDesc")}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 bg-black/20 p-1 rounded-lg border border-white/10">
+                    <button
+                      onClick={() => updateAppSettings({ theme: "light" })}
+                      className={`p-2 rounded-md transition-all ${app.theme === "light"
+                        ? "bg-white text-black shadow-sm"
+                        : "text-slate-400 hover:text-slate-200"
+                        }`}
+                    >
+                      <Sun className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => updateAppSettings({ theme: "dark" })}
+                      className={`p-2 rounded-md transition-all ${app.theme === "dark"
+                        ? "bg-slate-700 text-white shadow-sm"
+                        : "text-slate-400 hover:text-slate-200"
+                        }`}
+                    >
+                      <Moon className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => updateAppSettings({ theme: "auto" })}
+                      className={`p-2 rounded-md transition-all ${app.theme === "auto"
+                        ? "bg-blue-500/20 text-blue-400 shadow-sm"
+                        : "text-slate-400 hover:text-slate-200"
+                        }`}
+                    >
+                      <Monitor className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
 
-                    <Separator className="bg-white/10" />
+                <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium text-slate-200">
+                      Compact Mode
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      Reduce spacing and font size
+                    </p>
+                  </div>
+                  <Switch />
+                </div>
 
-                    {/* Refresh Interval */}
-                    <div>
-                      <Label htmlFor="refresh">
-                        {t("settings.refreshInterval")}
-                      </Label>
-                      <Select
-                        value={app.refreshInterval.toString()}
-                        onValueChange={(value) =>
-                          updateAppSettings({
-                            refreshInterval: parseInt(value) as
-                              | 10
-                              | 15
-                              | 30
-                              | 60,
-                          })
-                        }
-                      >
-                        <SelectTrigger
-                          id="refresh"
-                          className="mt-2 bg-white/5 border-white/10"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="10">
-                            {t("settings.refresh10")}
-                          </SelectItem>
-                          <SelectItem value="15">
-                            {t("settings.refresh15")}
-                          </SelectItem>
-                          <SelectItem value="30">
-                            {t("settings.refresh30")}
-                          </SelectItem>
-                          <SelectItem value="60">
-                            {t("settings.refresh60")}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </motion.div>
+                <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium text-slate-200">
+                      Animations
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      Enable UI animations and effects
+                    </p>
+                  </div>
+                  <Switch defaultChecked className="data-[state=checked]:bg-rose-500" />
+                </div>
+              </div>
+            </MagicCard>
           </TabsContent>
 
           {/* Data Management */}
-          <TabsContent value="data">
-            <motion.div
-              variants={containerVariants}
-              initial="initial"
-              animate="animate"
-              className="space-y-6"
+          <TabsContent value="data" className="space-y-6">
+            <MagicCard
+              className="rounded-xl border-white/10 overflow-hidden"
+              gradientColor="rgba(16, 185, 129, 0.15)"
             >
-              <motion.div variants={cardVariants}>
-                <Card className="bg-white/5 border-white/10 backdrop-blur-xl overflow-hidden">
-                  <CardHeader className="bg-gradient-to-r from-rose-500/10 to-red-500/10 border-b border-white/5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-rose-500/20 flex items-center justify-center">
-                        <Database className="w-6 h-6 text-rose-400" />
-                      </div>
-                      <div>
-                        <CardTitle>{t("settings.dataManagement")}</CardTitle>
-                        <CardDescription>
-                          {t("settings.dataManagementDesc")}
-                        </CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Button
-                        onClick={handleExport}
-                        variant="outline"
-                        className="w-full bg-white/5 border-white/10 hover:bg-white/10"
+              <div className="p-6 border-b border-white/10 bg-white/5">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <Database className="w-5 h-5 text-emerald-500" />
+                  {t("settings.dataManagement")}
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {t("settings.dataManagementDesc")}
+                </p>
+              </div>
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                    <h3 className="font-medium mb-2 flex items-center gap-2">
+                      <Download className="w-4 h-4 text-blue-400" />
+                      Export Data
+                    </h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Download all your data as a JSON file backup.
+                    </p>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleExportData}
+                      className="w-full py-2 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-colors"
+                    >
+                      Export JSON
+                    </motion.button>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                    <h3 className="font-medium mb-2 flex items-center gap-2">
+                      <Upload className="w-4 h-4 text-emerald-400" />
+                      Import Data
+                    </h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Restore your data from a JSON backup file.
+                    </p>
+                    <div className="relative">
+                      <input
+                        type="file"
+                        accept=".json"
+                        onChange={handleImportData}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="w-full py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg hover:bg-emerald-500/20 transition-colors"
                       >
-                        <Download className="w-4 h-4 mr-2" />
-                        {t("settings.exportData")}
-                      </Button>
-
-                      <Button
-                        variant="outline"
-                        className="w-full relative overflow-hidden bg-white/5 border-white/10 hover:bg-white/10"
-                      >
-                        <Upload className="w-4 h-4 mr-2" />
-                        {t("settings.importData")}
-                        <input
-                          type="file"
-                          accept=".json"
-                          onChange={handleImport}
-                          className="absolute inset-0 opacity-0 cursor-pointer"
-                        />
-                      </Button>
-
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="w-full bg-white/5 border-white/10 hover:bg-white/10"
-                          >
-                            <RefreshCw className="w-4 h-4 mr-2" />
-                            {t("settings.resetSettings")}
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent className="bg-slate-900 border-white/10">
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                              {t("settings.confirmReset")}
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              {t("settings.confirmResetDesc")}
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel className="bg-white/5 border-white/10">
-                              {t("common.cancel")}
-                            </AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={handleReset}
-                              className="bg-amber-500 hover:bg-amber-600"
-                            >
-                              {t("common.confirm")}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="destructive" className="w-full">
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            {t("settings.clearCache")}
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent className="bg-slate-900 border-white/10">
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                              {t("settings.confirmClear")}
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              {t("settings.confirmClearDesc")}
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel className="bg-white/5 border-white/10">
-                              {t("common.cancel")}
-                            </AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={handleClearCache}
-                              className="bg-rose-500 hover:bg-rose-600"
-                            >
-                              {t("common.confirm")}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                        Select File
+                      </motion.button>
                     </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </motion.div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/10">
+                  <h3 className="font-medium mb-2 flex items-center gap-2 text-red-400">
+                    <Trash2 className="w-4 h-4" />
+                    Danger Zone
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Permanently delete all your data. This action cannot be
+                    undone.
+                  </p>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="px-4 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-colors"
+                      >
+                        Reset All Data
+                      </motion.button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="glass-premium border-white/10">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          Are you absolutely sure?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This action cannot be undone. This will permanently
+                          delete all your data including settings, API keys, and
+                          income entries.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel className="bg-white/5 border-white/10 hover:bg-white/10 hover:text-white">
+                          Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleResetData}
+                          className="bg-red-500 hover:bg-red-600 text-white border-none"
+                        >
+                          Yes, delete everything
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+            </MagicCard>
           </TabsContent>
         </Tabs>
       </motion.div>
