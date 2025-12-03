@@ -35,30 +35,30 @@ import { MagicCard } from "@/components/ui/magic-card";
 
 // Navigation items configuration
 const getNavItems = (t: (key: string) => string) => [
-  { href: "/", label: t("nav.airdrops"), icon: Sparkles, color: "#fbbf24" },
+  { href: "/", label: t("nav.airdrops"), icon: Sparkles, color: "#d4a948" },
   {
     href: "/calculator",
     label: t("nav.calculator"),
     icon: Calculator,
-    color: "#06b6d4",
+    color: "#f5d485",
   },
   {
     href: "/stability",
     label: t("nav.stability"),
     icon: TrendingUp,
-    color: "#22c55e",
+    color: "#b8860b",
   },
   {
     href: "/calendar",
     label: t("nav.calendar"),
     icon: Calendar,
-    color: "#a855f7",
+    color: "#d4a948",
   },
   {
     href: "/settings",
     label: t("nav.settings"),
     icon: Settings,
-    color: "#f97316",
+    color: "#8b7355",
   },
 ];
 
@@ -125,8 +125,10 @@ function DesktopNavLink({
                 <Icon
                   className="w-5 h-5 transition-all duration-300"
                   style={{
-                    color: isActive || isHovered ? color : "rgb(156 163 175)",
-                    filter: isActive ? `drop-shadow(0 0 8px ${color}80)` : "none",
+                    color: isActive || isHovered ? color : "rgb(161 161 170)",
+                    filter: isActive
+                      ? `drop-shadow(0 0 10px ${color}90)`
+                      : "none",
                   }}
                 />
               </motion.div>
@@ -136,8 +138,8 @@ function DesktopNavLink({
                   color: isActive
                     ? color
                     : isHovered
-                      ? "#f0f0f5"
-                      : "rgb(156 163 175)",
+                      ? "#fafaf9"
+                      : "rgb(161 161 170)",
                 }}
                 suppressHydrationWarning
               >
@@ -149,7 +151,7 @@ function DesktopNavLink({
       </TooltipTrigger>
       <TooltipContent
         side="bottom"
-        className="bg-gradient-to-r from-primary/90 to-primary text-primary-foreground border-none shadow-lg shadow-primary/20"
+        className="bg-gradient-to-r from-[#d4a948] to-[#b8860b] text-[#030305] border-none shadow-lg shadow-[rgba(212,169,72,0.3)]"
       >
         <p className="text-sm font-medium" suppressHydrationWarning>
           {label}
@@ -221,8 +223,8 @@ function MobileNavLink({
             <Icon
               className="w-6 h-6 relative z-10 transition-all duration-300"
               style={{
-                color: isActive ? color : "rgb(156 163 175)",
-                filter: isActive ? `drop-shadow(0 0 10px ${color})` : "none",
+                color: isActive ? color : "rgb(161 161 170)",
+                filter: isActive ? `drop-shadow(0 0 12px ${color})` : "none",
               }}
             />
           </motion.div>
@@ -231,7 +233,7 @@ function MobileNavLink({
           <motion.span
             className="text-xs font-medium relative z-10"
             style={{
-              color: isActive ? color : "rgb(156 163 175)",
+              color: isActive ? color : "rgb(161 161 170)",
             }}
             animate={{
               opacity: isActive ? 1 : 0.7,
@@ -259,7 +261,7 @@ function MobileNavLink({
       </TooltipTrigger>
       <TooltipContent
         side="top"
-        className="bg-gradient-to-r from-primary/90 to-primary text-primary-foreground border-none shadow-lg shadow-primary/20 mb-2"
+        className="bg-gradient-to-r from-[#d4a948] to-[#b8860b] text-[#030305] border-none shadow-lg shadow-[rgba(212,169,72,0.3)] mb-2"
       >
         <p className="text-sm font-medium" suppressHydrationWarning>
           {label}
@@ -309,7 +311,7 @@ export function Navigation() {
           }}
           transition={springConfigs.stiff}
           style={{
-            background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
+            background: "linear-gradient(135deg, #d4a948 0%, #b8860b 100%)",
           }}
         >
           {/* Shine effect */}
@@ -367,13 +369,13 @@ export function Navigation() {
           className="backdrop-blur-xl border-b transition-all duration-300"
           style={{
             background: isScrolled
-              ? "linear-gradient(135deg, rgba(12, 18, 34, 0.95) 0%, rgba(5, 8, 22, 0.98) 100%)"
-              : "linear-gradient(135deg, rgba(12, 18, 34, 0.8) 0%, rgba(5, 8, 22, 0.85) 100%)",
+              ? "linear-gradient(135deg, rgba(10, 10, 12, 0.98) 0%, rgba(3, 3, 5, 0.99) 100%)"
+              : "linear-gradient(135deg, rgba(10, 10, 12, 0.9) 0%, rgba(3, 3, 5, 0.92) 100%)",
             borderColor: isScrolled
-              ? "rgba(255, 255, 255, 0.1)"
-              : "rgba(255, 255, 255, 0.05)",
+              ? "rgba(212, 169, 72, 0.15)"
+              : "rgba(212, 169, 72, 0.08)",
             boxShadow: isScrolled
-              ? "0 4px 30px rgba(0, 0, 0, 0.3), 0 0 40px rgba(251, 191, 36, 0.05)"
+              ? "0 4px 30px rgba(0, 0, 0, 0.4), 0 0 60px rgba(212, 169, 72, 0.06)"
               : "none",
           }}
         >
@@ -414,7 +416,7 @@ export function Navigation() {
           className="h-px w-full"
           style={{
             background:
-              "linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.3), rgba(6, 182, 212, 0.3), transparent)",
+              "linear-gradient(90deg, transparent, rgba(212, 169, 72, 0.4), rgba(184, 134, 11, 0.3), transparent)",
           }}
           animate={{
             opacity: isScrolled ? 1 : 0,
@@ -435,7 +437,7 @@ export function Navigation() {
           className="h-px w-full"
           style={{
             background:
-              "linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.4), rgba(6, 182, 212, 0.4), transparent)",
+              "linear-gradient(90deg, transparent, rgba(212, 169, 72, 0.5), rgba(184, 134, 11, 0.4), transparent)",
           }}
         />
 
@@ -443,8 +445,8 @@ export function Navigation() {
           className="backdrop-blur-xl border-t"
           style={{
             background:
-              "linear-gradient(180deg, rgba(12, 18, 34, 0.95) 0%, rgba(5, 8, 22, 0.98) 100%)",
-            borderColor: "rgba(255, 255, 255, 0.08)",
+              "linear-gradient(180deg, rgba(10, 10, 12, 0.98) 0%, rgba(3, 3, 5, 0.99) 100%)",
+            borderColor: "rgba(212, 169, 72, 0.1)",
           }}
         >
           <div className="flex items-center justify-around h-16 px-1">
@@ -465,7 +467,7 @@ export function Navigation() {
         <div
           className="h-[env(safe-area-inset-bottom)]"
           style={{
-            background: "rgba(5, 8, 22, 0.98)",
+            background: "rgba(3, 3, 5, 0.99)",
           }}
         />
       </motion.nav>
@@ -481,10 +483,10 @@ export function Navigation() {
           className="backdrop-blur-xl border-b transition-all duration-300"
           style={{
             background: isScrolled
-              ? "linear-gradient(135deg, rgba(12, 18, 34, 0.98) 0%, rgba(5, 8, 22, 0.98) 100%)"
-              : "linear-gradient(135deg, rgba(12, 18, 34, 0.9) 0%, rgba(5, 8, 22, 0.9) 100%)",
-            borderColor: "rgba(255, 255, 255, 0.08)",
-            boxShadow: isScrolled ? "0 4px 30px rgba(0, 0, 0, 0.3)" : "none",
+              ? "linear-gradient(135deg, rgba(10, 10, 12, 0.98) 0%, rgba(3, 3, 5, 0.99) 100%)"
+              : "linear-gradient(135deg, rgba(10, 10, 12, 0.92) 0%, rgba(3, 3, 5, 0.95) 100%)",
+            borderColor: "rgba(212, 169, 72, 0.1)",
+            boxShadow: isScrolled ? "0 4px 30px rgba(0, 0, 0, 0.4)" : "none",
           }}
         >
           <div className="flex items-center justify-between h-14 px-4">
@@ -498,7 +500,7 @@ export function Navigation() {
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 className="p-2 rounded-xl transition-colors relative overflow-hidden"
                 style={{
-                  background: "rgba(255, 255, 255, 0.05)",
+                  background: "rgba(212, 169, 72, 0.08)",
                 }}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -536,7 +538,7 @@ export function Navigation() {
           className="h-px w-full"
           style={{
             background:
-              "linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.3), transparent)",
+              "linear-gradient(90deg, transparent, rgba(212, 169, 72, 0.4), transparent)",
           }}
           animate={{
             opacity: isScrolled ? 1 : 0.5,
@@ -563,8 +565,8 @@ export function Navigation() {
               className="md:hidden fixed top-0 right-0 bottom-0 w-72 z-50"
               style={{
                 background:
-                  "linear-gradient(180deg, rgba(12, 18, 34, 0.98) 0%, rgba(5, 8, 22, 0.99) 100%)",
-                borderLeft: "1px solid rgba(255, 255, 255, 0.1)",
+                  "linear-gradient(180deg, rgba(10, 10, 12, 0.99) 0%, rgba(3, 3, 5, 1) 100%)",
+                borderLeft: "1px solid rgba(212, 169, 72, 0.15)",
               }}
               initial={{ x: "100%" }}
               animate={{ x: 0 }}
@@ -572,11 +574,13 @@ export function Navigation() {
               transition={springConfigs.stiff}
             >
               {/* Header */}
-              <div className="flex items-center justify-between p-4 border-b border-white/10">
-                <span className="font-semibold text-lg">Menu</span>
+              <div className="flex items-center justify-between p-4 border-b border-[rgba(212,169,72,0.15)]">
+                <span className="font-semibold text-lg text-[#d4a948]">
+                  Menu
+                </span>
                 <motion.button
                   onClick={() => setSidebarOpen(false)}
-                  className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                  className="p-2 rounded-lg hover:bg-[rgba(212,169,72,0.1)] transition-colors"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
@@ -613,13 +617,13 @@ export function Navigation() {
                         <Icon
                           className="w-5 h-5 transition-colors"
                           style={{
-                            color: isActive ? item.color : "rgb(156 163 175)",
+                            color: isActive ? item.color : "rgb(161 161 170)",
                           }}
                         />
                         <span
                           className="font-medium flex-1"
                           style={{
-                            color: isActive ? item.color : "rgb(156 163 175)",
+                            color: isActive ? item.color : "rgb(161 161 170)",
                           }}
                         >
                           {item.label}
@@ -635,8 +639,8 @@ export function Navigation() {
               </div>
 
               {/* Footer */}
-              <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/10">
-                <div className="text-center text-xs text-muted-foreground">
+              <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-[rgba(212,169,72,0.1)]">
+                <div className="text-center text-xs text-[#a1a1aa]">
                   Binance Alpha Tool v1.0
                 </div>
               </div>

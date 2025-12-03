@@ -7,10 +7,10 @@ import { QueryProvider } from "@/lib/providers/query-provider";
 import { ThemeProvider } from "@/lib/providers/theme-provider";
 
 const prompt = Prompt({
-  weight: ['300', '400', '500', '600', '700'],
+  weight: ["300", "400", "500", "600", "700"],
   subsets: ["latin", "thai"],
   variable: "--font-prompt",
-  display: 'swap',
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -32,7 +32,7 @@ export const viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#f59e0b",
+  themeColor: "#d4a948",
 };
 
 export default function RootLayout({
@@ -44,10 +44,9 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="apple-touch-icon" href="/icon-192.png" />
-
       </head>
       <body
-        className={`${prompt.variable} font-sans antialiased`}
+        className={`${prompt.variable} font-sans antialiased bg-[#030305] text-[#fafaf9]`}
         suppressHydrationWarning
       >
         <ThemeProvider>
