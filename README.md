@@ -1,6 +1,6 @@
 # 🚀 Binance Alpha Tool
 
-> Professional Binance Alpha tracking tool with airdrop management, stability analysis, and BNB calculator
+> Professional Binance Alpha tracking tool with airdrop management, stability analysis, BNB calculator, and income calendar
 
 [English](#english) | [ภาษาไทย](#ภาษาไทย)
 
@@ -10,15 +10,20 @@
 
 ### 📖 Overview
 
-A comprehensive web application for tracking and analyzing Binance Alpha projects. Features include real-time stability monitoring, airdrop management with CRUD operations, BNB allocation calculator, and professional data visualization with game-inspired UI design.
+A comprehensive web application for tracking and analyzing Binance Alpha projects. Features include real-time stability monitoring, airdrop management with CRUD operations, BNB allocation calculator, income tracking calendar, and professional data visualization with premium gold & black UI design.
 
-**Live Demo**: [Coming Soon]
-**Documentation**: [ARCHITECTURE.md](./ARCHITECTURE.md) | [SETUP.md](./SETUP.md)
+**Documentation**: [ARCHITECTURE.md](./ARCHITECTURE.md) | [SETUP.md](./SETUP.md) | [DEPLOYMENT.md](./DEPLOYMENT.md)
 
 ### ✨ Key Features
 
-#### 🎯 Stability Dashboard
-- **Real-time monitoring** of Binance Alpha projects (15-second auto-refresh)
+#### 🏠 Home Dashboard
+- **Unified Airdrop Table** - View all airdrops with status, chain, multiplier
+- **Premium Gold & Black Theme** - Professional UI design
+- **Countdown Timers** - Track snapshot, claim, and listing dates
+- **Loading Skeletons** - Smooth loading experience
+
+#### 📈 Stability Dashboard (`/stability`)
+- **Real-time monitoring** of Binance Alpha projects (10-second auto-refresh)
 - **4x multiplier filtering** - Focus on BLUM, MAJOR, SEED, TOMARKET, PLUTO, CATS, DOGS
 - **KOGE baseline reference** (1x multiplier) for comparison
 - **Comprehensive stability criteria**:
@@ -30,58 +35,58 @@ A comprehensive web application for tracking and analyzing Binance Alpha project
 - Professional TanStack table with sorting, filtering, and search
 - Color-coded risk levels (Safe/Moderate/High)
 
-#### 💰 BNB Calculator
+#### 🧮 BNB Calculator (`/calculator`)
 - **Dual input system** - Slider OR direct text input with real-time sync
+- **Daily Volume Tracker** - Track transaction history
+- **Points calculation** - Points per day/week, max allocations
+- **Profit Strategy** - Net profit calculations for 15/30 day periods
 - Calculate allocation with oversubscription multiplier
 - Estimate get amount, cost, and USD value
-- Locked daily transaction summary display
 
-#### 📊 Airdrop Management System
-- **Full CRUD operations** with admin authentication
-- **Batch import/export** with JSON backup system
-- **Smart duplicate detection** (by token)
-- **Date-based versioning** for backups
-- Professional data tables with advanced features:
-  - Global search
-  - Column sorting & visibility
-  - Pagination
-  - Row selection
-  - CSV/JSON export
+#### 📅 Income Calendar (`/calendar`)
+- **Daily income tracking** - Add/edit/delete entries
+- **Multi-user support** - Manage multiple accounts
+- **Statistics dashboard** - Total income, monthly stats
+- **Category support** - Airdrop, Trading, Staking, Other
+- **Visual calendar** - See income by date with color coding
 
-#### ⚙️ Settings & Customization
+#### ⚙️ Settings (`/settings`)
 - **Theme system**: Dark / Light / Auto (follows system preference)
-- **Language support**: English / Thai
-- **Animation speed control**: Fast / Normal / Slow / None
-- **Notification preferences**: Sound, volume, alerts
+- **Language support**: English / Thai (full i18n)
+- **API Keys management**: Binance API configuration
+- **Telegram integration**: Bot token and chat ID setup
+- **Data management**: Export/Import/Reset functionality
 - All settings persist to localStorage
 
 #### 🎨 Professional UI/UX
-- **Game-inspired design** (Genshin Impact aesthetics)
+- **Premium Gold & Black design** inspired by luxury aesthetics
 - **Glassmorphism effects** with backdrop blur
 - **Smooth animations** with Framer Motion
 - **Responsive design** - Mobile-first approach
-- **Gold/Cyan accents** with gradient effects
+- **Animated backgrounds** with gradient mesh effects
 
 ### 🛠️ Tech Stack
 
 | Category | Technologies |
 |----------|-------------|
-| **Framework** | Next.js 15 (App Router) |
+| **Framework** | Next.js 16 (App Router) |
 | **Language** | TypeScript (Strict Mode) |
-| **Database** | Prisma + SQLite (migration to PostgreSQL ready) |
+| **Database** | Prisma 7 + SQLite (PostgreSQL ready) |
 | **UI Components** | shadcn/ui + Radix UI |
 | **Styling** | TailwindCSS 4 |
 | **Animations** | Framer Motion |
 | **Data Tables** | TanStack Table v8 |
-| **State Management** | Zustand (with persistence) |
+| **State Management** | Zustand 5 (with persistence) |
 | **Data Fetching** | TanStack Query (React Query) |
-| **Validation** | Zod |
+| **Validation** | Zod 4 |
 | **Testing** | Vitest + Testing Library |
+| **Charts** | Recharts |
 
 ### 🚀 Quick Start
 
 #### Prerequisites
-- Node.js 18+ or pnpm/npm
+- Node.js 18+ 
+- pnpm (recommended) or npm
 
 #### Installation
 
@@ -102,7 +107,12 @@ pnpm db:push
 # Create environment variables
 cp .env.example .env.local
 # Edit .env.local with your configuration
+
+# Run development server
+pnpm dev
 ```
+
+Visit **http://localhost:3000**
 
 #### Environment Variables
 
@@ -117,17 +127,12 @@ ADMIN_KEY="your-secure-admin-key-here"
 
 # App URL (for production)
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
+
+# Telegram (Optional)
+TELEGRAM_BOT_TOKEN="your-bot-token"
+TELEGRAM_CHAT_ID="your-chat-id"
+TELEGRAM_LANGUAGE="th"
 ```
-
-#### Run Development Server
-
-```bash
-pnpm dev
-# or
-npm run dev
-```
-
-Visit **http://localhost:3000**
 
 ### 📚 API Documentation
 
@@ -139,7 +144,7 @@ Visit **http://localhost:3000**
 | `GET` | `/api/airdrops/[id]` | Get single airdrop |
 | `GET` | `/api/airdrops/export` | Export to JSON |
 | `GET` | `/api/binance/alpha/projects` | Binance Alpha projects |
-| `GET` | `/api/binance/alpha/stability` | Stability data (redirects to projects) |
+| `GET` | `/api/binance/alpha/stability` | Stability data |
 
 #### Admin Endpoints (require `x-admin-key` header)
 
@@ -203,20 +208,37 @@ binance-alpha-tool/
 ├── app/                      # Next.js App Router
 │   ├── api/                 # API routes
 │   │   ├── airdrops/       # Airdrop CRUD
-│   │   └── binance/alpha/  # Binance Alpha API
+│   │   ├── binance/        # Binance Alpha API
+│   │   │   ├── alpha/      # stability, projects, sync
+│   │   │   └── market/     # Market data
+│   │   ├── cron/           # Scheduled jobs
+│   │   └── telegram/       # Telegram bot
 │   ├── calculator/         # BNB Calculator page
-│   ├── stability/          # Stability Dashboard
-│   └── settings/           # Settings page
+│   ├── calendar/           # Income Calendar page
+│   ├── settings/           # Settings page
+│   └── stability/          # Stability Dashboard
 ├── components/
 │   ├── features/           # Feature components
+│   │   ├── airdrops/       # Airdrop table & timer
 │   │   ├── calculator/     # Calculator components
+│   │   ├── calendar/       # Calendar components
 │   │   ├── stability/      # Stability table
 │   │   └── data-table/     # Advanced data table
+│   ├── layout/             # Navigation & layout
 │   └── ui/                 # shadcn/ui components
 ├── lib/
-│   ├── db/                 # Prisma client
-│   ├── stores/             # Zustand stores
-│   └── providers/          # React providers
+│   ├── stores/             # Zustand stores (7 stores)
+│   │   ├── calculator-store.ts
+│   │   ├── filter-store.ts
+│   │   ├── income-store.ts
+│   │   ├── language-store.ts
+│   │   ├── settings-store.ts
+│   │   ├── ui-store.ts
+│   │   └── user-store.ts
+│   ├── i18n/               # Translations (TH/EN)
+│   ├── hooks/              # Custom hooks
+│   ├── services/           # Business logic
+│   └── db/                 # Prisma client
 ├── prisma/
 │   └── schema.prisma       # Database schema
 ├── scripts/
@@ -236,6 +258,7 @@ model Airdrop {
   chain           String              // BSC, ETH
   multiplier      Int       @default(1)  // 1x, 2x, 4x
   isBaseline      Boolean   @default(false)
+  type            AirdropType @default(AIRDROP) // TGE, PRETGE, AIRDROP
 
   // Dates
   snapshotDate    DateTime?
@@ -246,9 +269,10 @@ model Airdrop {
   // Points
   requiredPoints  Int?
   pointsPerDay    Int?
+  deductPoints    Int?      @default(0)
 
   // Status
-  status          AirdropStatus
+  status          AirdropStatus  // UPCOMING, SNAPSHOT, CLAIMABLE, ENDED, CANCELLED
   verified        Boolean
   isActive        Boolean
 
@@ -256,14 +280,15 @@ model Airdrop {
   createdAt       DateTime
   updatedAt       DateTime
 }
+
+// Additional models: User, UserAirdrop, Alert, StabilityScore, IncomeEntry
 ```
 
 ### 🎨 UI/UX Design System
 
 **Theme Colors:**
-- **Primary**: Gold gradient (#FFD700 → #FFA500)
-- **Secondary**: Cyan (#00CED1)
-- **Background**: Deep navy (#0A0E27)
+- **Primary**: Gold gradient (#D4A948 → #B8860B)
+- **Background**: Deep black (#030305 → #0A0A0C)
 - **Status**: Green (safe) / Yellow (moderate) / Red (high risk)
 
 **Glassmorphism:**
@@ -302,19 +327,15 @@ pnpm test:coverage
    - `ADMIN_KEY`
    - `NEXT_PUBLIC_APP_URL`
 
-#### Database Migration
-
-```bash
-pnpm db:migrate
-```
-
-See [SETUP.md](./SETUP.md) for detailed deployment instructions.
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed instructions.
 
 ### 📝 Available Scripts
 
 ```bash
 pnpm dev              # Start development server
+pnpm dev:turbo        # Start with Turbopack
 pnpm build            # Build for production
+pnpm build:analyze    # Build with bundle analyzer
 pnpm start            # Start production server
 pnpm lint             # Run ESLint
 pnpm test             # Run tests
@@ -323,6 +344,7 @@ pnpm test             # Run tests
 pnpm db:generate      # Generate Prisma client
 pnpm db:push          # Push schema to database
 pnpm db:studio        # Open Prisma Studio
+pnpm db:seed          # Seed database
 pnpm db:migrate       # Run migrations
 
 # Data Management
@@ -351,17 +373,11 @@ MIT License - See [LICENSE](./LICENSE) for details.
 
 ### 🙏 Acknowledgments
 
-- Design inspiration: Genshin Impact
+- Design inspiration: Premium luxury aesthetics
 - Reference projects:
   - https://bn-alpha-tool.com
   - https://new.alphabot.cm/
   - https://www.bn-alpha.site
-  - https://github.com/gaohongxiang/bn-alpha-tool
-
-### 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/binance-alpha-tool/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/binance-alpha-tool/discussions)
 
 ---
 
@@ -369,12 +385,17 @@ MIT License - See [LICENSE](./LICENSE) for details.
 
 ### 📖 ภาพรวมโปรเจกต์
 
-เครื่องมือติดตามโปรเจกต์ Binance Alpha แบบมืออาชีพ พร้อมระบบจัดการ Airdrop, วิเคราะห์ความเสถียร, เครื่องคำนวณ BNB และ UI ดีไซน์แบบเกม
+เครื่องมือติดตามโปรเจกต์ Binance Alpha แบบมืออาชีพ พร้อมระบบจัดการ Airdrop, วิเคราะห์ความเสถียร, เครื่องคำนวณ BNB, ปฏิทินติดตามรายได้ และ UI ธีมทอง-ดำระดับพรีเมียม
 
 ### ✨ ฟีเจอร์หลัก
 
-#### 🎯 แดชบอร์ดความเสถียร
-- **ติดตามแบบเรียลไทม์** โปรเจกต์ Binance Alpha (รีเฟรชอัตโนมัติทุก 15 วินาที)
+#### 🏠 หน้าแรก
+- **ตาราง Airdrop รวม** - ดูทุก airdrop พร้อมสถานะ, chain, multiplier
+- **ธีมทอง-ดำพรีเมียม** - UI ดีไซน์ระดับมืออาชีพ
+- **นับถอยหลัง** - ติดตามวัน snapshot, claim และ listing
+
+#### 📈 แดชบอร์ดความเสถียร (`/stability`)
+- **ติดตามแบบเรียลไทม์** โปรเจกต์ Binance Alpha (รีเฟรชอัตโนมัติทุก 10 วินาที)
 - **กรองแค่ตัวคูณ 4 เท่า** - มุ่งเน้น BLUM, MAJOR, SEED, TOMARKET, PLUTO, CATS, DOGS
 - **KOGE เป็นฐานอ้างอิง** (ตัวคูณ 1 เท่า) สำหรับเปรียบเทียบ
 - **เกณฑ์ความเสถียรครบถ้วน**:
@@ -384,22 +405,24 @@ MIT License - See [LICENSE](./LICENSE) for details.
   - วิเคราะห์แนวโน้มระยะสั้น
   - **ตัวบ่งชี้ Spread bps** (🟢🟢 = เสถียรที่สุด)
 
-#### 💰 เครื่องคำนวณ BNB
+#### 🧮 เครื่องคำนวณ BNB (`/calculator`)
 - **ระบบ 2 อินพุต** - สไลด์เดอร์หรือพิมพ์โดยตรง ซิงค์แบบเรียลไทม์
-- คำนวณการจัดสรรด้วยตัวคูณโอเวอร์ซับสคริปชัน
-- ประมาณการจำนวนที่ได้รับ, ต้นทุน และมูลค่า USD
+- **Daily Volume Tracker** - ติดตามประวัติธุรกรรม
+- **คำนวณคะแนน** - Points per day/week, max allocations
+- **กลยุทธ์กำไร** - คำนวณกำไรสุทธิช่วง 15/30 วัน
 
-#### 📊 ระบบจัดการ Airdrop
-- **CRUD ครบครัน** พร้อมการยืนยันตัวตนแอดมิน
-- **นำเข้า/ส่งออกเป็นชุด** พร้อมระบบสำรองข้อมูล JSON
-- **ตรวจจับข้อมูลซ้ำอัจฉริยะ** (ตามโทเคน)
-- **ควบคุมเวอร์ชันตามวันที่**
+#### 📅 ปฏิทินรายได้ (`/calendar`)
+- **ติดตามรายได้รายวัน** - เพิ่ม/แก้ไข/ลบ entries
+- **รองรับหลายผู้ใช้** - จัดการหลายบัญชี
+- **สถิติแดชบอร์ด** - รายได้รวม, สถิติรายเดือน
+- **รองรับหมวดหมู่** - Airdrop, Trading, Staking, Other
 
-#### ⚙️ การตั้งค่าและปรับแต่ง
+#### ⚙️ การตั้งค่า (`/settings`)
 - **ระบบธีม**: มืด / สว่าง / อัตโนมัติ (ตามระบบ)
-- **รองรับภาษา**: อังกฤษ / ไทย / จีน
-- **ควบคุมความเร็วแอนิเมชัน**: เร็ว / ปกติ / ช้า / ไม่มี
-- **การแจ้งเตือน**: เสียง, ระดับเสียง, การแจ้งเตือน
+- **รองรับภาษา**: อังกฤษ / ไทย (i18n เต็มรูปแบบ)
+- **จัดการ API Keys**: ตั้งค่า Binance API
+- **Telegram**: ตั้งค่า Bot token และ Chat ID
+- **จัดการข้อมูล**: Export/Import/Reset
 
 ### 🚀 เริ่มต้นใช้งาน
 
@@ -420,6 +443,19 @@ pnpm dev
 
 เข้าใช้งานที่ **http://localhost:3000**
 
+### 🛠️ Tech Stack
+
+| หมวด | เทคโนโลยี |
+|------|----------|
+| **Framework** | Next.js 16 (App Router) |
+| **Language** | TypeScript |
+| **Database** | Prisma 7 + SQLite |
+| **UI** | shadcn/ui + Radix UI |
+| **Styling** | TailwindCSS 4 |
+| **Animation** | Framer Motion |
+| **State** | Zustand 5 + TanStack Query |
+| **Validation** | Zod 4 |
+
 ### 📚 เอกสาร API
 
 #### Endpoint สาธารณะ
@@ -429,6 +465,7 @@ pnpm dev
 | `GET` | `/api/airdrops` | แสดงรายการ Airdrop ทั้งหมด |
 | `GET` | `/api/airdrops/[id]` | ดูข้อมูล Airdrop เดี่ยว |
 | `GET` | `/api/airdrops/export` | ส่งออกเป็น JSON |
+| `GET` | `/api/binance/alpha/stability` | ข้อมูลความเสถียร |
 
 #### Endpoint แอดมิน (ต้องการ `x-admin-key` header)
 
@@ -454,7 +491,8 @@ pnpm db:list-backups
 
 ### 🎨 ระบบดีไซน์
 
-- **สีธีม**: ไล่เฉดสีทอง, สีฟ้าเขียว
+- **สีธีม**: ไล่เฉดสีทอง (#D4A948 → #B8860B)
+- **พื้นหลัง**: สีดำเข้ม (#030305 → #0A0A0C)
 - **เอฟเฟกต์กระจก**: เบลอพื้นหลัง + ความโปร่งใส
 - **แอนิเมชันลื่นไหล**: Framer Motion
 - **รองรับหลายหน้าจอ**: เน้นมือถือก่อน

@@ -6,47 +6,42 @@
 
 - GitHub account
 - Vercel account (free tier available)
-- Supabase account (for database)
-- Moralis account (for Web3 API)
-- Telegram Bot (optional)
+- Node.js 18+ locally (for database setup)
 
-### 2. Database Setup (Supabase)
+### 2. Environment Variables
 
-1. Go to [https://supabase.com](https://supabase.com)
-2. Create a new project
-3. Wait for database to be ready (~2 minutes)
-4. Go to **Settings > Database**
-5. Copy **Connection String** (URI format)
-6. Replace `[YOUR-PASSWORD]` with your password
+Before deploying, prepare these environment variables:
 
-Example:
+```env
+# Database (Required)
+DATABASE_URL="file:./dev.db"
 
+# Admin Key for API operations (Required)
+ADMIN_KEY="your-secure-admin-key-here-min-32-chars"
+
+# App URL (Required for production)
+NEXT_PUBLIC_APP_URL="https://your-domain.vercel.app"
+
+# Telegram (Optional - for notifications)
+TELEGRAM_BOT_TOKEN="your-bot-token"
+TELEGRAM_CHAT_ID="your-chat-id"
+TELEGRAM_LANGUAGE="th"
+
+# Cron Security (Optional - for scheduled jobs)
+CRON_SECRET="your-random-secret-key-min-32-chars"
 ```
-postgresql://postgres:[YOUR-PASSWORD]@db.xxxxx.supabase.co:5432/postgres
-```
 
-### 3. Get API Keys
+### 3. Deploy to Vercel
 
-#### Moralis (Web3 API)
+#### Option A: Deploy from GitHub (Recommended)
 
-1. Go to [https://moralis.io](https://moralis.io)
-2. Sign up / Login
-3. Go to **Web3 Data API** > **Get your API Key**
-4. Copy the API key
+1. Push your code to GitHub
+2. Go to [https://vercel.com/new](https://vercel.com/new)
+3. Import your repository
+4. Configure environment variables (see above)
+5. Click **Deploy**
 
-#### Telegram Bot (Optional)
-
-1. Open Telegram, search for `@BotFather`
-2. Send `/newbot` command
-3. Follow instructions to create bot
-4. Copy the **Bot Token**
-5. Start a chat with your bot
-6. Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
-7. Look for `"chat":{"id":123456789}` and copy the ID
-
-### 4. Deploy to Vercel
-
-#### Option A: Deploy with Vercel CLI
+#### Option B: Deploy with Vercel CLI
 
 ```bash
 # Install Vercel CLI
@@ -59,116 +54,172 @@ vercel login
 vercel
 
 # Follow prompts and set environment variables
+# For production deployment:
+vercel --prod
 ```
 
-#### Option B: Deploy from GitHub
+### 4. Post-Deployment Setup
 
-1. Push your code to GitHub
-2. Go to [https://vercel.com/new](https://vercel.com/new)
-3. Import your repository
-4. Configure environment variables (see below)
-5. Click **Deploy**
-
-### 5. Environment Variables
-
-Add these in **Vercel Dashboard > Settings > Environment Variables**:
+After first deployment, run database setup:
 
 ```bash
-# Database (Required)
-DATABASE_URL=postgresql://postgres:[PASSWORD]@db.xxxxx.supabase.co:5432/postgres
-
-# Supabase (Required)
-NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
-
-# Moralis (Required)
-MORALIS_API_KEY=your_moralis_api_key_here
-
-# Binance API (Optional - for real-time market data)
-BINANCE_API_KEY=your_binance_api_key
-BINANCE_API_SECRET=your_binance_secret
-
-# Telegram (Optional - for notifications)
-TELEGRAM_BOT_TOKEN=your_bot_token
-TELEGRAM_CHAT_ID=your_chat_id
-TELEGRAM_LANGUAGE=th
-
-# Cron Security (Required - generate random string)
-CRON_SECRET=your_random_secret_key_min_32_chars
-
-# Optional
-SENTRY_DSN=your_sentry_dsn
-NODE_ENV=production
-```
-
-### 6. Run Database Migrations
-
-After first deployment:
-
-```bash
-# Install dependencies locally
-npm install
+# Pull environment variables locally
+vercel env pull .env.local
 
 # Generate Prisma Client
-npm run db:generate
+pnpm db:generate
 
 # Push schema to database
-npm run db:push
+pnpm db:push
 
-# Seed sample data (optional)
-npm run db:seed
+# (Optional) Seed sample data
+pnpm db:seed
 ```
 
-Or via Vercel CLI:
+---
+
+## 🗄️ Database Options
+
+### Option 1: SQLite (Default - Development)
+
+SQLite is included by default. Great for:
+- Local development
+- Small deployments
+- Testing
+
+```env
+DATABASE_URL="file:./dev.db"
+```
+
+### Option 2: PostgreSQL (Production Recommended)
+
+For production, migrate to PostgreSQL:
+
+#### Using Supabase (Free Tier Available)
+
+1. Go to [https://supabase.com](https://supabase.com)
+2. Create a new project
+3. Go to **Settings > Database**
+4. Copy **Connection String** (URI format)
+
+```env
+DATABASE_URL="postgresql://postgres:[PASSWORD]@db.xxxxx.supabase.co:5432/postgres"
+```
+
+#### Using Neon (Free Tier Available)
+
+1. Go to [https://neon.tech](https://neon.tech)
+2. Create a new project
+3. Copy connection string
+
+```env
+DATABASE_URL="postgresql://username:password@ep-xxx.neon.tech/neondb"
+```
+
+#### Prisma Schema Update for PostgreSQL
+
+Update `prisma/schema.prisma`:
+
+```prisma
+datasource db {
+  provider = "postgresql"  // Change from "sqlite"
+}
+```
+
+Then run:
 
 ```bash
-vercel env pull .env
-npm run db:push
-npm run db:seed
+pnpm db:generate
+pnpm db:push
 ```
 
-### 7. Setup Cron Jobs
+---
 
-Vercel Pro plan required for cron jobs. Alternative for free tier:
+## 📱 Telegram Bot Setup (Optional)
 
-#### Option A: External Cron Service (Free)
+See [TELEGRAM_SETUP.md](./TELEGRAM_SETUP.md) for detailed instructions.
 
-1. Go to [https://cron-job.org](https://cron-job.org)
-2. Create a new cron job:
-   - **URL**: `https://your-domain.vercel.app/api/cron/update-airdrops?secret=YOUR_CRON_SECRET`
-   - **Schedule**: `0 * * * *` (every hour)
-   - **Method**: GET
+Quick steps:
+1. Create bot via `@BotFather` on Telegram
+2. Get bot token
+3. Get chat ID
+4. Add to environment variables
 
-#### Option B: GitHub Actions (Free)
+---
+
+## ⏰ Cron Jobs Setup (Optional)
+
+### Option A: Vercel Cron (Pro Plan Required)
+
+Add to `vercel.json`:
+
+```json
+{
+  "crons": [
+    {
+      "path": "/api/cron/update-airdrops?secret=YOUR_CRON_SECRET",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
+```
+
+### Option B: External Cron Service (Free)
+
+Use services like:
+- [cron-job.org](https://cron-job.org)
+- [EasyCron](https://www.easycron.com)
+- [UptimeRobot](https://uptimerobot.com)
+
+Setup:
+- **URL**: `https://your-domain.vercel.app/api/cron/update-airdrops?secret=YOUR_CRON_SECRET`
+- **Schedule**: `0 * * * *` (every hour)
+- **Method**: GET
+
+### Option C: GitHub Actions (Free)
 
 Create `.github/workflows/cron.yml`:
 
-\`\`\`yaml
+```yaml
 name: Hourly Airdrop Update
 
 on:
-schedule: - cron: '0 \* \* \* \*' # Every hour
-workflow_dispatch: # Manual trigger
+  schedule:
+    - cron: '0 * * * *'  # Every hour
+  workflow_dispatch:      # Manual trigger
 
 jobs:
-update:
-runs-on: ubuntu-latest
-steps: - name: Trigger Cron
-run: |
-curl -X GET "https://your-domain.vercel.app/api/cron/update-airdrops?secret=${{ secrets.CRON_SECRET }}"
-\`\`\`
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Cron
+        run: |
+          curl -X GET "https://your-domain.vercel.app/api/cron/update-airdrops?secret=${{ secrets.CRON_SECRET }}"
+```
 
-Add `CRON_SECRET` to GitHub Secrets.
+Add `CRON_SECRET` to GitHub repository secrets.
 
-### 8. Verify Deployment
+---
 
-1. Visit your deployed URL: `https://your-app.vercel.app`
-2. Check API endpoints:
-   - `/api/binance/market/ticker`
-   - `/api/binance/alpha/airdrops`
-   - `/api/binance/alpha/stability`
-3. Test Telegram notifications (if configured)
-4. Check Prisma Studio: `npm run db:studio`
+## ✅ Deployment Checklist
+
+### Before Deployment
+
+- [ ] All environment variables prepared
+- [ ] `ADMIN_KEY` is strong (32+ characters)
+- [ ] Code pushed to GitHub
+- [ ] No sensitive data in code
+
+### After Deployment
+
+- [ ] Visit deployed URL and verify pages load
+- [ ] Test API endpoints:
+  - [ ] `GET /api/airdrops`
+  - [ ] `GET /api/binance/alpha/stability`
+- [ ] Test admin endpoints with `x-admin-key` header
+- [ ] Verify database connection
+- [ ] Setup Telegram bot (optional)
+- [ ] Configure cron jobs (optional)
 
 ---
 
@@ -178,10 +229,9 @@ Add `CRON_SECRET` to GitHub Secrets.
 
 **Error**: `Cannot find module '@prisma/client'`
 
-**Solution**:
+**Solution**: Update `vercel.json`:
 
 ```json
-// vercel.json
 {
   "buildCommand": "prisma generate && next build"
 }
@@ -192,27 +242,34 @@ Add `CRON_SECRET` to GitHub Secrets.
 **Error**: `Can't reach database server`
 
 **Solutions**:
+1. Check `DATABASE_URL` format is correct
+2. For Supabase: Enable IP allowlist (allow all: `0.0.0.0/0`)
+3. URL encode special characters in password
 
-1. Check `DATABASE_URL` is correct
-2. Ensure IP allowlist in Supabase (allow all: `0.0.0.0/0`)
-3. Verify password has no special characters (or URL encode them)
+### API Returns 401 Unauthorized
 
-### Cron Job Not Working
-
-**Solutions**:
-
-1. Verify `CRON_SECRET` matches in `.env` and cron service
-2. Check Vercel function logs
-3. Test manually: `curl https://your-domain.vercel.app/api/cron/update-airdrops?secret=YOUR_SECRET`
-
-### Telegram Not Sending
+**Error**: Admin endpoints return 401
 
 **Solutions**:
+1. Verify `ADMIN_KEY` environment variable is set
+2. Check `x-admin-key` header matches exactly
+3. Redeploy after setting environment variables
 
-1. Ensure `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set
-2. Start a chat with your bot first
-3. Check bot has permission to send messages
-4. Verify language setting: `TELEGRAM_LANGUAGE=th` or `en`
+### Pages Load Slowly
+
+**Solutions**:
+1. Enable Vercel Analytics
+2. Check bundle size: `pnpm build:analyze`
+3. Optimize images with Next.js `<Image>`
+4. Enable ISR for static pages
+
+### Telegram Not Working
+
+**Solutions**:
+1. Verify `TELEGRAM_BOT_TOKEN` is correct
+2. Ensure you've started chat with bot first
+3. Check `TELEGRAM_CHAT_ID` format
+4. See [TELEGRAM_SETUP.md](./TELEGRAM_SETUP.md) for details
 
 ---
 
@@ -221,22 +278,20 @@ Add `CRON_SECRET` to GitHub Secrets.
 ### Vercel Analytics
 
 - Enable in Vercel Dashboard > Analytics
-- Track page views, performance
+- Track page views, performance, and vitals
 
-### Error Tracking (Sentry)
+### Error Tracking
 
-```bash
-npm install @sentry/nextjs
-
-# Follow setup wizard
-npx @sentry/wizard@latest -i nextjs
-```
+Consider adding:
+- Sentry (`@sentry/nextjs`)
+- LogRocket
+- Vercel Error Monitoring
 
 ### Database Monitoring
 
-- Supabase Dashboard > Database > Logs
-- Query performance
-- Connection pooling
+- Prisma Studio: `pnpm db:studio`
+- Supabase Dashboard (if using)
+- Query performance logs
 
 ---
 
@@ -245,116 +300,119 @@ npx @sentry/wizard@latest -i nextjs
 ### Deploy Updates
 
 ```bash
+# Push changes to GitHub
 git add .
 git commit -m "Update features"
-git push origin main  # Auto-deploys on Vercel
+git push origin main
+
+# Vercel auto-deploys on push
 ```
 
 ### Database Migrations
 
 ```bash
 # After schema changes
-npm run db:push
+pnpm db:push
 
-# Generate new client
-npm run db:generate
+# Regenerate client
+pnpm db:generate
 
-# Re-deploy
+# Redeploy
 vercel --prod
 ```
 
 ### Backup Database
 
 ```bash
-# Export from Supabase
-# Settings > Database > Backups
-# Download .sql file
+# Export airdrops to JSON backup
+pnpm db:export
+
+# Creates: data/backups/airdrop-backup-YYYY-MM-DD.json
 ```
 
 ---
 
-## 🎯 Performance Tips
+## 🎯 Performance Optimization
 
-1. **Enable caching**: Already configured in `next.config.ts`
-2. **Use CDN**: Vercel Edge Network (automatic)
-3. **Optimize images**: Use Next.js `<Image>` component
-4. **Monitor bundle size**: `ANALYZE=true npm run build`
-5. **Database indexes**: Already in Prisma schema
+### Next.js 16 Features
+
+- **App Router**: Already configured
+- **Server Components**: Used by default
+- **Turbopack**: Enable with `pnpm dev:turbo`
+
+### Caching
+
+Already configured in `next.config.ts`:
+- Static page caching
+- API response caching
+- Image optimization
+
+### Bundle Optimization
+
+```bash
+# Analyze bundle size
+pnpm build:analyze
+```
+
+### Edge Runtime (Optional)
+
+For faster API responses, consider Edge Runtime:
+
+```typescript
+export const runtime = 'edge';
+```
 
 ---
 
-## 📱 PWA Features
+## 💰 Cost Estimate
 
-The app is PWA-ready:
+### Free Tier
 
-- Offline support (via service worker)
-- Install to home screen
-- Push notifications (requires setup)
+| Service | Limit | Cost |
+|---------|-------|------|
+| Vercel | 100GB bandwidth, 100GB-hrs compute | $0 |
+| SQLite | Local file | $0 |
+| GitHub | Unlimited public repos | $0 |
+| **Total** | | **$0/month** |
 
-To enable push notifications:
+### Production (Recommended)
 
-1. Get VAPID keys
-2. Add to `.env`
-3. Implement service worker
+| Service | Features | Cost |
+|---------|----------|------|
+| Vercel Pro | Cron jobs, analytics, more bandwidth | $20/month |
+| Supabase Pro | 8GB database, daily backups | $25/month |
+| **Total** | | **$45/month** |
 
 ---
 
-## 🔐 Security Checklist
+## 🔐 Security Best Practices
 
-- ✅ Environment variables secure
-- ✅ HTTPS only (Vercel automatic)
-- ✅ Rate limiting enabled
-- ✅ Input validation (Zod)
-- ✅ CORS configured
-- ✅ CSP headers set
-- ✅ API key rotation (manual - do quarterly)
+- ✅ Use strong `ADMIN_KEY` (32+ characters, random)
+- ✅ Never commit `.env.local` to git
+- ✅ Rotate API keys quarterly
+- ✅ Enable HTTPS (automatic on Vercel)
+- ✅ Use environment variables for all secrets
+- ✅ Input validation with Zod
+- ✅ SQL injection prevention (Prisma)
 
 ---
 
 ## 📚 Resources
 
 - [Vercel Documentation](https://vercel.com/docs)
-- [Next.js Deployment](https://nextjs.org/docs/deployment)
-- [Prisma Deployment](https://www.prisma.io/docs/guides/deployment)
-- [Supabase Guide](https://supabase.com/docs/guides/getting-started)
+- [Next.js 16 Deployment](https://nextjs.org/docs/deployment)
+- [Prisma Deployment Guide](https://www.prisma.io/docs/guides/deployment)
+- [Supabase Documentation](https://supabase.com/docs)
 
 ---
 
-## 💡 Cost Estimate
+## 📞 Need Help?
 
-**Free Tier:**
-
-- Vercel: Free (100GB bandwidth, 100GB-hrs compute)
-- Supabase: Free (500MB database, 2GB transfer)
-- Moralis: Free (40,000 requests/month)
-- Total: **$0/month** for small projects
-
-**Production (Recommended):**
-
-- Vercel Pro: $20/month (cron jobs, analytics)
-- Supabase Pro: $25/month (8GB database, daily backups)
-- Moralis: $49/month (3M requests)
-- Total: **~$94/month**
+1. Check [SETUP.md](./SETUP.md) for local development
+2. Check [DATABASE_SETUP.md](./DATABASE_SETUP.md) for database details
+3. Check [TELEGRAM_SETUP.md](./TELEGRAM_SETUP.md) for bot setup
+4. Review [ARCHITECTURE.md](./ARCHITECTURE.md) for technical details
 
 ---
 
-## ✅ Deployment Checklist
-
-Before going live:
-
-- [ ] Database migrated and seeded
-- [ ] All environment variables set
-- [ ] API endpoints tested
-- [ ] Telegram bot working
-- [ ] Cron jobs configured
-- [ ] PWA manifest correct
-- [ ] SEO metadata added
-- [ ] Error tracking enabled
-- [ ] Analytics configured
-- [ ] Domain configured (optional)
-- [ ] SSL certificate active (automatic)
-- [ ] Backup strategy in place
-
----
-
-**Need help?** Check [DATABASE_SETUP.md](./DATABASE_SETUP.md) for API usage examples.
+**Made with ❤️ for the Binance Alpha community**

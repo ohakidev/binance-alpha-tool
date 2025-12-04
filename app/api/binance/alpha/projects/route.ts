@@ -2,244 +2,427 @@
  * Binance Alpha Projects API
  * GET /api/binance/alpha/projects
  *
- * Fetches real project data from Binance Alpha
- * Source: https://web3.binance.com/en/markets/alpha?chain=bsc
+ * Fetches REAL project data from Binance Alpha API
+ * Source: https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list
  */
 
 import { NextResponse } from "next/server";
 
-interface BinanceAlphaProject {
+// ============= Types =============
+
+interface BinanceAlphaTokenRaw {
+  tokenId: string;
+  chainId: string;
+  chainIconUrl: string;
+  chainName: string;
+  contractAddress: string;
+  name: string;
+  symbol: string;
+  iconUrl: string;
+  price: string;
+  percentChange24h: string;
+  volume24h: string;
+  marketCap: string;
+  fdv: string;
+  liquidity: string;
+  totalSupply: string;
+  circulatingSupply: string;
+  holders: string;
+  decimals: number;
+  listingCex: boolean;
+  hotTag: boolean;
+  cexCoinName: string;
+  canTransfer: boolean;
+  denomination: number;
+  offline: boolean;
+  tradeDecimal: number;
+  alphaId: string;
+  offsell: boolean;
+  priceHigh24h: string;
+  priceLow24h: string;
+  count24h: string;
+  onlineTge: boolean;
+  onlineAirdrop: boolean;
+  score: number;
+  cexOffDisplay: boolean;
+  stockState: boolean;
+  listingTime: number;
+  mulPoint: number;
+  bnExclusiveState: boolean;
+}
+
+interface BinanceAlphaApiResponse {
+  code: string;
+  message: string | null;
+  messageDetail: string | null;
+  data: BinanceAlphaTokenRaw[];
+}
+
+interface ProcessedProject {
   token: string;
   name: string;
   chain: string;
+  chainId: string;
   multiplier: number;
   isBaseline: boolean;
   price: number;
+  priceHigh24h: number;
+  priceLow24h: number;
   change24h: number;
   volume24h: number;
-  marketCap?: number;
-  holders?: number;
+  marketCap: number;
+  liquidity: number;
+  holders: number;
   stabilityScore: number;
   riskLevel: "LOW" | "MEDIUM" | "HIGH";
   spreadBps: number;
   volatilityIndex: number;
   trend: "UP" | "DOWN" | "STABLE";
-  fourXDays: number; // Number of days with 4x multiplier
+  fourXDays: number;
+  contractAddress: string;
+  iconUrl: string;
+  alphaId: string;
+  listingTime: number | null;
+  score: number;
+  hotTag: boolean;
+  isOffline: boolean;
+  hasBinancePair: boolean;
 }
 
-// Mock data based on real Binance Alpha projects
-// In production, this would scrape or call Binance API
-const BINANCE_ALPHA_PROJECTS: BinanceAlphaProject[] = [
-  {
-    token: "KOGE",
-    name: "KOGE",
-    chain: "BSC",
-    multiplier: 1,
-    isBaseline: true,
-    price: 0.0012,
-    change24h: 2.5,
-    volume24h: 125000,
-    stabilityScore: 65,
-    riskLevel: "MEDIUM",
-    spreadBps: 0.00,
-    volatilityIndex: 58,
-    trend: "STABLE",
-    fourXDays: 0,
-  },
-  {
-    token: "ALEO",
-    name: "ALEO",
-    chain: "BSC",
-    multiplier: 4,
-    isBaseline: false,
-    price: 0.0245,
-    change24h: 8.3,
-    volume24h: 2500000,
-    stabilityScore: 78,
-    riskLevel: "LOW",
-    spreadBps: 0.69,
-    volatilityIndex: 72,
-    trend: "UP",
-    fourXDays: 10,
-  },
-  {
-    token: "AOP",
-    name: "AOP",
-    chain: "BSC",
-    multiplier: 4,
-    isBaseline: false,
-    price: 0.0198,
-    change24h: -3.2,
-    volume24h: 1800000,
-    stabilityScore: 68,
-    riskLevel: "LOW",
-    spreadBps: 1.10,
-    volatilityIndex: 62,
-    trend: "STABLE",
-    fourXDays: 15,
-  },
-  {
-    token: "NUMI",
-    name: "NUMI",
-    chain: "BSC",
-    multiplier: 4,
-    isBaseline: false,
-    price: 0.0089,
-    change24h: 15.7,
-    volume24h: 3200000,
-    stabilityScore: 82,
-    riskLevel: "MEDIUM",
-    spreadBps: 0.82,
-    volatilityIndex: 78,
-    trend: "STABLE",
-    fourXDays: 17,
-  },
-  {
-    token: "POP",
-    name: "POP",
-    chain: "BSC",
-    multiplier: 4,
-    isBaseline: false,
-    price: 0.0156,
-    change24h: 5.1,
-    volume24h: 1950000,
-    stabilityScore: 72,
-    riskLevel: "MEDIUM",
-    spreadBps: 0.72,
-    volatilityIndex: 68,
-    trend: "STABLE",
-    fourXDays: 6,
-  },
-  {
-    token: "FROGGIE",
-    name: "FROGGIE",
-    chain: "BSC",
-    multiplier: 4,
-    isBaseline: false,
-    price: 0.0134,
-    change24h: -8.4,
-    volume24h: 1200000,
-    stabilityScore: 52,
-    riskLevel: "HIGH",
-    spreadBps: 8.62,
-    volatilityIndex: 48,
-    trend: "DOWN",
-    fourXDays: 16,
-  },
-  {
-    token: "STAR",
-    name: "STAR",
-    chain: "BSC",
-    multiplier: 4,
-    isBaseline: false,
-    price: 0.0078,
-    change24h: 12.5,
-    volume24h: 2800000,
-    stabilityScore: 75,
-    riskLevel: "HIGH",
-    spreadBps: 0.00,
-    volatilityIndex: 70,
-    trend: "DOWN",
-    fourXDays: 2,
-  },
-  {
-    token: "ZEUS",
-    name: "ZEUS",
-    chain: "BSC",
-    multiplier: 4,
-    isBaseline: false,
-    price: 0.0092,
-    change24h: -1.8,
-    volume24h: 2100000,
-    stabilityScore: 70,
-    riskLevel: "HIGH",
-    spreadBps: 6.70,
-    volatilityIndex: 65,
-    trend: "DOWN",
-    fourXDays: 9,
-  },
+// ============= Constants =============
+
+const BINANCE_ALPHA_API_URL =
+  "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list";
+
+const DEFAULT_HEADERS = {
+  "Content-Type": "application/json",
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  Accept: "application/json",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
+// Chain ID to name mapping
+const CHAIN_ID_MAP: Record<string, string> = {
+  "1": "Ethereum",
+  "56": "BSC",
+  "137": "Polygon",
+  "42161": "Arbitrum",
+  "10": "Optimism",
+  "43114": "Avalanche",
+  "250": "Fantom",
+  "8453": "Base",
+  "324": "zkSync",
+  "534352": "Scroll",
+  "59144": "Linea",
+  "1399811149": "Solana",
+};
+
+// Alpha tokens that have USDT pairs on Binance Spot
+const ALPHA_WITH_BINANCE_PAIRS = [
+  "ALEO",
+  "KAITO",
+  "BERA",
+  "LAYER",
+  "IP",
+  "SHELL",
+  "BMT",
+  "NIL",
+  "PARTI",
+  "PLUME",
+  "MUBARAK",
+  "BROCCOLI",
+  "TUT",
+  "B2",
+  "GPS",
+  "RED",
+  "HAEDAL",
+  "SIGN",
+  "INIT",
+  "ZORA",
 ];
 
-/**
- * Fetch projects from Binance Alpha
- * In production, implement actual API call or web scraping
- */
-async function fetchBinanceAlphaProjects(): Promise<BinanceAlphaProject[]> {
-  try {
-    // TODO: Implement actual API call to Binance
-    // const response = await fetch('https://web3.binance.com/api/alpha/projects?chain=bsc', {
-    //   headers: { ... },
-    //   cache: 'no-store'
-    // });
-    // const data = await response.json();
-    // return parseAndTransform(data);
+// ============= Helper Functions =============
 
-    // For now, return mock data
-    // Add some randomization to simulate live data
-    return BINANCE_ALPHA_PROJECTS.map((project) => ({
-      ...project,
-      price: project.price * (1 + (Math.random() - 0.5) * 0.1), // ±5% variation
-      change24h: project.change24h + (Math.random() - 0.5) * 4, // ±2% variation
-      volume24h: Math.round(project.volume24h * (1 + (Math.random() - 0.5) * 0.2)), // ±10% variation
-    }));
+function parseNumber(value: string | number | undefined): number {
+  if (typeof value === "number") return value;
+  if (!value) return 0;
+  const parsed = parseFloat(value);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+function normalizeChainName(chainId: string, chainName?: string): string {
+  if (chainId && CHAIN_ID_MAP[chainId]) {
+    return CHAIN_ID_MAP[chainId];
+  }
+  if (chainName) {
+    return chainName;
+  }
+  return "Unknown";
+}
+
+/**
+ * Calculate stability score based on multiple factors
+ */
+function calculateStabilityScore(token: BinanceAlphaTokenRaw): number {
+  const price = parseNumber(token.price);
+  const high = parseNumber(token.priceHigh24h);
+  const low = parseNumber(token.priceLow24h);
+  const change = parseNumber(token.percentChange24h);
+  const volume = parseNumber(token.volume24h);
+  const liquidity = parseNumber(token.liquidity);
+
+  let score = 50; // Base score
+
+  // Price volatility factor (lower is better)
+  if (price > 0 && high > 0 && low > 0) {
+    const priceRange = ((high - low) / price) * 100;
+    if (priceRange < 5) score += 20;
+    else if (priceRange < 10) score += 10;
+    else if (priceRange > 20) score -= 15;
+  }
+
+  // 24h change factor
+  const absChange = Math.abs(change);
+  if (absChange < 5) score += 15;
+  else if (absChange < 10) score += 5;
+  else if (absChange > 20) score -= 10;
+
+  // Liquidity factor (higher is better)
+  if (liquidity > 1000000) score += 15;
+  else if (liquidity > 500000) score += 10;
+  else if (liquidity > 100000) score += 5;
+  else score -= 5;
+
+  // Volume factor
+  if (volume > 5000000) score += 10;
+  else if (volume > 1000000) score += 5;
+
+  // Multiplier bonus (4x tokens might be more volatile)
+  const mulPoint = token.mulPoint || 1;
+  if (mulPoint === 1) score += 5; // Baseline tokens tend to be more stable
+
+  // Cap score between 0-100
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+/**
+ * Calculate spread in basis points from price range
+ */
+function calculateSpreadBps(token: BinanceAlphaTokenRaw): number {
+  const high = parseNumber(token.priceHigh24h);
+  const low = parseNumber(token.priceLow24h);
+  const price = parseNumber(token.price);
+
+  if (price <= 0 || high <= 0 || low <= 0) return 0;
+
+  // Approximate spread from price range
+  const spread = ((high - low) / price) * 10000;
+  return Math.round(spread * 100) / 100;
+}
+
+/**
+ * Determine risk level from stability score
+ */
+function determineRiskLevel(
+  stabilityScore: number,
+  spreadBps: number,
+): "LOW" | "MEDIUM" | "HIGH" {
+  if (stabilityScore >= 70 && spreadBps < 500) return "LOW";
+  if (stabilityScore >= 45 && spreadBps < 1000) return "MEDIUM";
+  return "HIGH";
+}
+
+/**
+ * Determine price trend
+ */
+function determineTrend(change24h: number): "UP" | "DOWN" | "STABLE" {
+  if (change24h > 3) return "UP";
+  if (change24h < -3) return "DOWN";
+  return "STABLE";
+}
+
+/**
+ * Calculate volatility index (0-100, higher = more volatile)
+ */
+function calculateVolatilityIndex(token: BinanceAlphaTokenRaw): number {
+  const price = parseNumber(token.price);
+  const high = parseNumber(token.priceHigh24h);
+  const low = parseNumber(token.priceLow24h);
+  const change = Math.abs(parseNumber(token.percentChange24h));
+
+  if (price <= 0) return 50;
+
+  const priceRange = ((high - low) / price) * 100;
+  const volatility = (priceRange + change) / 2;
+
+  return Math.min(100, Math.round(volatility * 2));
+}
+
+/**
+ * Estimate 4x days based on listing time and multiplier
+ */
+function estimate4xDays(token: BinanceAlphaTokenRaw): number {
+  if (token.mulPoint !== 4) return 0;
+
+  const listingTime = token.listingTime || 0;
+  if (listingTime === 0) return 0;
+
+  const now = Date.now();
+  const daysSinceListing = Math.floor(
+    (now - listingTime) / (1000 * 60 * 60 * 24),
+  );
+
+  return Math.max(0, daysSinceListing);
+}
+
+/**
+ * Transform raw token to processed project
+ */
+function transformToken(token: BinanceAlphaTokenRaw): ProcessedProject {
+  const price = parseNumber(token.price);
+  const change24h = parseNumber(token.percentChange24h);
+  const stabilityScore = calculateStabilityScore(token);
+  const spreadBps = calculateSpreadBps(token);
+  const mulPoint = token.mulPoint || 1;
+
+  return {
+    token: token.symbol,
+    name: token.name,
+    chain: normalizeChainName(token.chainId, token.chainName),
+    chainId: token.chainId,
+    multiplier: mulPoint,
+    isBaseline: mulPoint === 1,
+    price,
+    priceHigh24h: parseNumber(token.priceHigh24h),
+    priceLow24h: parseNumber(token.priceLow24h),
+    change24h,
+    volume24h: parseNumber(token.volume24h),
+    marketCap: parseNumber(token.marketCap),
+    liquidity: parseNumber(token.liquidity),
+    holders: parseInt(token.holders) || 0,
+    stabilityScore,
+    riskLevel: determineRiskLevel(stabilityScore, spreadBps),
+    spreadBps,
+    volatilityIndex: calculateVolatilityIndex(token),
+    trend: determineTrend(change24h),
+    fourXDays: estimate4xDays(token),
+    contractAddress: token.contractAddress,
+    iconUrl: token.iconUrl,
+    alphaId: token.alphaId,
+    listingTime: token.listingTime || null,
+    score: token.score || 0,
+    hotTag: token.hotTag,
+    isOffline: token.offline || token.offsell,
+    hasBinancePair: ALPHA_WITH_BINANCE_PAIRS.includes(
+      token.symbol.toUpperCase(),
+    ),
+  };
+}
+
+/**
+ * Fetch real data from Binance Alpha API
+ */
+async function fetchBinanceAlphaProjects(): Promise<ProcessedProject[]> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+  try {
+    console.log("🔍 Fetching from Binance Alpha API...");
+
+    const response = await fetch(BINANCE_ALPHA_API_URL, {
+      method: "GET",
+      headers: DEFAULT_HEADERS,
+      signal: controller.signal,
+      cache: "no-store",
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data: BinanceAlphaApiResponse = await response.json();
+
+    if (data.code !== "000000") {
+      throw new Error(`Binance API error: ${data.message || "Unknown error"}`);
+    }
+
+    if (!data.data || !Array.isArray(data.data)) {
+      throw new Error("Invalid API response structure");
+    }
+
+    console.log(`✅ Found ${data.data.length} tokens from Binance Alpha API`);
+
+    // Filter out offline tokens and transform
+    const activeTokens = data.data.filter(
+      (token) => !token.offline && !token.offsell,
+    );
+
+    return activeTokens.map(transformToken);
   } catch (error) {
-    console.error("Error fetching Binance Alpha projects:", error);
-    return BINANCE_ALPHA_PROJECTS;
+    clearTimeout(timeoutId);
+
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Binance Alpha API request timeout");
+    }
+
+    throw error;
   }
 }
+
+// ============= API Handler =============
 
 export async function GET() {
   try {
     const projects = await fetchBinanceAlphaProjects();
 
-    // Sort by stability score, but keep KOGE (baseline) at top
-    const kogeProject = projects.find((p) => p.isBaseline);
-    const otherProjects = projects
-      .filter((p) => !p.isBaseline)
-      .sort((a, b) => b.stabilityScore - a.stabilityScore);
+    // Sort: baseline (1x) first, then by stability score descending
+    const sorted = projects.sort((a, b) => {
+      // Baseline first
+      if (a.isBaseline && !b.isBaseline) return -1;
+      if (!a.isBaseline && b.isBaseline) return 1;
 
-    const sortedProjects = kogeProject
-      ? [kogeProject, ...otherProjects]
-      : otherProjects;
+      // Then by stability score
+      return b.stabilityScore - a.stabilityScore;
+    });
+
+    // Find baseline project (1x multiplier)
+    const baselineProject = sorted.find((p) => p.isBaseline);
+
+    // Stats
+    const stats = {
+      total: sorted.length,
+      fourX: sorted.filter((p) => p.multiplier === 4).length,
+      withBinancePairs: sorted.filter((p) => p.hasBinancePair).length,
+      lowRisk: sorted.filter((p) => p.riskLevel === "LOW").length,
+      mediumRisk: sorted.filter((p) => p.riskLevel === "MEDIUM").length,
+      highRisk: sorted.filter((p) => p.riskLevel === "HIGH").length,
+    };
 
     return NextResponse.json({
       success: true,
-      data: sortedProjects,
-      count: sortedProjects.length,
-      baseline: kogeProject,
+      data: sorted,
+      count: sorted.length,
+      baseline: baselineProject || null,
+      stats,
       timestamp: new Date().toISOString(),
-      source: "binance-alpha-api",
+      source: "binance-alpha-api-real",
       disclaimer:
         "⚠️ Markets are unpredictable. DYOR; no liability for losses.",
     });
   } catch (error) {
-    console.error("Error in Binance Alpha API:", error);
+    console.error("❌ Error fetching Binance Alpha projects:", error);
+
     return NextResponse.json(
       {
         success: false,
         error: "Failed to fetch Binance Alpha projects",
         message: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
-
-/**
- * Future implementation notes:
- *
- * 1. Web Scraping approach:
- *    - Use Puppeteer or Playwright to scrape Binance Alpha page
- *    - Parse HTML to extract project data
- *    - Cache results for performance
- *
- * 2. API approach (if available):
- *    - Find Binance's internal API endpoint
- *    - Use proper authentication if required
- *    - Implement rate limiting
- *
- * 3. Data enrichment:
- *    - Fetch additional data from CoinGecko/CoinMarketCap
- *    - Calculate custom metrics (spread bps, volatility)
- *    - Store historical data in database
- */

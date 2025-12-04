@@ -1,296 +1,617 @@
-# 🚀 Database & API Integration Setup
+# 🗄️ Database & API Setup Guide
 
-## ✅ เสร็จสิ้นแล้ว
+## 📋 Overview
 
-### 1. Database Setup (Supabase + Prisma)
-
-**Installed:**
-
-- ✅ Prisma ORM
-- ✅ Supabase Client
-- ✅ PostgreSQL Database Schema
-
-**Models Created:**
-
-- `User` - ข้อมูลผู้ใช้และ wallet
-- `Airdrop` - ข้อมูล airdrops
-- `UserAirdrop` - ความสัมพันธ์ระหว่างผู้ใช้และ airdrops
-- `Alert` - การแจ้งเตือน
-- `StabilityScore` - คะแนนความมั่นคง
-- `IncomeEntry` - บันทึกรายได้
-
-### 2. Web3 API Integration (Moralis)
-
-**Features:**
-
-- ✅ Wallet token balance tracking
-- ✅ NFT ownership verification
-- ✅ Transaction history
-- ✅ Airdrop eligibility checker
-
-### 3. Telegram Notifications
-
-**Alerts:**
-
-- ✅ New airdrop announcements
-- ✅ Snapshot reminders
-- ✅ Claimable notifications
-- ✅ Price alerts
-- ✅ Stability warnings
-
-### 4. Airdrop Calculator
-
-**Capabilities:**
-
-- ✅ คำนวณคะแนนความน่าสนใจ (0-100)
-- ✅ ตรวจสอบ eligibility ผ่าน Moralis
-- ✅ อัพเดทสถานะอัตโนมัติ
-- ✅ ส่งการแจ้งเตือนผ่าน Telegram
+This guide covers database setup, schema details, and API integration for the Binance Alpha Tool.
 
 ---
 
-## 📋 Setup Instructions
+## 🚀 Quick Setup
 
-### 1. Environment Variables
-
-สร้างไฟล์ `.env` และเพิ่มค่าต่อไปนี้:
+### 1. Generate Prisma Client
 
 ```bash
-# Database (Supabase)
-DATABASE_URL="postgresql://user:password@host:5432/database?schema=public"
-NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
-NEXT_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
-
-# Moralis Web3 API
-MORALIS_API_KEY="your-moralis-api-key"
-
-# Telegram Bot
-TELEGRAM_BOT_TOKEN="your-telegram-bot-token"
-TELEGRAM_CHAT_ID="your-telegram-chat-id"
-
-# Cron Job Security
-CRON_SECRET="your-random-secret-key"
-
-# Binance API (Optional)
-BINANCE_API_KEY="your-binance-api-key"
-BINANCE_API_SECRET="your-binance-api-secret"
+pnpm db:generate
 ```
 
-### 2. Database Setup
+### 2. Push Schema to Database
 
 ```bash
-# Generate Prisma Client
-npm run db:generate
-
-# Push schema to database
-npm run db:push
-
-# Seed sample data
-npm run db:seed
-
-# Open Prisma Studio (GUI)
-npm run db:studio
+pnpm db:push
 ```
 
-### 3. Get API Keys
+### 3. (Optional) Seed Sample Data
 
-#### Supabase:
+```bash
+pnpm db:seed
+```
 
-1. ไปที่ https://supabase.com
-2. สร้าง project ใหม่
-3. คัดลอก `Project URL` และ `anon key` จาก Settings > API
+### 4. Open Prisma Studio (GUI)
 
-#### Moralis:
-
-1. ไปที่ https://moralis.io
-2. สร้าง account และ project
-3. คัดลอก API key จาก Dashboard
-
-#### Telegram Bot:
-
-1. ค้นหา `@BotFather` ใน Telegram
-2. ส่ง `/newbot` และตั้งชื่อ bot
-3. คัดลอก `Token` ที่ได้รับ
-4. เริ่มแชทกับ bot ของคุณ
-5. ไปที่ `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
-6. คัดลอก `chat.id` จาก response
+```bash
+pnpm db:studio
+```
 
 ---
 
-## 🔄 API Endpoints
+## 🗃️ Database Configuration
 
-### Airdrops
+### SQLite (Default - Development)
 
-**GET** `/api/binance/alpha/airdrops`
+The project uses SQLite by default for simplicity:
 
-- Query params: `status`, `chain`, `limit`
-- Returns: รายการ airdrops พร้อมคะแนน
+```env
+DATABASE_URL="file:./dev.db"
+```
 
-**POST** `/api/binance/alpha/airdrops`
+### PostgreSQL (Production)
 
-- Body: Airdrop data
-- Creates: Airdrop ใหม่และส่งการแจ้งเตือน
+For production, migrate to PostgreSQL:
 
-### Cron Jobs
+```env
+DATABASE_URL="postgresql://username:password@host:5432/database"
+```
 
-**GET** `/api/cron/update-airdrops?secret=YOUR_SECRET`
+Update `prisma/schema.prisma`:
 
-- Updates: สถานะ airdrops ทั้งหมด
-- Sends: การแจ้งเตือนอัตโนมัติ
-
----
-
-## 🤖 Automatic Updates
-
-### Vercel Cron (Recommended)
-
-เพิ่มใน `vercel.json`:
-
-```json
-{
-  "crons": [
-    {
-      "path": "/api/cron/update-airdrops?secret=YOUR_SECRET",
-      "schedule": "0 * * * *"
-    }
-  ]
+```prisma
+datasource db {
+  provider = "postgresql"  // Change from "sqlite"
 }
 ```
 
-### External Cron Service
+Then regenerate:
 
-ใช้ service เช่น:
-
-- cron-job.org
-- EasyCron
-- GitHub Actions
-
-Schedule: `0 * * * *` (ทุกชั่วโมง)
-URL: `https://your-domain.com/api/cron/update-airdrops?secret=YOUR_SECRET`
+```bash
+pnpm db:generate
+pnpm db:push
+```
 
 ---
 
 ## 📊 Database Schema
 
-### Airdrop Statuses:
+### Core Models
 
-- `UPCOMING` - กำลังจะมาถึง
-- `SNAPSHOT` - ระหว่าง snapshot
-- `CLAIMABLE` - สามารถ claim ได้
-- `ENDED` - สิ้นสุดแล้ว
-- `CANCELLED` - ยกเลิก
+#### User
 
-### Alert Types:
+```prisma
+model User {
+  id            String    @id @default(uuid())
+  name          String
+  walletAddress String?   @unique
+  telegramId    String?   @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-- `AIRDROP_NEW` - Airdrop ใหม่
-- `AIRDROP_SNAPSHOT` - Snapshot reminder
-- `AIRDROP_CLAIMABLE` - พร้อม claim
-- `AIRDROP_ENDING` - ใกล้สิ้นสุด
-- `PRICE_ALERT` - ราคาผ่าน threshold
-- `STABILITY_WARNING` - คำเตือนความมั่นคง
+  // Relations
+  airdrops      UserAirdrop[]
+  alerts        Alert[]
+}
+```
+
+#### Airdrop
+
+```prisma
+model Airdrop {
+  id              String    @id @default(uuid())
+  token           String    @unique  // Token symbol (unique identifier)
+  name            String
+  chain           String              // BSC, ETH, etc.
+  logoUrl         String?
+
+  // Binance Alpha specific
+  multiplier      Int       @default(1)  // 1x, 2x, 4x
+  isBaseline      Boolean   @default(false)
+  alphaUrl        String?
+
+  // Airdrop details
+  description     String?
+  totalSupply     String?
+  airdropAmount   String?
+  initialPrice    Float?
+  currentPrice    Float?
+
+  // Eligibility (stored as JSON string)
+  eligibility     String    @default("[]")
+  requirements    String    @default("[]")
+
+  // Dates
+  snapshotDate    DateTime?
+  claimStartDate  DateTime?
+  claimEndDate    DateTime?
+  listingDate     DateTime?
+
+  // Points system
+  requiredPoints  Int?
+  pointsPerDay    Int?
+  deductPoints    Int?      @default(0)
+
+  // Type classification
+  type            AirdropType @default(AIRDROP)
+
+  // Contract information
+  contractAddress String?
+
+  // Status
+  status          AirdropStatus @default(UPCOMING)
+  verified        Boolean       @default(false)
+  isActive        Boolean       @default(true)
+
+  // External links
+  websiteUrl      String?
+  twitterUrl      String?
+  discordUrl      String?
+  telegramUrl     String?
+
+  // Metadata
+  estimatedValue  Float?
+  participantCount Int?
+  addedBy         String?
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  users           UserAirdrop[]
+  alerts          Alert[]
+}
+```
+
+#### StabilityScore
+
+```prisma
+model StabilityScore {
+  id              String    @id @default(uuid())
+  symbol          String
+
+  // Metrics
+  stabilityScore  Float
+  riskLevel       RiskLevel
+  volatilityIndex Float
+  volumeScore     Float
+
+  // Price data
+  currentPrice    Float
+  priceChange     Float
+  high24h         Float
+  low24h          Float
+  volume24h       Float
+
+  timestamp       DateTime  @default(now())
+}
+```
+
+#### IncomeEntry
+
+```prisma
+model IncomeEntry {
+  id          String    @id @default(uuid())
+  userId      String
+
+  // Income details
+  amount      Float
+  currency    String    @default("USDT")
+  source      String
+  category    String    // airdrop, trading, staking, other
+  description String?
+
+  // Date
+  date        DateTime
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+```
+
+### Enums
+
+```prisma
+enum AirdropStatus {
+  UPCOMING
+  SNAPSHOT
+  CLAIMABLE
+  ENDED
+  CANCELLED
+}
+
+enum AirdropType {
+  TGE       // Token Generation Event
+  PRETGE    // Pre-TGE
+  AIRDROP   // Standard Airdrop
+}
+
+enum RiskLevel {
+  SAFE
+  MODERATE
+  HIGH
+}
+
+enum AlertType {
+  AIRDROP_NEW
+  AIRDROP_SNAPSHOT
+  AIRDROP_CLAIMABLE
+  AIRDROP_ENDING
+  PRICE_ALERT
+  STABILITY_WARNING
+}
+```
 
 ---
 
-## 🎯 Usage Examples
+## 🔌 API Endpoints
 
-### 1. สร้าง Airdrop ใหม่
+### Public Endpoints
+
+#### List All Airdrops
+
+```bash
+GET /api/airdrops
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "token": "BLUM",
+      "name": "Blum",
+      "chain": "BSC",
+      "multiplier": 4,
+      "status": "UPCOMING",
+      "isActive": true
+    }
+  ]
+}
+```
+
+#### Get Single Airdrop
+
+```bash
+GET /api/airdrops/[id]
+```
+
+#### Export Airdrops to JSON
+
+```bash
+GET /api/airdrops/export
+```
+
+#### Get Stability Data
+
+```bash
+GET /api/binance/alpha/stability
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "token": "KOGE",
+      "name": "KOGE",
+      "multiplier": 1,
+      "isBaseline": true,
+      "price": 0.0012,
+      "stabilityScore": 65,
+      "riskLevel": "MODERATE",
+      "spreadBps": 45,
+      "trend": "STABLE"
+    }
+  ],
+  "timestamp": "2025-01-15T12:00:00Z"
+}
+```
+
+#### Get Binance Alpha Projects
+
+```bash
+GET /api/binance/alpha/projects
+```
+
+---
+
+### Admin Endpoints
+
+All admin endpoints require `x-admin-key` header.
+
+#### Create Airdrop
+
+```bash
+POST /api/airdrops
+```
+
+Headers:
+
+```
+Content-Type: application/json
+x-admin-key: your-admin-key
+```
+
+Body:
+
+```json
+{
+  "token": "BLUM",
+  "name": "Blum",
+  "chain": "BSC",
+  "multiplier": 4,
+  "status": "UPCOMING",
+  "description": "Blum airdrop project",
+  "websiteUrl": "https://blum.io",
+  "snapshotDate": "2025-02-01T00:00:00Z"
+}
+```
+
+#### Update Airdrop
+
+```bash
+PUT /api/airdrops/[id]
+```
+
+Headers:
+
+```
+Content-Type: application/json
+x-admin-key: your-admin-key
+```
+
+Body:
+
+```json
+{
+  "status": "CLAIMABLE",
+  "claimStartDate": "2025-02-15T00:00:00Z"
+}
+```
+
+#### Delete Airdrop
+
+```bash
+DELETE /api/airdrops/[id]
+```
+
+Headers:
+
+```
+x-admin-key: your-admin-key
+```
+
+#### Import Airdrops from JSON
+
+```bash
+POST /api/airdrops/import
+```
+
+Headers:
+
+```
+Content-Type: application/json
+x-admin-key: your-admin-key
+```
+
+Body:
+
+```json
+{
+  "airdrops": [
+    {
+      "token": "BLUM",
+      "name": "Blum",
+      "chain": "BSC",
+      "multiplier": 4
+    },
+    {
+      "token": "MAJOR",
+      "name": "Major",
+      "chain": "TON",
+      "multiplier": 4
+    }
+  ]
+}
+```
+
+---
+
+## 🔄 Data Management Scripts
+
+### Export Database to Backup
+
+```bash
+pnpm db:export
+```
+
+Creates: `data/backups/airdrop-backup-YYYY-MM-DD.json`
+
+### Import from Backup
+
+```bash
+# Import latest backup
+pnpm db:import
+
+# Import specific backup
+pnpm db:import airdrop-backup-2025-01-15.json
+```
+
+### List All Backups
+
+```bash
+pnpm db:list-backups
+```
+
+### Features
+
+- ✅ **Smart Duplicate Check**: Skips existing records (by token)
+- ✅ **Version Control**: Date-based filenames
+- ✅ **Detailed Summary**: Shows imported/skipped/errors
+- ✅ **Auto-select Latest**: No filename needed
+
+---
+
+## 💻 Usage Examples
+
+### Using cURL
+
+```bash
+# List all airdrops
+curl http://localhost:3000/api/airdrops
+
+# Get stability data
+curl http://localhost:3000/api/binance/alpha/stability
+
+# Create airdrop (admin)
+curl -X POST http://localhost:3000/api/airdrops \
+  -H "Content-Type: application/json" \
+  -H "x-admin-key: your-admin-key" \
+  -d '{
+    "token": "NEWTOKEN",
+    "name": "New Token",
+    "chain": "ETH",
+    "multiplier": 2,
+    "status": "UPCOMING"
+  }'
+
+# Delete airdrop (admin)
+curl -X DELETE http://localhost:3000/api/airdrops/uuid-here \
+  -H "x-admin-key: your-admin-key"
+```
+
+### Using TypeScript/JavaScript
 
 ```typescript
-const response = await fetch("/api/binance/alpha/airdrops", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
+// Fetch airdrops
+const response = await fetch('/api/airdrops');
+const { data } = await response.json();
+
+// Fetch stability data
+const stabilityResponse = await fetch('/api/binance/alpha/stability');
+const { data: stabilityData } = await stabilityResponse.json();
+
+// Create airdrop (admin)
+const createResponse = await fetch('/api/airdrops', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-admin-key': process.env.ADMIN_KEY!,
+  },
   body: JSON.stringify({
-    name: "Example Airdrop",
-    symbol: "EXP",
-    chain: "Ethereum",
-    description: "Example airdrop description",
-    eligibility: ["NFT Holder", "Early User"],
-    requirements: ["Hold NFT", "Make 5 transactions"],
-    snapshotDate: "2025-02-01",
-    claimStartDate: "2025-02-15",
-    claimEndDate: "2025-05-15",
-    estimatedValue: 500,
-    websiteUrl: "https://example.com",
-    twitterUrl: "https://twitter.com/example",
+    token: 'NEWTOKEN',
+    name: 'New Token',
+    chain: 'ETH',
+    multiplier: 2,
+    status: 'UPCOMING',
   }),
 });
 ```
 
-### 2. ตรวจสอบ Eligibility
+### Using React Query
 
 ```typescript
-import { moralisClient } from "@/lib/api/moralis-client";
+import { useQuery, useMutation } from '@tanstack/react-query';
 
-const eligibility = await moralisClient.checkAirdropEligibility(
-  "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
-);
+// Fetch airdrops
+const { data, isLoading } = useQuery({
+  queryKey: ['airdrops'],
+  queryFn: async () => {
+    const res = await fetch('/api/airdrops');
+    return res.json();
+  },
+});
 
-console.log(eligibility);
-// {
-//   hasNFTs: true,
-//   tokenCount: 5,
-//   transactionCount: 150,
-//   isActive: true
-// }
-```
-
-### 3. ส่งการแจ้งเตือน Telegram
-
-```typescript
-import { telegramService } from "@/lib/services/telegram";
-
-await telegramService.sendAirdropAlert({
-  name: "Example Airdrop",
-  symbol: "EXP",
-  chain: "Ethereum",
-  status: "CLAIMABLE",
-  estimatedValue: 500,
+// Fetch stability with auto-refresh
+const { data: stabilityData } = useQuery({
+  queryKey: ['stability'],
+  queryFn: async () => {
+    const res = await fetch('/api/binance/alpha/stability');
+    return res.json();
+  },
+  refetchInterval: 10000, // 10 seconds
 });
 ```
 
 ---
 
-## 🔍 Troubleshooting
-
-### Prisma Client Not Generated
+## 🔧 Database Commands Reference
 
 ```bash
-npm run db:generate
+# Generate Prisma Client
+pnpm db:generate
+
+# Push schema to database (dev)
+pnpm db:push
+
+# Open Prisma Studio (GUI)
+pnpm db:studio
+
+# Seed sample data
+pnpm db:seed
+
+# Run migrations (production)
+pnpm db:migrate
+
+# Export to backup
+pnpm db:export
+
+# Import from backup
+pnpm db:import
+
+# List backups
+pnpm db:list-backups
+```
+
+---
+
+## 🆘 Troubleshooting
+
+### Prisma Client Not Found
+
+```bash
+pnpm db:generate
 ```
 
 ### Database Connection Error
 
-- ตรวจสอบ `DATABASE_URL` ใน `.env`
-- ตรวจสอบว่า Supabase project ทำงานอยู่
+1. Check `DATABASE_URL` in `.env.local`
+2. Ensure database file exists (SQLite)
+3. For PostgreSQL: verify credentials and network access
 
-### Telegram Not Sending
+### Schema Changes Not Reflected
 
-- ตรวจสอบ `TELEGRAM_BOT_TOKEN` และ `TELEGRAM_CHAT_ID`
-- แน่ใจว่าคุณได้เริ่มแชทกับ bot แล้ว
+```bash
+pnpm db:push
+pnpm db:generate
+```
 
-### Moralis API Error
+### Import Fails
 
-- ตรวจสอบ `MORALIS_API_KEY`
-- ตรวจสอบ rate limit (free tier: 40,000 requests/month)
+1. Check JSON format is valid
+2. Ensure `token` field is unique
+3. Verify backup file path
+
+### Reset Database
+
+```bash
+rm dev.db
+pnpm db:push
+pnpm db:seed
+```
 
 ---
 
-## ✅ Next Steps
+## 📚 Related Documentation
 
-1. ✅ Setup database (Supabase)
-2. ✅ Configure environment variables
-3. ✅ Run migrations and seed data
-4. ✅ Test API endpoints
-5. ⏳ Setup Telegram bot
-6. ⏳ Configure cron jobs
-7. ⏳ Deploy to production
+- [README.md](./README.md) - Project overview
+- [SETUP.md](./SETUP.md) - Development setup
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - Deployment guide
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - Technical architecture
+- [TELEGRAM_SETUP.md](./TELEGRAM_SETUP.md) - Telegram bot setup
 
 ---
 
-## 📚 Resources
-
-- [Prisma Documentation](https://www.prisma.io/docs)
-- [Supabase Documentation](https://supabase.com/docs)
-- [Moralis Documentation](https://docs.moralis.io)
-- [Telegram Bot API](https://core.telegram.org/bots/api)
-- [Next.js API Routes](https://nextjs.org/docs/app/building-your-application/routing/route-handlers)
+**Made with ❤️ for the Binance Alpha community**
