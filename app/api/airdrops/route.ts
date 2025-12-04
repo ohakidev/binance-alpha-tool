@@ -5,10 +5,9 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, AirdropStatus } from "@prisma/client";
 import { z } from "zod";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 // Validation schema
 const AirdropSchema = z.object({
@@ -32,7 +31,9 @@ const AirdropSchema = z.object({
   listingDate: z.string().datetime().optional().nullable(),
   requiredPoints: z.number().int().optional().nullable(),
   pointsPerDay: z.number().int().optional().nullable(),
-  status: z.enum(["UPCOMING", "SNAPSHOT", "CLAIMABLE", "ENDED", "CANCELLED"]).default("UPCOMING"),
+  status: z
+    .enum(["UPCOMING", "SNAPSHOT", "CLAIMABLE", "ENDED", "CANCELLED"])
+    .default("UPCOMING"),
   verified: z.boolean().default(false),
   isActive: z.boolean().default(true),
   websiteUrl: z.string().url().optional().nullable(),
@@ -48,7 +49,8 @@ const AirdropSchema = z.object({
 // Check admin authentication
 function checkAdminAuth(request: NextRequest): boolean {
   const adminKey = request.headers.get("x-admin-key");
-  const envAdminKey = process.env.ADMIN_KEY || "default-admin-key-change-in-production";
+  const envAdminKey =
+    process.env.ADMIN_KEY || "default-admin-key-change-in-production";
   return adminKey === envAdminKey;
 }
 
@@ -65,8 +67,8 @@ export async function GET(request: NextRequest) {
     const multiplier = searchParams.get("multiplier");
 
     // Build filter
-    const where: any = {};
-    if (status) where.status = status;
+    const where: Prisma.AirdropWhereInput = {};
+    if (status) where.status = status as AirdropStatus;
     if (chain) where.chain = chain;
     if (isActive !== null) where.isActive = isActive === "true";
     if (multiplier) where.multiplier = parseInt(multiplier);
@@ -92,7 +94,7 @@ export async function GET(request: NextRequest) {
         error: "Failed to fetch airdrops",
         message: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -107,7 +109,7 @@ export async function POST(request: NextRequest) {
     if (!checkAdminAuth(request)) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -124,7 +126,7 @@ export async function POST(request: NextRequest) {
     if (existing) {
       return NextResponse.json(
         { success: false, error: "Token already exists" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -145,10 +147,18 @@ export async function POST(request: NextRequest) {
         currentPrice: validatedData.currentPrice,
         eligibility: JSON.stringify(validatedData.eligibility),
         requirements: JSON.stringify(validatedData.requirements),
-        snapshotDate: validatedData.snapshotDate ? new Date(validatedData.snapshotDate) : null,
-        claimStartDate: validatedData.claimStartDate ? new Date(validatedData.claimStartDate) : null,
-        claimEndDate: validatedData.claimEndDate ? new Date(validatedData.claimEndDate) : null,
-        listingDate: validatedData.listingDate ? new Date(validatedData.listingDate) : null,
+        snapshotDate: validatedData.snapshotDate
+          ? new Date(validatedData.snapshotDate)
+          : null,
+        claimStartDate: validatedData.claimStartDate
+          ? new Date(validatedData.claimStartDate)
+          : null,
+        claimEndDate: validatedData.claimEndDate
+          ? new Date(validatedData.claimEndDate)
+          : null,
+        listingDate: validatedData.listingDate
+          ? new Date(validatedData.listingDate)
+          : null,
         requiredPoints: validatedData.requiredPoints,
         pointsPerDay: validatedData.pointsPerDay,
         status: validatedData.status,
@@ -165,11 +175,14 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      data: airdrop,
-      message: "Airdrop created successfully",
-    }, { status: 201 });
+    return NextResponse.json(
+      {
+        success: true,
+        data: airdrop,
+        message: "Airdrop created successfully",
+      },
+      { status: 201 },
+    );
   } catch (error) {
     console.error("Error creating airdrop:", error);
 
@@ -180,7 +193,7 @@ export async function POST(request: NextRequest) {
           error: "Validation error",
           details: error.issues,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -190,7 +203,7 @@ export async function POST(request: NextRequest) {
         error: "Failed to create airdrop",
         message: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

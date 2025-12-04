@@ -6,10 +6,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 // Partial schema for updates
 const UpdateAirdropSchema = z.object({
@@ -33,7 +31,9 @@ const UpdateAirdropSchema = z.object({
   listingDate: z.string().datetime().optional().nullable(),
   requiredPoints: z.number().int().optional().nullable(),
   pointsPerDay: z.number().int().optional().nullable(),
-  status: z.enum(["UPCOMING", "SNAPSHOT", "CLAIMABLE", "ENDED", "CANCELLED"]).optional(),
+  status: z
+    .enum(["UPCOMING", "SNAPSHOT", "CLAIMABLE", "ENDED", "CANCELLED"])
+    .optional(),
   verified: z.boolean().optional(),
   isActive: z.boolean().optional(),
   websiteUrl: z.string().url().optional().nullable(),
@@ -49,7 +49,8 @@ const UpdateAirdropSchema = z.object({
 // Check admin authentication
 function checkAdminAuth(request: NextRequest): boolean {
   const adminKey = request.headers.get("x-admin-key");
-  const envAdminKey = process.env.ADMIN_KEY || "default-admin-key-change-in-production";
+  const envAdminKey =
+    process.env.ADMIN_KEY || "default-admin-key-change-in-production";
   return adminKey === envAdminKey;
 }
 
@@ -58,7 +59,7 @@ function checkAdminAuth(request: NextRequest): boolean {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
@@ -80,7 +81,7 @@ export async function GET(
     if (!airdrop) {
       return NextResponse.json(
         { success: false, error: "Airdrop not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -103,7 +104,7 @@ export async function GET(
         error: "Failed to fetch airdrop",
         message: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -113,7 +114,7 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
@@ -122,7 +123,7 @@ export async function PUT(
     if (!checkAdminAuth(request)) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -139,12 +140,31 @@ export async function PUT(
     if (!existing) {
       return NextResponse.json(
         { success: false, error: "Airdrop not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
-    // Prepare update data
-    const updateData: any = { ...validatedData };
+    // Prepare update data - exclude arrays that need transformation
+    const {
+      eligibility: _eligibility,
+      requirements: _requirements,
+      snapshotDate: _snapshotDate,
+      claimStartDate: _claimStartDate,
+      claimEndDate: _claimEndDate,
+      listingDate: _listingDate,
+      ...scalarData
+    } = validatedData;
+
+    // Suppress unused variable warnings - these are intentionally destructured to exclude them
+    void _eligibility;
+    void _requirements;
+    void _snapshotDate;
+    void _claimStartDate;
+    void _claimEndDate;
+    void _listingDate;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updateData: Record<string, any> = { ...scalarData };
 
     // Convert arrays to JSON strings
     if (validatedData.eligibility) {
@@ -188,7 +208,7 @@ export async function PUT(
           error: "Validation error",
           details: error.issues,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -198,7 +218,7 @@ export async function PUT(
         error: "Failed to update airdrop",
         message: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -208,7 +228,7 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
@@ -217,7 +237,7 @@ export async function DELETE(
     if (!checkAdminAuth(request)) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -229,7 +249,7 @@ export async function DELETE(
     if (!existing) {
       return NextResponse.json(
         { success: false, error: "Airdrop not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -249,7 +269,7 @@ export async function DELETE(
         error: "Failed to delete airdrop",
         message: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

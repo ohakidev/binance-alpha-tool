@@ -6,10 +6,15 @@
  */
 
 import { PrismaClient } from "@prisma/client";
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import * as fs from "fs";
 import * as path from "path";
 
-const prisma = new PrismaClient();
+const adapter = new PrismaBetterSqlite3({
+  url: process.env.DATABASE_URL || "file:./prisma/dev.db",
+});
+
+const prisma = new PrismaClient({ adapter });
 
 interface AirdropBackup {
   token: string;
@@ -93,12 +98,18 @@ async function importAirdrops(backupFile?: string) {
           requirements: Array.isArray(airdrop.requirements)
             ? JSON.stringify(airdrop.requirements)
             : airdrop.requirements || "[]",
-          snapshotDate: airdrop.snapshotDate ? new Date(airdrop.snapshotDate) : null,
+          snapshotDate: airdrop.snapshotDate
+            ? new Date(airdrop.snapshotDate)
+            : null,
           claimStartDate: airdrop.claimStartDate
             ? new Date(airdrop.claimStartDate)
             : null,
-          claimEndDate: airdrop.claimEndDate ? new Date(airdrop.claimEndDate) : null,
-          listingDate: airdrop.listingDate ? new Date(airdrop.listingDate) : null,
+          claimEndDate: airdrop.claimEndDate
+            ? new Date(airdrop.claimEndDate)
+            : null,
+          listingDate: airdrop.listingDate
+            ? new Date(airdrop.listingDate)
+            : null,
         };
 
         // Remove fields that shouldn't be imported

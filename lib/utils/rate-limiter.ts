@@ -115,7 +115,7 @@ export class RateLimiter {
 // Throttle Function
 // ============================================
 
-export function throttle<T extends (...args: any[]) => any>(
+export function throttle<T extends (...args: unknown[]) => unknown>(
   func: T,
   options: ThrottleOptions,
 ): ((...args: Parameters<T>) => ReturnType<T> | undefined) & {
@@ -187,7 +187,7 @@ export function throttle<T extends (...args: any[]) => any>(
 // Debounce Function
 // ============================================
 
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   options: DebounceOptions,
 ): ((...args: Parameters<T>) => void) & {
@@ -284,6 +284,7 @@ export function debounce<T extends (...args: any[]) => any>(
 // Request Queue
 // ============================================
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface QueuedRequest<T = any> {
   execute: () => Promise<T>;
   resolve: (value: T) => void;
@@ -292,6 +293,7 @@ interface QueuedRequest<T = any> {
 }
 
 export class RequestQueue {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private queue: QueuedRequest<any>[] = [];
   private processing = false;
   private concurrency: number;

@@ -13,8 +13,9 @@
  */
 
 import { NextResponse } from "next/server";
-import { alphaService, AlphaDataSourceType } from "@/lib/services/alpha";
+import { alphaService } from "@/lib/services/alpha";
 import { AirdropStatus } from "@prisma/client";
+import type { ChainName } from "@/lib/types/alpha.types";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,7 @@ export async function GET(request: Request) {
     const response = await alphaService.getFilteredTokens(
       {
         status: statusFilter,
-        chain: chainFilter as any,
+        chain: chainFilter ? (chainFilter as ChainName) : undefined,
         limit,
         offset,
         sortBy: "score",
@@ -54,7 +55,7 @@ export async function GET(request: Request) {
     const allResponse = await alphaService.getFilteredTokens(
       {
         status: statusFilter,
-        chain: chainFilter as any,
+        chain: chainFilter ? (chainFilter as ChainName) : undefined,
       },
       false,
     );

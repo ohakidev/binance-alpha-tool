@@ -1,15 +1,24 @@
-'use client';
+"use client";
 
 /**
  * API Key Manager Component
  * Secure management of Binance API keys with encryption
  */
 
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Key, Plus, Trash2, Eye, EyeOff, CheckCircle, AlertCircle, Copy } from 'lucide-react';
-import { cardVariants } from '@/lib/animations';
-import { useToast } from '@/lib/hooks/use-toast';
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Key,
+  Plus,
+  Trash2,
+  Eye,
+  EyeOff,
+  CheckCircle,
+  AlertCircle,
+  Copy,
+} from "lucide-react";
+import { cardVariants } from "@/lib/animations";
+import { useToast } from "@/lib/hooks/use-toast";
 
 interface APIKey {
   id: string;
@@ -26,9 +35,9 @@ export function APIKeyManager() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
   const [formData, setFormData] = useState({
-    name: '',
-    key: '',
-    secret: '',
+    name: "",
+    key: "",
+    secret: "",
   });
 
   const toggleKeyVisibility = (id: string) => {
@@ -44,16 +53,16 @@ export function APIKeyManager() {
   };
 
   const maskKey = (key: string) => {
-    if (key.length <= 8) return '****';
-    return key.substring(0, 4) + '****' + key.substring(key.length - 4);
+    if (key.length <= 8) return "****";
+    return key.substring(0, 4) + "****" + key.substring(key.length - 4);
   };
 
   const copyToClipboard = async (text: string, label: string) => {
     try {
       await navigator.clipboard.writeText(text);
       success(`${label} copied to clipboard`);
-    } catch (err) {
-      showError('Failed to copy to clipboard');
+    } catch {
+      showError("Failed to copy to clipboard");
     }
   };
 
@@ -61,7 +70,7 @@ export function APIKeyManager() {
     e.preventDefault();
 
     if (!formData.name || !formData.key || !formData.secret) {
-      showError('Please fill in all fields');
+      showError("Please fill in all fields");
       return;
     }
 
@@ -75,15 +84,15 @@ export function APIKeyManager() {
     };
 
     setApiKeys([...apiKeys, newKey]);
-    setFormData({ name: '', key: '', secret: '' });
+    setFormData({ name: "", key: "", secret: "" });
     setShowAddForm(false);
-    success('API key added successfully');
+    success("API key added successfully");
   };
 
   const handleDeleteKey = (id: string) => {
-    if (confirm('Are you sure you want to delete this API key?')) {
+    if (confirm("Are you sure you want to delete this API key?")) {
       setApiKeys(apiKeys.filter((k) => k.id !== id));
-      success('API key deleted');
+      success("API key deleted");
     }
   };
 
@@ -92,9 +101,9 @@ export function APIKeyManager() {
       apiKeys.map((k) => ({
         ...k,
         isActive: k.id === id,
-      }))
+      })),
     );
-    success('Active API key updated');
+    success("Active API key updated");
   };
 
   return (
@@ -140,7 +149,7 @@ export function APIKeyManager() {
         {showAddForm && (
           <motion.form
             initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
+            animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             onSubmit={handleAddKey}
             className="mb-6 p-4 rounded-lg glass space-y-4 overflow-hidden"
@@ -163,7 +172,9 @@ export function APIKeyManager() {
               <input
                 type="text"
                 value={formData.key}
-                onChange={(e) => setFormData({ ...formData, key: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, key: e.target.value })
+                }
                 placeholder="Your Binance API Key"
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:border-primary focus:outline-none font-mono text-sm"
               />
@@ -195,7 +206,7 @@ export function APIKeyManager() {
                 type="button"
                 onClick={() => {
                   setShowAddForm(false);
-                  setFormData({ name: '', key: '', secret: '' });
+                  setFormData({ name: "", key: "", secret: "" });
                 }}
                 className="px-4 py-2 glass hover:bg-white/10 rounded-lg transition-colors"
               >
@@ -226,8 +237,8 @@ export function APIKeyManager() {
                 exit={{ opacity: 0, y: -10 }}
                 className={`p-4 rounded-lg glass border ${
                   apiKey.isActive
-                    ? 'border-[#FFD700]/50 bg-[#FFD700]/5'
-                    : 'border-white/10'
+                    ? "border-[#FFD700]/50 bg-[#FFD700]/5"
+                    : "border-white/10"
                 }`}
               >
                 <div className="flex items-start justify-between mb-3">
@@ -290,7 +301,7 @@ export function APIKeyManager() {
                       )}
                     </button>
                     <button
-                      onClick={() => copyToClipboard(apiKey.key, 'API Key')}
+                      onClick={() => copyToClipboard(apiKey.key, "API Key")}
                       className="p-2 rounded-lg glass hover:bg-white/10 transition-colors"
                     >
                       <Copy className="w-4 h-4" />
@@ -320,7 +331,9 @@ export function APIKeyManager() {
                       )}
                     </button>
                     <button
-                      onClick={() => copyToClipboard(apiKey.secret, 'API Secret')}
+                      onClick={() =>
+                        copyToClipboard(apiKey.secret, "API Secret")
+                      }
                       className="p-2 rounded-lg glass hover:bg-white/10 transition-colors"
                     >
                       <Copy className="w-4 h-4" />

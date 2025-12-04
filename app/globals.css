@@ -1386,6 +1386,102 @@
     }
 }
 
+/* Shimmer Animation for Loading Skeletons */
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+/* Optimized Skeleton Pulse - GPU accelerated */
+@keyframes skeleton-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.4;
+    }
+}
+
+/* Smooth fade in for loaded content */
+@keyframes fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Bounce animation for loading dots */
+@keyframes bounce-dot {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-6px);
+    }
+}
+
+/* Glow pulse animations for background - GPU accelerated */
+@keyframes glow-pulse-1 {
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 0.5;
+    }
+    50% {
+        transform: scale(1.1);
+        opacity: 0.7;
+    }
+}
+
+@keyframes glow-pulse-2 {
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 0.4;
+    }
+    50% {
+        transform: scale(1.15);
+        opacity: 0.6;
+    }
+}
+
+@keyframes glow-pulse-3 {
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 0.3;
+    }
+    50% {
+        transform: scale(1.2);
+        opacity: 0.5;
+    }
+}
+
+.animate-glow-1 {
+    animation: glow-pulse-1 8s ease-in-out infinite;
+    will-change: transform, opacity;
+}
+
+.animate-glow-2 {
+    animation: glow-pulse-2 10s ease-in-out infinite 2s;
+    will-change: transform, opacity;
+}
+
+.animate-glow-3 {
+    animation: glow-pulse-3 12s ease-in-out infinite 4s;
+    will-change: transform, opacity;
+}
+
 /* Shiny Text Animation */
 @keyframes shiny-text {
     0%,
@@ -1492,6 +1588,86 @@
 /* Number Ticker Tabular Nums */
 .tabular-nums {
     font-variant-numeric: tabular-nums;
+}
+
+/* ============================================
+   Performance-Optimized Loading Animations
+   ============================================ */
+
+/* Shimmer effect for skeleton loading - GPU accelerated */
+.animate-shimmer {
+    position: relative;
+    overflow: hidden;
+}
+
+.animate-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(212, 169, 72, 0.08),
+        transparent
+    );
+    animation: shimmer 2s infinite;
+    will-change: transform;
+}
+
+/* Skeleton pulse animation */
+.skeleton-pulse {
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+    will-change: opacity;
+}
+
+/* Optimized fade in */
+.animate-fade-in {
+    animation: fade-in 0.3s ease-out forwards;
+}
+
+/* Loading dots */
+.loading-dot {
+    animation: bounce-dot 1s ease-in-out infinite;
+}
+
+.loading-dot:nth-child(2) {
+    animation-delay: 0.15s;
+}
+
+.loading-dot:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+/* Content loaded transition */
+.content-loaded {
+    animation: fade-in 0.4s ease-out;
+}
+
+/* Prevent layout shift during loading */
+.loading-placeholder {
+    contain: layout style;
+}
+
+/* GPU acceleration for smooth animations */
+.gpu-accelerated {
+    transform: translateZ(0);
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+}
+
+/* Reduce motion preference support */
+@media (prefers-reduced-motion: reduce) {
+    .animate-shimmer::after,
+    .skeleton-pulse,
+    .loading-dot {
+        animation: none;
+    }
+
+    .animate-fade-in,
+    .content-loaded {
+        animation-duration: 0.01ms;
+    }
 }
 
 /* ============================================

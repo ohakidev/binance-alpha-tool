@@ -7,6 +7,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { airdropCalculator } from "@/lib/services/airdrop-calculator";
+import type { Airdrop } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -48,54 +49,53 @@ export async function GET(request: Request) {
     });
 
     // คำนวณคะแนนสำหรับแต่ละ airdrop
-    const airdropsWithScores = airdrops.map((airdrop: any) => {
-        // Parse JSON strings to arrays
-        const eligibility = JSON.parse(airdrop.eligibility || "[]");
-        const requirements = JSON.parse(airdrop.requirements || "[]");
+    const airdropsWithScores = airdrops.map((airdrop: Airdrop) => {
+      // Parse JSON strings to arrays
+      const eligibility = JSON.parse(airdrop.eligibility || "[]");
+      const requirements = JSON.parse(airdrop.requirements || "[]");
 
-        return {
-          id: airdrop.id,
-          projectName: airdrop.name,
-          symbol: airdrop.symbol || airdrop.token,
-          logo: "🎁",
-          chain: airdrop.chain,
-          status: airdrop.status.toLowerCase(),
-          description: airdrop.description || "",
-          website: airdrop.websiteUrl || "",
-          twitter: airdrop.twitterUrl || "",
-          discord: airdrop.discordUrl || "",
-          eligibility,
-          requirements,
-          airdropAmount: airdrop.airdropAmount || "TBA",
-          estimatedValue: airdrop.estimatedValue,
-          snapshotDate: airdrop.snapshotDate,
-          claimStartDate: airdrop.claimStartDate,
-          claimEndDate: airdrop.claimEndDate,
-          dropTime:
-            airdrop.claimStartDate?.toISOString() || new Date().toISOString(),
+      return {
+        id: airdrop.id,
+        projectName: airdrop.name,
+        symbol: airdrop.token,
+        logo: "🎁",
+        chain: airdrop.chain,
+        status: airdrop.status.toLowerCase(),
+        description: airdrop.description || "",
+        website: airdrop.websiteUrl || "",
+        twitter: airdrop.twitterUrl || "",
+        discord: airdrop.discordUrl || "",
+        eligibility,
+        requirements,
+        airdropAmount: airdrop.airdropAmount || "TBA",
+        estimatedValue: airdrop.estimatedValue,
+        snapshotDate: airdrop.snapshotDate,
+        claimStartDate: airdrop.claimStartDate,
+        claimEndDate: airdrop.claimEndDate,
+        dropTime:
+          airdrop.claimStartDate?.toISOString() || new Date().toISOString(),
+        verified: airdrop.verified,
+        participantCount: airdrop.participantCount,
+
+        // New fields
+        type: airdrop.type || "Airdrop",
+        requiredPoints: airdrop.requiredPoints || 0,
+        deductPoints: airdrop.deductPoints || 0,
+        contractAddress: airdrop.contractAddress || "",
+
+        score: airdropCalculator.calculateAirdropScore({
+          estimatedValue: airdrop.estimatedValue || undefined,
+          participantCount: airdrop.participantCount || undefined,
           verified: airdrop.verified,
-          participantCount: airdrop.participantCount,
-
-          // New fields
-          type: airdrop.type || 'Airdrop',
-          requiredPoints: airdrop.requiredPoints || 0,
-          deductPoints: airdrop.deductPoints || 0,
-          contractAddress: airdrop.contractAddress || '',
-
-          score: airdropCalculator.calculateAirdropScore({
-            estimatedValue: airdrop.estimatedValue || undefined,
-            participantCount: airdrop.participantCount || undefined,
-            verified: airdrop.verified,
-            requirements,
-            claimEndDate: airdrop.claimEndDate,
-          }),
-        };
-      }
-    );
+          requirements,
+          claimEndDate: airdrop.claimEndDate,
+        }),
+      };
+    });
 
     // Sort by score
     airdropsWithScores.sort(
-      (a: { score: number }, b: { score: number }) => b.score - a.score
+      (a: { score: number }, b: { score: number }) => b.score - a.score,
     );
 
     return NextResponse.json({
@@ -113,7 +113,7 @@ export async function GET(request: Request) {
         error:
           error instanceof Error ? error.message : "Failed to fetch airdrops",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -153,7 +153,7 @@ export async function POST(request: Request) {
         error:
           error instanceof Error ? error.message : "Failed to create airdrop",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

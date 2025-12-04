@@ -65,6 +65,7 @@ const nextConfig: NextConfig = {
     optimizePackageImports: [
       "lucide-react",
       "framer-motion",
+      "motion",
       "@tanstack/react-query",
       "@tanstack/react-table",
       "recharts",
@@ -74,9 +75,23 @@ const nextConfig: NextConfig = {
       "@radix-ui/react-dropdown-menu",
       "@radix-ui/react-tabs",
       "@radix-ui/react-tooltip",
+      "@radix-ui/react-popover",
+      "@radix-ui/react-select",
+      "@radix-ui/react-accordion",
+      "@radix-ui/react-checkbox",
+      "@radix-ui/react-switch",
+      "@radix-ui/react-slider",
+      "@radix-ui/react-scroll-area",
+      "zod",
+      "zustand",
+      "clsx",
+      "tailwind-merge",
+      "class-variance-authority",
     ],
     // Enable CSS optimization
     optimizeCss: true,
+    // Scroll restoration for better UX
+    scrollRestoration: true,
   },
 
   // ============================================
@@ -108,21 +123,22 @@ const nextConfig: NextConfig = {
         // Split chunks for better caching
         splitChunks: {
           chunks: "all",
-          maxInitialRequests: 25,
+          maxInitialRequests: 30,
           minSize: 20000,
-          maxSize: 250000,
+          maxSize: 200000,
           cacheGroups: {
             // Disable default groups
             default: false,
             defaultVendors: false,
 
-            // Framework chunks (React, Next.js)
+            // Framework chunks (React, Next.js) - highest priority
             framework: {
               name: "framework",
               chunks: "all",
               test: /[\\/]node_modules[\\/](react|react-dom|next|scheduler)[\\/]/,
-              priority: 50,
+              priority: 60,
               enforce: true,
+              reuseExistingChunk: true,
             },
 
             // UI library chunks
@@ -130,15 +146,17 @@ const nextConfig: NextConfig = {
               name: "ui",
               test: /[\\/]node_modules[\\/](@radix-ui|@headlessui|cmdk)[\\/]/,
               chunks: "all",
-              priority: 40,
+              priority: 50,
+              reuseExistingChunk: true,
             },
 
-            // Animation library
+            // Animation library - separate chunk for lazy loading
             animations: {
               name: "animations",
               test: /[\\/]node_modules[\\/](framer-motion|motion)[\\/]/,
               chunks: "all",
-              priority: 40,
+              priority: 45,
+              reuseExistingChunk: true,
             },
 
             // Data fetching libraries
@@ -146,15 +164,17 @@ const nextConfig: NextConfig = {
               name: "data-fetching",
               test: /[\\/]node_modules[\\/](@tanstack)[\\/]/,
               chunks: "all",
-              priority: 40,
+              priority: 45,
+              reuseExistingChunk: true,
             },
 
-            // Charts library
+            // Charts library - often lazy loaded
             charts: {
               name: "charts",
               test: /[\\/]node_modules[\\/](recharts|d3|victory)[\\/]/,
-              chunks: "all",
-              priority: 35,
+              chunks: "async",
+              priority: 40,
+              reuseExistingChunk: true,
             },
 
             // Date libraries
@@ -162,15 +182,35 @@ const nextConfig: NextConfig = {
               name: "dates",
               test: /[\\/]node_modules[\\/](date-fns|dayjs|moment)[\\/]/,
               chunks: "all",
-              priority: 35,
+              priority: 40,
+              reuseExistingChunk: true,
             },
 
-            // Icons
+            // Icons - often large, separate chunk
             icons: {
               name: "icons",
               test: /[\\/]node_modules[\\/](lucide-react|react-icons)[\\/]/,
               chunks: "all",
-              priority: 30,
+              priority: 35,
+              reuseExistingChunk: true,
+            },
+
+            // Crypto/Blockchain related
+            crypto: {
+              name: "crypto",
+              test: /[\\/]node_modules[\\/](moralis|crypto-js|ethers|web3)[\\/]/,
+              chunks: "async",
+              priority: 35,
+              reuseExistingChunk: true,
+            },
+
+            // State management
+            state: {
+              name: "state",
+              test: /[\\/]node_modules[\\/](zustand|zod)[\\/]/,
+              chunks: "all",
+              priority: 35,
+              reuseExistingChunk: true,
             },
 
             // Common vendor chunks
@@ -179,6 +219,7 @@ const nextConfig: NextConfig = {
               test: /[\\/]node_modules[\\/]/,
               chunks: "all",
               priority: 10,
+              reuseExistingChunk: true,
             },
 
             // Common chunks from app code
@@ -197,9 +238,11 @@ const nextConfig: NextConfig = {
         },
       };
 
-      // Tree shaking
+      // Tree shaking optimizations
       config.optimization.usedExports = true;
       config.optimization.sideEffects = true;
+      config.optimization.providedExports = true;
+      config.optimization.concatenateModules = true;
     }
 
     // SVG support
@@ -245,13 +288,18 @@ const nextConfig: NextConfig = {
           {
             key: "Permissions-Policy",
             value:
-              "camera=(), microphone=(), geolocation=(), browsing-topics=()",
+              "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), interest-cohort=(), browsing-topics=()",
+          },
+          // XSS Protection (legacy browsers)
+          {
+            key: "X-XSS-Protection",
+            value: "1; mode=block",
           },
         ],
       },
-      // Static assets - long cache
+      // Static assets - long cache with immutable
       {
-        source: "/:all*(svg|jpg|jpeg|png|webp|avif|gif|ico|woff|woff2)",
+        source: "/:all*(svg|jpg|jpeg|png|webp|avif|gif|ico|woff|woff2|ttf|eot)",
         headers: [
           {
             key: "Cache-Control",
@@ -259,9 +307,19 @@ const nextConfig: NextConfig = {
           },
         ],
       },
-      // Next.js static files
+      // Next.js static files - aggressive caching
       {
         source: "/_next/static/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      // Chunks - aggressive caching
+      {
+        source: "/_next/static/chunks/:path*",
         headers: [
           {
             key: "Cache-Control",
@@ -277,15 +335,20 @@ const nextConfig: NextConfig = {
             key: "Cache-Control",
             value: "public, max-age=86400, stale-while-revalidate=604800",
           },
+          {
+            key: "Content-Type",
+            value: "application/manifest+json",
+          },
         ],
       },
-      // API routes - no cache by default
+      // API routes - no cache by default with security headers
       {
         source: "/api/:path*",
         headers: [
           {
             key: "Cache-Control",
-            value: "no-store, no-cache, must-revalidate, proxy-revalidate",
+            value:
+              "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
           },
           // CORS headers
           {
@@ -294,11 +357,16 @@ const nextConfig: NextConfig = {
           },
           {
             key: "Access-Control-Allow-Methods",
-            value: "GET, POST, PUT, DELETE, OPTIONS",
+            value: "GET, POST, PUT, DELETE, PATCH, OPTIONS",
           },
           {
             key: "Access-Control-Allow-Headers",
-            value: "Content-Type, Authorization, X-Requested-With",
+            value:
+              "Content-Type, Authorization, X-Requested-With, X-CSRF-Token",
+          },
+          {
+            key: "Access-Control-Max-Age",
+            value: "86400",
           },
         ],
       },
@@ -330,6 +398,16 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      // HTML pages - short cache with revalidation
+      {
+        source: "/:path((?!api|_next|static).*)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
+          },
+        ],
+      },
     ];
   },
 
@@ -343,6 +421,17 @@ const nextConfig: NextConfig = {
       {
         source: "/airdrops",
         destination: "/",
+        permanent: true,
+      },
+      // Security: Prevent access to sensitive files
+      {
+        source: "/.env",
+        destination: "/404",
+        permanent: true,
+      },
+      {
+        source: "/.git/:path*",
+        destination: "/404",
         permanent: true,
       },
     ];
@@ -389,11 +478,14 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: process.env.SKIP_TYPE_CHECK === "true",
   },
 
-  // Skip ESLint errors in production build (use with caution)
-  eslint: {
-    // Only ignore in CI if explicitly set
-    ignoreDuringBuilds: process.env.SKIP_LINT === "true",
-  },
+  // Note: ESLint configuration has been removed in Next.js 16
+  // Configure ESLint directly in eslint.config.mjs instead
+
+  // ============================================
+  // Server External Packages
+  // ============================================
+
+  serverExternalPackages: ["@prisma/client", "prisma"],
 };
 
 export default withBundleAnalyzer(nextConfig);

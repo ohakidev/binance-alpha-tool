@@ -10,7 +10,6 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
 }
 
 // User model
@@ -21,11 +20,11 @@ model User {
   telegramId    String?   @unique
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  
+
   // Relations
   airdrops      UserAirdrop[]
   alerts        Alert[]
-  
+
   @@map("users")
 }
 
@@ -107,23 +106,23 @@ model UserAirdrop {
   id          String    @id @default(uuid())
   userId      String
   airdropId   String
-  
+
   // Tracking
   isEligible  Boolean   @default(false)
   hasClaimed  Boolean   @default(false)
   claimedAt   DateTime?
   claimAmount String?
-  
+
   // Notifications
   notified    Boolean   @default(false)
-  
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  
+
   // Relations
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   airdrop     Airdrop   @relation(fields: [airdropId], references: [id], onDelete: Cascade)
-  
+
   @@unique([userId, airdropId])
   @@map("user_airdrops")
 }
@@ -133,24 +132,24 @@ model Alert {
   id          String      @id @default(uuid())
   userId      String
   airdropId   String?
-  
+
   // Alert details
   type        AlertType
   title       String
   message     String
-  
+
   // Status
   sent        Boolean     @default(false)
   sentAt      DateTime?
   read        Boolean     @default(false)
   readAt      DateTime?
-  
+
   createdAt   DateTime    @default(now())
-  
+
   // Relations
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   airdrop     Airdrop?    @relation(fields: [airdropId], references: [id], onDelete: SetNull)
-  
+
   @@map("alerts")
 }
 
@@ -158,22 +157,22 @@ model Alert {
 model StabilityScore {
   id              String    @id @default(uuid())
   symbol          String
-  
+
   // Metrics
   stabilityScore  Float
   riskLevel       RiskLevel
   volatilityIndex Float
   volumeScore     Float
-  
+
   // Price data
   currentPrice    Float
   priceChange     Float
   high24h         Float
   low24h          Float
   volume24h       Float
-  
+
   timestamp       DateTime  @default(now())
-  
+
   @@index([symbol, timestamp])
   @@map("stability_scores")
 }
@@ -182,20 +181,20 @@ model StabilityScore {
 model IncomeEntry {
   id          String    @id @default(uuid())
   userId      String
-  
+
   // Income details
   amount      Float
   currency    String    @default("USDT")
   source      String
   category    String
   description String?
-  
+
   // Date
   date        DateTime
-  
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  
+
   @@index([userId, date])
   @@map("income_entries")
 }

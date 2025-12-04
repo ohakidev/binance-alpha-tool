@@ -14,7 +14,6 @@ import {
   Download,
   Trash2,
   Key,
-  RefreshCw,
   Save,
   Upload,
   Eye,
@@ -22,39 +21,16 @@ import {
   Globe,
   Settings as SettingsIcon,
   Shield,
-  Volume2,
   Monitor,
   Moon,
   Sun,
-  Check,
   Send,
 } from "lucide-react";
 import { useSettingsStore } from "@/lib/stores/settings-store";
 import { useLanguage } from "@/lib/stores/language-store";
 import { toast } from "sonner";
-import { containerVariants, cardVariants } from "@/lib/animations";
-import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -73,16 +49,16 @@ export default function SettingsPage() {
   const [mounted, setMounted] = useState(false);
 
   // API Keys State
-  const [apiKey, setApiKey] = useState("");
-  const [secretKey, setSecretKey] = useState("");
+  const [, setApiKey] = useState("");
+  const [, setSecretKey] = useState("");
   const [tempApiKey, setTempApiKey] = useState("");
   const [tempApiSecret, setTempApiSecret] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [showApiSecret, setShowApiSecret] = useState(false);
 
   // Telegram State
-  const [telegramToken, setTelegramToken] = useState("");
-  const [telegramChatId, setTelegramChatId] = useState("");
+  const [, setTelegramToken] = useState("");
+  const [, setTelegramChatId] = useState("");
   const [tempTelegramToken, setTempTelegramToken] = useState("");
   const [tempTelegramChatId, setTempTelegramChatId] = useState("");
 
@@ -91,12 +67,8 @@ export default function SettingsPage() {
 
   // Get settings after mount to avoid hydration mismatch
   const app = useSettingsStore((state) => state.app);
-  const notifications = useSettingsStore((state) => state.notifications);
   const updateAppSettings = useSettingsStore(
     (state) => state.updateAppSettings,
-  );
-  const updateNotificationSettings = useSettingsStore(
-    (state) => state.updateNotificationSettings,
   );
   const resetToDefaults = useSettingsStore((state) => state.resetToDefaults);
 
@@ -220,16 +192,6 @@ export default function SettingsPage() {
     reader.readAsText(file);
   };
 
-  const handleLanguageChange = (lang: "th" | "en") => {
-    setLanguage(lang);
-    // Show success message in the new language
-    setTimeout(() => {
-      toast.success(
-        lang === "th" ? "เปลี่ยนภาษาสำเร็จ" : "Language changed successfully",
-      );
-    }, 100);
-  };
-
   const tabItems = [
     { value: "general", label: t("settings.general"), icon: SettingsIcon },
     { value: "api", label: t("settings.apiKeys"), icon: Key },
@@ -312,25 +274,26 @@ export default function SettingsPage() {
                   {[
                     { code: "en", label: "English", flag: "🇺🇸" },
                     { code: "th", label: "ไทย", flag: "🇹🇭" },
-                    { code: "zh", label: "中文", flag: "🇨🇳" },
                   ].map((lang) => (
                     <motion.button
                       key={lang.code}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
-                      onClick={() => setLanguage(lang.code as any)}
-                      className={`relative p-4 rounded-xl border-2 transition-all ${language === lang.code
-                        ? "border-amber-500 bg-amber-500/10"
-                        : "border-white/10 hover:border-white/20 hover:bg-white/5"
-                        }`}
+                      onClick={() => setLanguage(lang.code as "th" | "en")}
+                      className={`relative p-4 rounded-xl border-2 transition-all ${
+                        language === lang.code
+                          ? "border-amber-500 bg-amber-500/10"
+                          : "border-white/10 hover:border-white/20 hover:bg-white/5"
+                      }`}
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-2xl">{lang.flag}</span>
                         <span
-                          className={`font-medium ${language === lang.code
-                            ? "text-amber-500"
-                            : "text-slate-300"
-                            }`}
+                          className={`font-medium ${
+                            language === lang.code
+                              ? "text-amber-500"
+                              : "text-slate-300"
+                          }`}
                         >
                           {lang.label}
                         </span>
@@ -541,7 +504,10 @@ export default function SettingsPage() {
                           {item.desc}
                         </p>
                       </div>
-                      <Switch defaultChecked className="data-[state=checked]:bg-purple-500" />
+                      <Switch
+                        defaultChecked
+                        className="data-[state=checked]:bg-purple-500"
+                      />
                     </div>
                   ))}
                 </div>
@@ -577,28 +543,31 @@ export default function SettingsPage() {
                   <div className="flex items-center gap-2 bg-black/20 p-1 rounded-lg border border-white/10">
                     <button
                       onClick={() => updateAppSettings({ theme: "light" })}
-                      className={`p-2 rounded-md transition-all ${app.theme === "light"
-                        ? "bg-white text-black shadow-sm"
-                        : "text-slate-400 hover:text-slate-200"
-                        }`}
+                      className={`p-2 rounded-md transition-all ${
+                        app.theme === "light"
+                          ? "bg-white text-black shadow-sm"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
                     >
                       <Sun className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => updateAppSettings({ theme: "dark" })}
-                      className={`p-2 rounded-md transition-all ${app.theme === "dark"
-                        ? "bg-slate-700 text-white shadow-sm"
-                        : "text-slate-400 hover:text-slate-200"
-                        }`}
+                      className={`p-2 rounded-md transition-all ${
+                        app.theme === "dark"
+                          ? "bg-slate-700 text-white shadow-sm"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
                     >
                       <Moon className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => updateAppSettings({ theme: "auto" })}
-                      className={`p-2 rounded-md transition-all ${app.theme === "auto"
-                        ? "bg-blue-500/20 text-blue-400 shadow-sm"
-                        : "text-slate-400 hover:text-slate-200"
-                        }`}
+                      className={`p-2 rounded-md transition-all ${
+                        app.theme === "auto"
+                          ? "bg-blue-500/20 text-blue-400 shadow-sm"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
                     >
                       <Monitor className="w-4 h-4" />
                     </button>
@@ -626,7 +595,10 @@ export default function SettingsPage() {
                       Enable UI animations and effects
                     </p>
                   </div>
-                  <Switch defaultChecked className="data-[state=checked]:bg-rose-500" />
+                  <Switch
+                    defaultChecked
+                    className="data-[state=checked]:bg-rose-500"
+                  />
                 </div>
               </div>
             </MagicCard>

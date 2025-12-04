@@ -31,7 +31,10 @@ function calculateSpreadBps(high: number, low: number, last: number): number {
 }
 
 // Detect abnormal price spikes
-function detectAbnormalSpikes(priceChange: number, volatilityIndex: number): boolean {
+function detectAbnormalSpikes(
+  priceChange: number,
+  volatilityIndex: number,
+): boolean {
   // Spike if price change > 15% or volatility > 80
   return Math.abs(priceChange) > 15 || volatilityIndex > 80;
 }
@@ -72,7 +75,10 @@ function calculateEnhancedStabilityScore(ticker: {
   const spreadBps = calculateSpreadBps(high, low, last);
 
   // 4. Volatility Index (0-100, lower is more volatile)
-  const volatilityIndex = Math.max(0, 100 - (priceRange * 2 + Math.abs(priceChange)));
+  const volatilityIndex = Math.max(
+    0,
+    100 - (priceRange * 2 + Math.abs(priceChange)),
+  );
 
   // 5. Abnormal Spike Detection
   const hasAbnormalSpike = detectAbnormalSpikes(priceChange, volatilityIndex);
@@ -123,103 +129,113 @@ function calculateEnhancedStabilityScore(ticker: {
 export async function GET() {
   try {
     // Fetch from new Binance Alpha projects API
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/binance/alpha/projects`, {
-      cache: 'no-store'
-    });
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/binance/alpha/projects`,
+      {
+        cache: "no-store",
+      },
+    );
 
     if (!response.ok) {
-      throw new Error('Failed to fetch from projects API');
+      throw new Error("Failed to fetch from projects API");
     }
 
     const projectsData = await response.json();
 
     if (!projectsData.success) {
-      throw new Error('Projects API returned error');
+      throw new Error("Projects API returned error");
     }
 
     return NextResponse.json(projectsData);
   } catch (error) {
-    console.error('Error in stability route:', error);
+    console.error("Error in stability route:", error);
 
     // Fallback to old method if new API fails
     try {
       const tickerData = await binanceClient.get24hrTicker();
 
-    // Map Alpha projects to real Binance symbols for demo
-    // In production, these would be actual Alpha project pairs
-    const symbolMapping: Record<string, string> = {
-      KOGE: "DOGEUSDT",
-      BLUM: "BTCUSDT",
-      MAJOR: "ETHUSDT",
-      SEED: "SOLUSDT",
-      TOMARKET: "BNBUSDT",
-      PLUTO: "XRPUSDT",
-      CATS: "MATICUSDT",
-      DOGS: "AVAXUSDT",
-    };
+      // Map Alpha projects to real Binance symbols for demo
+      // In production, these would be actual Alpha project pairs
+      const symbolMapping: Record<string, string> = {
+        KOGE: "DOGEUSDT",
+        BLUM: "BTCUSDT",
+        MAJOR: "ETHUSDT",
+        SEED: "SOLUSDT",
+        TOMARKET: "BNBUSDT",
+        PLUTO: "XRPUSDT",
+        CATS: "MATICUSDT",
+        DOGS: "AVAXUSDT",
+      };
 
-    // Filter and map data for Alpha projects
-    const stabilityData = ALPHA_4X_PROJECTS.map((project) => {
-      const binanceSymbol = symbolMapping[project.symbol];
-      const ticker = Array.isArray(tickerData)
-        ? tickerData.find((t: any) => t.symbol === binanceSymbol)
-        : null;
+      // Filter and map data for Alpha projects
+      const stabilityData = ALPHA_4X_PROJECTS.map((project) => {
+        const binanceSymbol = symbolMapping[project.symbol];
+        const ticker = Array.isArray(tickerData)
+          ? tickerData.find(
+              (t: {
+                symbol: string;
+                lastPrice?: string;
+                priceChangePercent?: string;
+                volume?: string;
+              }) => t.symbol === binanceSymbol,
+            )
+          : null;
 
-      if (!ticker) {
-        // Return mock data if ticker not found
+        if (!ticker) {
+          // Return mock data if ticker not found
+          return {
+            symbol: project.symbol,
+            name: project.name,
+            multiplier: project.multiplier,
+            isBaseline: project.isBaseline,
+            price: Math.random() * 10,
+            change24h: (Math.random() - 0.5) * 20,
+            volume24h: Math.random() * 50000000,
+            stabilityScore: Math.round(Math.random() * 100),
+            riskLevel: "MEDIUM" as const,
+            volatilityIndex: Math.round(Math.random() * 100),
+            spreadBps: Math.round(Math.random() * 200),
+            hasAbnormalSpike: false,
+            volumeSwing: Math.round(Math.random() * 10000),
+            trend: "STABLE" as const,
+          };
+        }
+
+        const {
+          stabilityScore,
+          riskLevel,
+          volatilityIndex,
+          spreadBps,
+          hasAbnormalSpike,
+          volumeSwing,
+          trend,
+        } = calculateEnhancedStabilityScore(ticker);
+
         return {
           symbol: project.symbol,
           name: project.name,
           multiplier: project.multiplier,
           isBaseline: project.isBaseline,
-          price: Math.random() * 10,
-          change24h: (Math.random() - 0.5) * 20,
-          volume24h: Math.random() * 50000000,
-          stabilityScore: Math.round(Math.random() * 100),
-          riskLevel: "MEDIUM" as const,
-          volatilityIndex: Math.round(Math.random() * 100),
-          spreadBps: Math.round(Math.random() * 200),
-          hasAbnormalSpike: false,
-          volumeSwing: Math.round(Math.random() * 10000),
-          trend: "STABLE" as const,
+          price: parseFloat(ticker.lastPrice),
+          change24h: parseFloat(ticker.priceChangePercent),
+          volume24h: parseFloat(ticker.quoteVolume),
+          stabilityScore,
+          riskLevel,
+          volatilityIndex,
+          spreadBps,
+          hasAbnormalSpike,
+          volumeSwing,
+          trend,
         };
-      }
+      });
 
-      const {
-        stabilityScore,
-        riskLevel,
-        volatilityIndex,
-        spreadBps,
-        hasAbnormalSpike,
-        volumeSwing,
-        trend,
-      } = calculateEnhancedStabilityScore(ticker);
+      // Sort by stability score, but keep KOGE (baseline) visible
+      const kogeData = stabilityData.find((d) => d.isBaseline);
+      const otherData = stabilityData
+        .filter((d) => !d.isBaseline)
+        .sort((a, b) => b.stabilityScore - a.stabilityScore);
 
-      return {
-        symbol: project.symbol,
-        name: project.name,
-        multiplier: project.multiplier,
-        isBaseline: project.isBaseline,
-        price: parseFloat(ticker.lastPrice),
-        change24h: parseFloat(ticker.priceChangePercent),
-        volume24h: parseFloat(ticker.quoteVolume),
-        stabilityScore,
-        riskLevel,
-        volatilityIndex,
-        spreadBps,
-        hasAbnormalSpike,
-        volumeSwing,
-        trend,
-      };
-    });
-
-    // Sort by stability score, but keep KOGE (baseline) visible
-    const kogeData = stabilityData.find((d) => d.isBaseline);
-    const otherData = stabilityData
-      .filter((d) => !d.isBaseline)
-      .sort((a, b) => b.stabilityScore - a.stabilityScore);
-
-    const sortedData = kogeData ? [kogeData, ...otherData] : otherData;
+      const sortedData = kogeData ? [kogeData, ...otherData] : otherData;
 
       return NextResponse.json({
         success: true,
@@ -229,7 +245,8 @@ export async function GET() {
         timestamp: new Date().toISOString(),
         refreshInterval: 15,
         source: "binance-alpha-4x-projects-fallback",
-        disclaimer: "⚠️ Markets are unpredictable. DYOR; no liability for losses.",
+        disclaimer:
+          "⚠️ Markets are unpredictable. DYOR; no liability for losses.",
       });
     } catch (fallbackError) {
       console.error("Fallback also failed:", fallbackError);
@@ -239,7 +256,7 @@ export async function GET() {
           error: "Failed to fetch stability data",
           message: error instanceof Error ? error.message : "Unknown error",
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
   }

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
 /**
  * API Proxy Route - Forwards requests to alpha123.uk from client-side
@@ -8,12 +8,12 @@ import { NextResponse } from 'next/server';
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const url = searchParams.get('url');
+  const url = searchParams.get("url");
 
   if (!url) {
     return NextResponse.json(
-      { success: false, error: 'URL parameter is required' },
-      { status: 400 }
+      { success: false, error: "URL parameter is required" },
+      { status: 400 },
     );
   }
 
@@ -22,15 +22,16 @@ export async function GET(request: Request) {
     // Note: This may still face 403 errors from server-side
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json, text/plain, */*',
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Accept: "application/json, text/plain, */*",
       },
     });
 
     if (!response.ok) {
       return NextResponse.json(
         { success: false, error: `API error: ${response.status}` },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
@@ -40,10 +41,13 @@ export async function GET(request: Request) {
       success: true,
       data,
     });
-  } catch (error: any) {
+  } catch (error) {
     return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
     );
   }
 }

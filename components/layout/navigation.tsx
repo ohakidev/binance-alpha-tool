@@ -31,7 +31,6 @@ import {
 } from "@/components/ui/tooltip";
 import { springConfigs, easings } from "@/lib/animations";
 import { BorderBeam } from "@/components/ui/border-beam";
-import { MagicCard } from "@/components/ui/magic-card";
 
 // Navigation items configuration
 const getNavItems = (t: (key: string) => string) => [
