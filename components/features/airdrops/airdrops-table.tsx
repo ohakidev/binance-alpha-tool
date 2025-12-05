@@ -15,7 +15,6 @@ import {
 } from "@tanstack/react-table";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Calendar,
   Trophy,
   ExternalLink,
   ChevronDown,
@@ -24,30 +23,37 @@ import {
   Search,
   Filter,
   TrendingUp,
-  History,
   X,
   Send,
   Bell,
   Zap,
   Gift,
-  Timer,
   RefreshCw,
-  CheckCircle2,
-  AlertCircle,
+  Sparkles,
+  Coins,
+  Clock,
+  ArrowUpRight,
+  Flame,
+  Target,
+  CalendarDays,
+  CalendarClock,
+  Star,
 } from "lucide-react";
 import {
   formatDistanceToNow,
   format,
   isToday,
+  isTomorrow,
   addDays,
   isBefore,
-  isAfter,
+  startOfDay,
+  endOfDay,
 } from "date-fns";
 import { th } from "date-fns/locale";
 
 // UI Components
 import { Card, CardHeader } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -103,33 +109,18 @@ interface Airdrop {
   description?: string;
   website?: string;
   twitter?: string;
-  type: "TGE" | "PreTGE" | "Airdrop";
+  type: "TGE" | "PRETGE" | "PreTGE" | "Airdrop" | "AIRDROP";
   requiredPoints: number;
   deductPoints: number;
   contractAddress: string;
-}
-
-interface ClaimRecord {
-  id: string;
-  projectName: string;
-  symbol: string;
-  logo: string;
-  chain: string;
-  pointsUsed: number;
-  amountReceived: string;
-  pricePerToken: number;
-  totalValue: number;
-  claimedAt: string;
-  currentValue?: number;
-  type: "TGE" | "PreTGE" | "Airdrop";
-  contractAddress?: string;
-  txHash?: string;
 }
 
 // Chain colors with premium styling
 const chainColors: Record<string, string> = {
   BSC: "bg-gradient-to-r from-yellow-500/20 to-yellow-600/10 text-yellow-400 border-yellow-500/40",
   ETH: "bg-gradient-to-r from-purple-500/20 to-purple-600/10 text-purple-400 border-purple-500/40",
+  Ethereum:
+    "bg-gradient-to-r from-purple-500/20 to-purple-600/10 text-purple-400 border-purple-500/40",
   Polygon:
     "bg-gradient-to-r from-violet-500/20 to-violet-600/10 text-violet-400 border-violet-500/40",
   Solana:
@@ -144,20 +135,26 @@ const typeColors: Record<string, string> = {
   TGE: "bg-gradient-to-r from-emerald-500/20 to-green-500/10 text-emerald-400 border-emerald-500/40",
   PreTGE:
     "bg-gradient-to-r from-amber-500/20 to-orange-500/10 text-amber-400 border-amber-500/40",
+  PRETGE:
+    "bg-gradient-to-r from-amber-500/20 to-orange-500/10 text-amber-400 border-amber-500/40",
   Airdrop:
+    "bg-gradient-to-r from-cyan-500/20 to-blue-500/10 text-cyan-400 border-cyan-500/40",
+  AIRDROP:
     "bg-gradient-to-r from-cyan-500/20 to-blue-500/10 text-cyan-400 border-cyan-500/40",
 };
 
 export function AirdropsTable() {
-  const [activeTab, setActiveTab] = useState<"today" | "upcoming" | "history">(
+  const [activeTab, setActiveTab] = useState<"today" | "upcoming" | "all">(
     "today",
   );
-  const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [airdropSorting, setAirdropSorting] = useState<SortingState>([]);
+  const [airdropColumnFilters, setAirdropColumnFilters] =
+    useState<ColumnFiltersState>([]);
   const [selectedAirdrop, setSelectedAirdrop] = useState<Airdrop | null>(null);
   const [selectedChains, setSelectedChains] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [, setLastRefresh] = useState<Date>(new Date());
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const {
     isLoading: isSendingTelegram,
@@ -174,135 +171,118 @@ export function AirdropsTable() {
     queryKey: ["airdrops", "claimable"],
     queryFn: async () => {
       const res = await fetch(
-        "/api/binance/alpha/airdrops?status=claimable&limit=50",
+        "/api/binance/alpha/airdrops?status=claimable&limit=300",
       );
       const json = await res.json();
       return json.data as Airdrop[];
     },
-    refetchInterval: 10000, // Auto-refresh every 10 seconds
+    refetchInterval: 30000,
     refetchOnWindowFocus: false,
-    staleTime: 9000,
+    staleTime: 25000,
+  });
+
+  // Fetch all airdrops for "All" tab
+  const {
+    data: allAirdropsData,
+    isLoading: allLoading,
+    refetch: refetchAll,
+  } = useQuery({
+    queryKey: ["airdrops", "all"],
+    queryFn: async () => {
+      const res = await fetch("/api/binance/alpha/airdrops?limit=500");
+      const json = await res.json();
+      return json.data as Airdrop[];
+    },
+    refetchInterval: 60000,
+    refetchOnWindowFocus: false,
+    staleTime: 55000,
   });
 
   // Fetch upcoming airdrops
   const {
-    data: upcomingRawData,
+    data: upcomingData,
     isLoading: upcomingLoading,
     refetch: refetchUpcoming,
   } = useQuery({
     queryKey: ["airdrops", "upcoming"],
     queryFn: async () => {
       const res = await fetch(
-        "/api/binance/alpha/airdrops?status=upcoming&limit=50",
+        "/api/binance/alpha/airdrops?status=upcoming&limit=200",
       );
       const json = await res.json();
       return json.data as Airdrop[];
     },
-    refetchInterval: 10000, // Auto-refresh every 10 seconds
+    refetchInterval: 60000,
     refetchOnWindowFocus: false,
-    staleTime: 9000,
+    staleTime: 55000,
   });
 
-  // Fetch claim history from database
-  const {
-    data: historyData,
-    isLoading: historyLoading,
-    refetch: refetchHistory,
-  } = useQuery({
-    queryKey: ["airdrops", "history"],
-    queryFn: async () => {
-      const res = await fetch(
-        "/api/binance/alpha/airdrops?status=ended&limit=50",
-      );
-      const json = await res.json();
-      // Transform to ClaimRecord format
-      const records: ClaimRecord[] = (json.data || []).map(
-        (airdrop: Airdrop) => ({
-          id: airdrop.id,
-          projectName: airdrop.projectName,
-          symbol: airdrop.symbol,
-          logo: airdrop.logo || "🎁",
-          chain: airdrop.chain,
-          pointsUsed: airdrop.deductPoints || 0,
-          amountReceived: airdrop.airdropAmount,
-          pricePerToken: airdrop.estimatedValue
-            ? airdrop.estimatedValue /
-              parseFloat(airdrop.airdropAmount.replace(/[^0-9.]/g, "") || "1")
-            : 0,
-          totalValue: airdrop.estimatedValue || 0,
-          claimedAt:
-            airdrop.claimEndDate ||
-            airdrop.claimStartDate ||
-            new Date().toISOString(),
-          currentValue: airdrop.estimatedValue,
-          type: airdrop.type,
-          contractAddress: airdrop.contractAddress,
-        }),
-      );
-      return records;
-    },
-    refetchInterval: 30000, // History refreshes every 30 seconds (less frequent)
-    refetchOnWindowFocus: false,
-    staleTime: 25000,
-  });
-
-  // Split claimable data into today's and upcoming claims
+  // Today's airdrops - filter from claimable data where claimStartDate is today
   const todayData = useMemo(() => {
     if (!claimableData) return [];
     const now = new Date();
+    const todayStart = startOfDay(now);
+    const todayEnd = endOfDay(now);
 
     return claimableData.filter((airdrop) => {
-      if (!airdrop.claimStartDate) return true; // If no start date, assume it's available now
-      const startDate = new Date(airdrop.claimStartDate);
-      // Show if claim has started (before now) and hasn't ended yet
-      return isBefore(startDate, now) || isToday(startDate);
+      if (!airdrop.claimStartDate) return false;
+      const claimDate = new Date(airdrop.claimStartDate);
+      // Show airdrops that started today or are still claimable today
+      return (
+        (claimDate >= todayStart && claimDate <= todayEnd) ||
+        (airdrop.status.toLowerCase() === "claimable" && isToday(claimDate))
+      );
     });
   }, [claimableData]);
 
-  const upcomingData = useMemo(() => {
-    if (!upcomingRawData && !claimableData) return [];
+  // Upcoming airdrops - filter from upcoming data or airdrops starting after today
+  const futureData = useMemo(() => {
+    // Combine upcoming API data with claimable data that starts after today
+    const upcoming = upcomingData || [];
+    const claimable = claimableData || [];
+
     const now = new Date();
+    const tomorrow = startOfDay(addDays(now, 1));
 
-    // Combine upcoming and claimable that haven't started yet
-    const upcoming = [...(upcomingRawData || [])];
+    // Filter claimable data for future dates
+    const futureClaimable = claimable.filter((airdrop) => {
+      if (!airdrop.claimStartDate) return false;
+      const claimDate = new Date(airdrop.claimStartDate);
+      return claimDate >= tomorrow;
+    });
 
-    // Also add claimable items that haven't started yet
-    if (claimableData) {
-      claimableData.forEach((airdrop) => {
-        if (airdrop.claimStartDate) {
-          const startDate = new Date(airdrop.claimStartDate);
-          if (isAfter(startDate, now) && !isToday(startDate)) {
-            // Avoid duplicates
-            if (!upcoming.find((u) => u.id === airdrop.id)) {
-              upcoming.push(airdrop);
-            }
-          }
-        }
-      });
-    }
+    // Combine and deduplicate by id
+    const combined = [...upcoming, ...futureClaimable];
+    const uniqueMap = new Map<string, Airdrop>();
+    combined.forEach((item) => {
+      if (!uniqueMap.has(item.id)) {
+        uniqueMap.set(item.id, item);
+      }
+    });
 
-    // Sort by claim start date
-    return upcoming.sort((a, b) => {
-      const dateA = a.claimStartDate
-        ? new Date(a.claimStartDate).getTime()
-        : Infinity;
-      const dateB = b.claimStartDate
-        ? new Date(b.claimStartDate).getTime()
-        : Infinity;
+    // Sort by claimStartDate
+    return Array.from(uniqueMap.values()).sort((a, b) => {
+      const dateA = a.claimStartDate ? new Date(a.claimStartDate).getTime() : 0;
+      const dateB = b.claimStartDate ? new Date(b.claimStartDate).getTime() : 0;
       return dateA - dateB;
     });
-  }, [upcomingRawData, claimableData]);
+  }, [upcomingData, claimableData]);
+
+  // All airdrops data
+  const allData = useMemo(() => {
+    return allAirdropsData || [];
+  }, [allAirdropsData]);
 
   // Filter and search data
   const filteredData = useMemo(() => {
-    let data: (Airdrop | ClaimRecord)[] = [];
+    let data: Airdrop[] = [];
 
-    if (activeTab === "history") {
-      data = historyData || [];
-    } else if (activeTab === "upcoming") {
-      data = upcomingData || [];
-    } else {
+    if (activeTab === "today") {
       data = todayData || [];
+    } else if (activeTab === "upcoming") {
+      data = futureData || [];
+    } else {
+      data = allData || [];
     }
 
     // Apply chain filter
@@ -313,76 +293,102 @@ export function AirdropsTable() {
     // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      data = data.filter(
-        (item) =>
-          item.projectName.toLowerCase().includes(query) ||
-          item.symbol.toLowerCase().includes(query),
-      );
+      data = data.filter((item) => {
+        const name = item.projectName;
+        return (
+          name.toLowerCase().includes(query) ||
+          item.symbol.toLowerCase().includes(query)
+        );
+      });
     }
 
     return data;
-  }, [
-    activeTab,
-    todayData,
-    upcomingData,
-    historyData,
-    selectedChains,
-    searchQuery,
-  ]);
+  }, [activeTab, todayData, futureData, allData, selectedChains, searchQuery]);
 
   const isLoading =
     activeTab === "today"
       ? claimableLoading
       : activeTab === "upcoming"
-        ? upcomingLoading
-        : historyLoading;
+        ? upcomingLoading || claimableLoading
+        : allLoading;
 
   // Calculate stats
   const stats = useMemo(() => {
     const todayCount = todayData.length;
-    const upcomingCount = upcomingData.length;
-    const historyCount = historyData?.length || 0;
+    const upcomingCount = futureData.length;
+    const allCount = allData.length;
 
-    const todayValue = todayData.reduce(
-      (sum, item) => sum + (item.estimatedValue || 0),
+    // Calculate total required points for today's airdrops
+    const todayTotalPoints = todayData.reduce(
+      (sum, item) => sum + (item.requiredPoints || 0),
       0,
     );
-    const historyValue =
-      historyData?.reduce(
-        (sum, item) => sum + (item.currentValue || item.totalValue),
-        0,
-      ) || 0;
+
+    // Calculate average required points
+    const avgRequiredPoints =
+      todayData.length > 0
+        ? Math.round(todayTotalPoints / todayData.length)
+        : 0;
+
+    // Calculate total deduct points for today
+    const todayDeductPoints = todayData.reduce(
+      (sum, item) => sum + (item.deductPoints || 0),
+      0,
+    );
+
+    // Count by type for today
+    const tgeCount = todayData.filter((a) => a.type === "TGE").length;
+    const airdropTypeCount = todayData.filter(
+      (a) =>
+        a.type === "AIRDROP" ||
+        a.type === "Airdrop" ||
+        a.type === "PRETGE" ||
+        a.type === "PreTGE",
+    ).length;
+
+    // Upcoming stats
+    const upcomingTGE = futureData.filter((a) => a.type === "TGE").length;
+    const upcomingAirdrop = futureData.filter(
+      (a) =>
+        a.type === "AIRDROP" ||
+        a.type === "Airdrop" ||
+        a.type === "PRETGE" ||
+        a.type === "PreTGE",
+    ).length;
 
     return {
       todayCount,
       upcomingCount,
-      historyCount,
-      todayValue,
-      historyValue,
-      totalProjects: todayCount + upcomingCount,
+      allCount,
+      todayTotalPoints,
+      avgRequiredPoints,
+      todayDeductPoints,
+      tgeCount,
+      airdropTypeCount,
+      upcomingTGE,
+      upcomingAirdrop,
     };
-  }, [todayData, upcomingData, historyData]);
+  }, [todayData, futureData, allData]);
 
   // Refresh all data
   const handleRefresh = useCallback(async () => {
     setLastRefresh(new Date());
-    await Promise.all([
-      refetchClaimable(),
-      refetchUpcoming(),
-      refetchHistory(),
-    ]);
-  }, [refetchClaimable, refetchUpcoming, refetchHistory]);
+    await Promise.all([refetchClaimable(), refetchAll(), refetchUpcoming()]);
+  }, [refetchClaimable, refetchAll, refetchUpcoming]);
 
-  // Sync from external source
+  // Sync from Binance Alpha
   const handleSync = useCallback(async () => {
+    setIsSyncing(true);
     try {
-      const res = await fetch("/api/binance/alpha/sync", { method: "POST" });
+      const res = await fetch("/api/alpha/sync?type=full", { method: "POST" });
       const data = await res.json();
       if (data.success) {
         await handleRefresh();
       }
     } catch (error) {
       console.error("Sync failed:", error);
+    } finally {
+      setIsSyncing(false);
     }
   }, [handleRefresh]);
 
@@ -398,7 +404,7 @@ export function AirdropsTable() {
     }
   }, []);
 
-  // Columns for today/upcoming airdrops
+  // Table columns for airdrops
   const airdropColumns: ColumnDef<Airdrop>[] = useMemo(
     () => [
       {
@@ -407,56 +413,62 @@ export function AirdropsTable() {
         cell: ({ row }) => {
           const airdrop = row.original;
           const contractLink = airdrop.contractAddress
-            ? `https://debot.ai/token/${airdrop.chain.toLowerCase()}/${airdrop.contractAddress}`
-            : "#";
+            ? `https://bscscan.com/token/${airdrop.contractAddress}`
+            : null;
 
           return (
-            <div className="min-w-0 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center text-lg">
-                {airdrop.logo || "🎁"}
-              </div>
-              <div>
-                <a
-                  href={contractLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-semibold text-foreground hover:text-primary transition-colors truncate block"
-                  onClick={(e) =>
-                    !airdrop.contractAddress && e.preventDefault()
-                  }
-                >
-                  {airdrop.projectName}
-                </a>
-                <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-                  <span className="font-medium">{airdrop.symbol}</span>
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] h-4 px-1.5 ${chainColors[airdrop.chain] || chainColors.BSC}`}
-                  >
-                    {airdrop.chain}
-                  </Badge>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center text-xl font-bold border border-primary/20">
+                  {airdrop.logo === "🎁" ? (
+                    <Sparkles className="w-5 h-5 text-primary" />
+                  ) : (
+                    airdrop.symbol.charAt(0)
+                  )}
                 </div>
+                {airdrop.type === "TGE" && (
+                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
+                    <Flame className="w-2.5 h-2.5 text-white" />
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-foreground">
+                    {airdrop.projectName}
+                  </span>
+                  {contractLink && (
+                    <a
+                      href={contractLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-muted-foreground hover:text-primary transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  ${airdrop.symbol}
+                </span>
               </div>
             </div>
           );
         },
       },
       {
-        accessorKey: "requiredPoints",
-        header: "คะแนน",
+        accessorKey: "chain",
+        header: "Chain",
         cell: ({ row }) => {
           const airdrop = row.original;
           return (
-            <div className="text-center">
-              <div className="font-bold text-amber-400 text-lg">
-                {airdrop.requiredPoints || 0}
-              </div>
-              {airdrop.deductPoints > 0 && (
-                <div className="text-xs text-red-400/80 font-medium">
-                  -{airdrop.deductPoints} หักแต้ม
-                </div>
-              )}
-            </div>
+            <Badge
+              variant="outline"
+              className={`${chainColors[airdrop.chain] || "bg-slate-500/20 text-slate-400 border-slate-500/40"} font-medium`}
+            >
+              {airdrop.chain}
+            </Badge>
           );
         },
       },
@@ -468,24 +480,35 @@ export function AirdropsTable() {
           return (
             <Badge
               variant="outline"
-              className={`text-xs font-medium ${typeColors[airdrop.type] || typeColors.Airdrop}`}
+              className={`${typeColors[airdrop.type] || typeColors["AIRDROP"]} font-medium`}
             >
-              {airdrop.type || "Airdrop"}
+              {airdrop.type}
             </Badge>
           );
         },
       },
       {
-        accessorKey: "airdropAmount",
-        header: "จำนวน",
+        accessorKey: "requiredPoints",
+        header: "Alpha Points",
         cell: ({ row }) => {
           const airdrop = row.original;
+          const required = airdrop.requiredPoints || 0;
+          const deduct = airdrop.deductPoints || 0;
+
           return (
-            <div>
-              <div className="font-semibold">{airdrop.airdropAmount}</div>
-              {airdrop.estimatedValue && airdrop.estimatedValue > 0 && (
-                <div className="text-xs text-emerald-400 font-medium">
-                  ≈ ${airdrop.estimatedValue.toLocaleString()}
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-1.5">
+                <Star className="w-3.5 h-3.5 text-amber-400" />
+                <span className="font-semibold text-amber-400">
+                  {required > 0 ? `${required} pts` : "ไม่ระบุ"}
+                </span>
+              </div>
+              {deduct > 0 && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-red-400/80">หัก:</span>
+                  <span className="text-xs font-medium text-red-400">
+                    -{deduct} pts
+                  </span>
                 </div>
               )}
             </div>
@@ -493,35 +516,58 @@ export function AirdropsTable() {
         },
       },
       {
-        accessorKey: activeTab === "today" ? "claimEndDate" : "claimStartDate",
-        header: activeTab === "today" ? "เหลือเวลา" : "เริ่มใน",
+        accessorKey: "claimStartDate",
+        header: "เวลา",
         cell: ({ row }) => {
           const airdrop = row.original;
-          const targetDate =
-            activeTab === "today"
-              ? airdrop.claimEndDate
-              : airdrop.claimStartDate;
+          const targetDate = airdrop.claimStartDate
+            ? new Date(airdrop.claimStartDate)
+            : null;
 
-          if (!targetDate)
-            return <span className="text-xs text-muted-foreground">TBA</span>;
+          if (!targetDate) {
+            return <span className="text-muted-foreground">-</span>;
+          }
 
           const date = new Date(targetDate);
           const timeText = formatDistanceToNow(date, {
             locale: th,
             addSuffix: true,
           });
-          const dateText = format(date, "dd MMM HH:mm", { locale: th });
+          const dateText = format(date, "dd MMM yy HH:mm", { locale: th });
           const isExpiringSoon =
-            activeTab === "today" && isBefore(date, addDays(new Date(), 1));
+            airdrop.claimEndDate &&
+            isBefore(new Date(airdrop.claimEndDate), addDays(new Date(), 3));
+
+          // Check if it's today or tomorrow
+          const isTodayDate = isToday(date);
+          const isTomorrowDate = isTomorrow(date);
 
           return (
-            <div>
-              <div
-                className={`font-semibold ${isExpiringSoon ? "text-red-400 animate-pulse" : activeTab === "today" ? "text-orange-400" : "text-cyan-400"}`}
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1.5">
+                {isTodayDate && (
+                  <Badge
+                    variant="outline"
+                    className="h-5 px-1.5 bg-emerald-500/20 text-emerald-400 border-emerald-500/40 text-[10px]"
+                  >
+                    วันนี้
+                  </Badge>
+                )}
+                {isTomorrowDate && (
+                  <Badge
+                    variant="outline"
+                    className="h-5 px-1.5 bg-blue-500/20 text-blue-400 border-blue-500/40 text-[10px]"
+                  >
+                    พรุ่งนี้
+                  </Badge>
+                )}
+                <span className="text-sm font-medium">{dateText}</span>
+              </div>
+              <span
+                className={`text-xs ${isExpiringSoon ? "text-red-400" : "text-muted-foreground"}`}
               >
                 {timeText}
-              </div>
-              <div className="text-xs text-muted-foreground">{dateText}</div>
+              </span>
             </div>
           );
         },
@@ -531,204 +577,83 @@ export function AirdropsTable() {
         header: "",
         cell: ({ row }) => {
           const airdrop = row.original;
+          const alertData = {
+            name: airdrop.projectName,
+            symbol: airdrop.symbol,
+            chain: airdrop.chain,
+            status: airdrop.status,
+            claimStartDate: airdrop.claimStartDate
+              ? new Date(airdrop.claimStartDate)
+              : undefined,
+            claimEndDate: airdrop.claimEndDate
+              ? new Date(airdrop.claimEndDate)
+              : undefined,
+            estimatedValue: airdrop.estimatedValue || undefined,
+            airdropAmount: airdrop.airdropAmount,
+            requirements: airdrop.requirements,
+            requiredPoints: airdrop.requiredPoints,
+            deductPoints: airdrop.deductPoints,
+            contractAddress: airdrop.contractAddress,
+          };
+
           return (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
-                size="icon"
-                onClick={() => {
-                  sendAirdropAlert({
-                    name: airdrop.projectName,
-                    symbol: airdrop.symbol,
-                    chain: airdrop.chain,
-                    status: airdrop.status,
-                    claimStartDate: airdrop.claimStartDate
-                      ? new Date(airdrop.claimStartDate)
-                      : undefined,
-                    claimEndDate: airdrop.claimEndDate
-                      ? new Date(airdrop.claimEndDate)
-                      : undefined,
-                    estimatedValue: airdrop.estimatedValue || undefined,
-                    airdropAmount: airdrop.airdropAmount,
-                    requirements: airdrop.requirements,
-                    requiredPoints: airdrop.requiredPoints,
-                    deductPoints: airdrop.deductPoints,
-                    contractAddress: airdrop.contractAddress,
-                  });
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  sendAirdropAlert(alertData);
                 }}
-                className="h-8 w-8 text-cyan-500 hover:text-cyan-400 hover:bg-cyan-500/10"
                 disabled={isSendingTelegram}
-                title="ส่งแจ้งเตือนไป Telegram"
+                className="h-8 px-2 text-muted-foreground hover:text-primary"
               >
                 <Send className="w-4 h-4" />
               </Button>
               <Button
                 variant="ghost"
-                size="icon"
+                size="sm"
                 onClick={() => handleAirdropClick(airdrop)}
-                className="h-8 w-8 hover:bg-primary/10"
-                title="ดูรายละเอียด"
+                className="h-8 px-2 text-muted-foreground hover:text-primary"
               >
-                <ExternalLink className="w-4 h-4" />
+                <ArrowUpRight className="w-4 h-4" />
               </Button>
             </div>
           );
         },
       },
     ],
-    [handleAirdropClick, activeTab, isSendingTelegram, sendAirdropAlert],
+    [sendAirdropAlert, isSendingTelegram, handleAirdropClick],
   );
 
-  // Columns for history
-  const historyColumns: ColumnDef<ClaimRecord>[] = useMemo(
-    () => [
-      {
-        accessorKey: "projectName",
-        header: "โปรเจค",
-        cell: ({ row }) => {
-          const record = row.original;
-          return (
-            <div className="min-w-0 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-green-500/20 flex items-center justify-center">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-              </div>
-              <div>
-                <div className="font-semibold">{record.projectName}</div>
-                <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-                  <span>{record.symbol}</span>
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] h-4 px-1.5 ${chainColors[record.chain] || chainColors.BSC}`}
-                  >
-                    {record.chain}
-                  </Badge>
-                </div>
-              </div>
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: "amountReceived",
-        header: "ที่ได้รับ",
-        cell: ({ row }) => {
-          const record = row.original;
-          return (
-            <div>
-              <div className="font-semibold">{record.amountReceived}</div>
-              <div className="text-xs text-muted-foreground">
-                ใช้ {record.pointsUsed} แต้ม
-              </div>
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: "type",
-        header: "ประเภท",
-        cell: ({ row }) => {
-          const record = row.original;
-          return (
-            <Badge
-              variant="outline"
-              className={`text-xs ${typeColors[record.type] || typeColors.Airdrop}`}
-            >
-              {record.type || "Airdrop"}
-            </Badge>
-          );
-        },
-      },
-      {
-        accessorKey: "totalValue",
-        header: "มูลค่า",
-        cell: ({ row }) => {
-          const record = row.original;
-          const current = record.currentValue || record.totalValue;
-          const profit = current - record.totalValue;
-          const profitPercent =
-            record.totalValue > 0
-              ? ((profit / record.totalValue) * 100).toFixed(1)
-              : "0";
-
-          return (
-            <div>
-              <div className="font-semibold">${current.toFixed(2)}</div>
-              {profit !== 0 && (
-                <div
-                  className={`text-xs font-medium ${profit >= 0 ? "text-emerald-400" : "text-red-400"}`}
-                >
-                  {profit >= 0 ? "+" : ""}
-                  {profitPercent}%
-                </div>
-              )}
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: "claimedAt",
-        header: "วันที่เคลม",
-        cell: ({ row }) => {
-          const date = new Date(row.getValue("claimedAt"));
-          return (
-            <div>
-              <div className="font-medium">
-                {format(date, "dd MMM yyyy", { locale: th })}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {format(date, "HH:mm", { locale: th })}
-              </div>
-            </div>
-          );
-        },
-      },
-    ],
-    [],
-  );
-
-  // Table instances
-  const airdropTable = useReactTable({
+  // React Table instance
+  const table = useReactTable({
     data: filteredData as Airdrop[],
     columns: airdropColumns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
-    state: { sorting, columnFilters },
-    initialState: { pagination: { pageSize: 10 } },
+    onSortingChange: setAirdropSorting,
+    onColumnFiltersChange: setAirdropColumnFilters,
+    state: { sorting: airdropSorting, columnFilters: airdropColumnFilters },
+    initialState: { pagination: { pageSize: 20 } },
   });
 
-  const historyTable = useReactTable({
-    data: filteredData as ClaimRecord[],
-    columns: historyColumns,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
-    state: { sorting, columnFilters },
-    initialState: { pagination: { pageSize: 10 } },
-  });
-
-  const table = activeTab === "history" ? historyTable : airdropTable;
-
-  // Available chains
+  // Available chains for filter
   const availableChains = useMemo(() => {
     const chains = new Set<string>();
     const data =
-      activeTab === "history"
-        ? historyData || []
+      activeTab === "today"
+        ? todayData
         : activeTab === "upcoming"
-          ? upcomingData
-          : todayData;
+          ? futureData
+          : allData;
     data.forEach((item) => {
       if (item.chain) chains.add(item.chain);
     });
     return Array.from(chains);
-  }, [activeTab, todayData, upcomingData, historyData]);
+  }, [activeTab, todayData, futureData, allData]);
 
   const clearFilters = useCallback(() => {
     setSelectedChains([]);
@@ -746,100 +671,108 @@ export function AirdropsTable() {
         className="relative overflow-hidden rounded-3xl"
       >
         <ShineBorder
-          className="p-8 bg-gradient-to-br from-slate-900/90 via-purple-900/20 to-slate-900/90"
-          shineColor={["#A07CFE", "#FE8FB5", "#FFBE7B"]}
+          className="p-6 sm:p-8 bg-gradient-to-br from-slate-900/90 via-purple-900/20 to-slate-900/90"
+          shineColor={["#d4a948", "#f0c674", "#b8860b"]}
           borderWidth={2}
           duration={8}
           borderRadius="1.5rem"
         >
           <div className="relative z-10">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <motion.div
                   animate={{
-                    scale: [1, 1.1, 1],
-                    rotate: [0, 5, -5, 0],
+                    scale: [1, 1.05, 1],
+                    rotate: [0, 2, -2, 0],
                   }}
                   transition={{
                     duration: 4,
                     repeat: Infinity,
                     ease: "easeInOut",
                   }}
-                  className="p-3 rounded-2xl bg-gradient-to-br from-primary/30 to-purple-500/30"
+                  className="p-3 rounded-2xl bg-gradient-to-br from-primary/30 to-amber-500/30 border border-primary/20"
                 >
-                  <Gift className="w-8 h-8 text-primary" />
+                  <Coins className="w-8 h-8 text-primary" />
                 </motion.div>
                 <div>
-                  <h1 className="text-3xl sm:text-4xl font-black">
+                  <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black">
                     <GradientText
-                      colors={["#667eea", "#764ba2", "#f093fb", "#667eea"]}
+                      colors={["#d4a948", "#f0c674", "#b8860b", "#d4a948"]}
                     >
                       Binance Alpha Airdrops
                     </GradientText>
                   </h1>
                   <p className="text-sm text-muted-foreground mt-1">
-                    ติดตามและเคลม Airdrop จาก Binance Alpha ได้ที่นี่
+                    🔥 ติดตาม Airdrop & TGE จาก Binance Alpha แบบ Real-time
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
+              <div className="flex items-center gap-2 flex-wrap">
+                <ShimmerButton
                   onClick={handleSync}
-                  className="gap-2 hidden sm:flex"
+                  disabled={isSyncing}
+                  className="gap-2 text-sm"
+                  shimmerColor="#d4a948"
                 >
-                  <RefreshCw className="w-4 h-4" />
-                  Sync Data
-                </Button>
+                  <RefreshCw
+                    className={`w-4 h-4 ${isSyncing ? "animate-spin" : ""}`}
+                  />
+                  <span className="hidden sm:inline">
+                    {isSyncing ? "กำลัง Sync..." : "Sync ข้อมูล"}
+                  </span>
+                </ShimmerButton>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={testConnection}
-                  className="gap-2"
+                  className="gap-2 border-primary/30 hover:bg-primary/10"
                 >
                   <Bell className="w-4 h-4" />
-                  <span className="hidden sm:inline">Telegram</span>
+                  <span className="hidden sm:inline">ทดสอบ Telegram</span>
                 </Button>
               </div>
             </div>
           </div>
           <CornerGlow
             position="top-right"
-            color="rgba(102, 126, 234, 0.4)"
+            color="rgba(212, 169, 72, 0.4)"
             size={200}
           />
           <CornerGlow
             position="bottom-left"
-            color="rgba(168, 85, 247, 0.3)"
+            color="rgba(184, 134, 11, 0.3)"
             size={150}
           />
         </ShineBorder>
       </motion.div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* Today's Airdrops */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <MagicCard className="p-5" gradientColor="rgba(239, 68, 68, 0.15)">
+          <MagicCard
+            className="p-4 sm:p-5"
+            gradientColor="rgba(239, 68, 68, 0.15)"
+          >
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm text-muted-foreground mb-1 flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-red-400" />
-                  เคลมได้วันนี้
+                <div className="text-xs sm:text-sm text-muted-foreground mb-1 flex items-center gap-2">
+                  <CalendarDays className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-400" />
+                  <span>วันนี้</span>
                 </div>
-                <div className="text-3xl font-bold text-red-400">
+                <div className="text-2xl sm:text-3xl font-bold text-red-400">
                   <NumberTicker value={stats.todayCount} />
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  มูลค่า ~${stats.todayValue.toLocaleString()}
+                <div className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                  {stats.tgeCount} TGE / {stats.airdropTypeCount} Airdrop
                 </div>
               </div>
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center">
-                <Timer className="w-7 h-7 text-red-400" />
+              <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center">
+                <Zap className="w-5 h-5 sm:w-7 sm:h-7 text-red-400" />
               </div>
             </div>
             <BorderBeam
@@ -851,66 +784,111 @@ export function AirdropsTable() {
           </MagicCard>
         </motion.div>
 
+        {/* Upcoming Airdrops */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+        >
+          <MagicCard
+            className="p-4 sm:p-5"
+            gradientColor="rgba(59, 130, 246, 0.15)"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs sm:text-sm text-muted-foreground mb-1 flex items-center gap-2">
+                  <CalendarClock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400" />
+                  <span>กำลังจะมา</span>
+                </div>
+                <div className="text-2xl sm:text-3xl font-bold text-blue-400">
+                  <NumberTicker value={stats.upcomingCount} />
+                </div>
+                <div className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                  {stats.upcomingTGE} TGE / {stats.upcomingAirdrop} Airdrop
+                </div>
+              </div>
+              <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center">
+                <Clock className="w-5 h-5 sm:w-7 sm:h-7 text-blue-400" />
+              </div>
+            </div>
+            <BorderBeam
+              size={80}
+              duration={8}
+              colorFrom="#3b82f6"
+              colorTo="#06b6d4"
+            />
+          </MagicCard>
+        </motion.div>
+
+        {/* Alpha Points Required (Today) */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
         >
-          <MagicCard className="p-5" gradientColor="rgba(34, 211, 238, 0.15)">
+          <MagicCard
+            className="p-4 sm:p-5"
+            gradientColor="rgba(245, 158, 11, 0.15)"
+          >
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm text-muted-foreground mb-1 flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-cyan-400" />
-                  กำลังจะมา
+                <div className="text-xs sm:text-sm text-muted-foreground mb-1 flex items-center gap-2">
+                  <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+                  <span>Alpha Points</span>
                 </div>
-                <div className="text-3xl font-bold text-cyan-400">
-                  <NumberTicker value={stats.upcomingCount} />
+                <div className="text-2xl sm:text-3xl font-bold text-amber-400">
+                  <NumberTicker value={stats.avgRequiredPoints} />
+                  <span className="text-sm ml-1">avg</span>
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  โปรเจคที่รอเคลม
+                <div className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                  หักรวม: {stats.todayDeductPoints} pts
                 </div>
               </div>
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center">
-                <TrendingUp className="w-7 h-7 text-cyan-400" />
+              <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500/20 to-yellow-500/20 flex items-center justify-center">
+                <Target className="w-5 h-5 sm:w-7 sm:h-7 text-amber-400" />
               </div>
             </div>
             <BorderBeam
               size={80}
               duration={8}
-              colorFrom="#22d3ee"
-              colorTo="#3b82f6"
+              colorFrom="#f59e0b"
+              colorTo="#eab308"
             />
           </MagicCard>
         </motion.div>
 
+        {/* Total Projects */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
+          transition={{ delay: 0.25 }}
         >
-          <MagicCard className="p-5" gradientColor="rgba(16, 185, 129, 0.15)">
+          <MagicCard
+            className="p-4 sm:p-5"
+            gradientColor="rgba(168, 85, 247, 0.15)"
+          >
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm text-muted-foreground mb-1 flex items-center gap-2">
-                  <Trophy className="w-4 h-4 text-emerald-400" />
-                  เคลมแล้ว
+                <div className="text-xs sm:text-sm text-muted-foreground mb-1 flex items-center gap-2">
+                  <Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
+                  <span>ทั้งหมด</span>
                 </div>
-                <div className="text-3xl font-bold text-emerald-400">
-                  <NumberTicker value={stats.historyCount} />
+                <div className="text-2xl sm:text-3xl font-bold text-purple-400">
+                  <NumberTicker value={stats.allCount} />
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  มูลค่ารวม ~${stats.historyValue.toLocaleString()}
+                <div className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                  โปรเจคทั้งหมด
                 </div>
               </div>
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-green-500/20 flex items-center justify-center">
-                <CheckCircle2 className="w-7 h-7 text-emerald-400" />
+              <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 sm:w-7 sm:h-7 text-purple-400" />
               </div>
             </div>
             <BorderBeam
               size={80}
               duration={8}
-              colorFrom="#10b981"
-              colorTo="#22c55e"
+              colorFrom="#a855f7"
+              colorTo="#ec4899"
             />
           </MagicCard>
         </motion.div>
@@ -919,10 +897,10 @@ export function AirdropsTable() {
       {/* Main Content Card */}
       <AnimatedGradientBorder
         gradientColors={[
-          "rgba(102, 126, 234, 0.5)",
-          "rgba(168, 85, 247, 0.5)",
-          "rgba(236, 72, 153, 0.5)",
-          "rgba(102, 126, 234, 0.5)",
+          "rgba(212, 169, 72, 0.5)",
+          "rgba(240, 198, 116, 0.5)",
+          "rgba(184, 134, 11, 0.5)",
+          "rgba(212, 169, 72, 0.5)",
         ]}
         borderWidth={1}
         duration={6}
@@ -932,22 +910,22 @@ export function AirdropsTable() {
             <Tabs
               value={activeTab}
               onValueChange={(v) =>
-                setActiveTab(v as "today" | "upcoming" | "history")
+                setActiveTab(v as "today" | "upcoming" | "all")
               }
               className="w-full"
             >
               <TabsList className="grid w-full grid-cols-3 mb-4 bg-muted/50">
                 <TabsTrigger
                   value="today"
-                  className="flex items-center gap-2 data-[state=active]:bg-red-500/20 data-[state=active]:text-red-400"
+                  className="flex items-center gap-1 sm:gap-2 data-[state=active]:bg-red-500/20 data-[state=active]:text-red-400"
                 >
-                  <Zap className="w-4 h-4" />
-                  <span className="hidden sm:inline">เคลมวันนี้</span>
-                  <span className="sm:hidden">วันนี้</span>
+                  <CalendarDays className="w-4 h-4" />
+                  <span className="hidden sm:inline">วันนี้</span>
+                  <span className="sm:hidden">Today</span>
                   {stats.todayCount > 0 && (
                     <Badge
                       variant="secondary"
-                      className="ml-1 h-5 px-1.5 bg-red-500/20 text-red-400"
+                      className="ml-1 h-5 px-1.5 bg-red-500/20 text-red-400 text-xs"
                     >
                       {stats.todayCount}
                     </Badge>
@@ -955,27 +933,35 @@ export function AirdropsTable() {
                 </TabsTrigger>
                 <TabsTrigger
                   value="upcoming"
-                  className="flex items-center gap-2 data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-400"
+                  className="flex items-center gap-1 sm:gap-2 data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400"
                 >
-                  <Calendar className="w-4 h-4" />
+                  <CalendarClock className="w-4 h-4" />
                   <span className="hidden sm:inline">กำลังจะมา</span>
-                  <span className="sm:hidden">จะมา</span>
+                  <span className="sm:hidden">Soon</span>
                   {stats.upcomingCount > 0 && (
                     <Badge
                       variant="secondary"
-                      className="ml-1 h-5 px-1.5 bg-cyan-500/20 text-cyan-400"
+                      className="ml-1 h-5 px-1.5 bg-blue-500/20 text-blue-400 text-xs"
                     >
                       {stats.upcomingCount}
                     </Badge>
                   )}
                 </TabsTrigger>
                 <TabsTrigger
-                  value="history"
-                  className="flex items-center gap-2 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-400"
+                  value="all"
+                  className="flex items-center gap-1 sm:gap-2 data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400"
                 >
-                  <History className="w-4 h-4" />
-                  <span className="hidden sm:inline">ประวัติ</span>
-                  <span className="sm:hidden">ประวัติ</span>
+                  <Coins className="w-4 h-4" />
+                  <span className="hidden sm:inline">ทั้งหมด</span>
+                  <span className="sm:hidden">All</span>
+                  {stats.allCount > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="ml-1 h-5 px-1.5 bg-purple-500/20 text-purple-400 text-xs"
+                    >
+                      {stats.allCount}
+                    </Badge>
+                  )}
                 </TabsTrigger>
               </TabsList>
 
@@ -985,23 +971,26 @@ export function AirdropsTable() {
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
-                      placeholder="ค้นหาโปรเจค หรือ สัญลักษณ์..."
+                      placeholder="ค้นหาโปรเจค หรือ Symbol..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9 bg-muted/30"
+                      className="pl-9 bg-muted/30 border-primary/20 focus:border-primary/40"
                     />
                   </div>
 
                   {availableChains.length > 0 && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="gap-2 bg-muted/30">
+                        <Button
+                          variant="outline"
+                          className="gap-2 bg-muted/30 border-primary/20"
+                        >
                           <Filter className="w-4 h-4" />
                           Chain
                           {selectedChains.length > 0 && (
                             <Badge
                               variant="secondary"
-                              className="ml-1 h-5 px-1.5"
+                              className="ml-1 h-5 px-1.5 bg-primary/20 text-primary"
                             >
                               {selectedChains.length}
                             </Badge>
@@ -1028,7 +1017,7 @@ export function AirdropsTable() {
                     variant="outline"
                     size="icon"
                     onClick={handleRefresh}
-                    className="bg-muted/30"
+                    className="bg-muted/30 border-primary/20 hover:bg-primary/10"
                   >
                     <RefreshCw className="w-4 h-4" />
                   </Button>
@@ -1050,7 +1039,7 @@ export function AirdropsTable() {
                         <Badge
                           key={chain}
                           variant="secondary"
-                          className="gap-1"
+                          className="gap-1 bg-primary/10 text-primary"
                         >
                           {chain}
                           <button
@@ -1066,7 +1055,10 @@ export function AirdropsTable() {
                         </Badge>
                       ))}
                       {searchQuery && (
-                        <Badge variant="secondary" className="gap-1">
+                        <Badge
+                          variant="secondary"
+                          className="gap-1 bg-primary/10 text-primary"
+                        >
                           &ldquo;{searchQuery}&rdquo;
                           <button
                             onClick={() => setSearchQuery("")}
@@ -1080,7 +1072,7 @@ export function AirdropsTable() {
                         variant="ghost"
                         size="sm"
                         onClick={clearFilters}
-                        className="h-6 text-xs"
+                        className="h-6 text-xs text-muted-foreground hover:text-primary"
                       >
                         ล้างทั้งหมด
                       </Button>
@@ -1090,181 +1082,140 @@ export function AirdropsTable() {
               </div>
 
               {/* Table Content */}
-              <TabsContent value={activeTab} className="mt-4">
-                {isLoading ? (
-                  <div className="space-y-3">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <Skeleton key={i} className="h-16 w-full rounded-xl" />
-                    ))}
+              {isLoading ? (
+                <div className="space-y-4 mt-4">
+                  {[...Array(5)].map((_, i) => (
+                    <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                  ))}
+                </div>
+              ) : filteredData.length === 0 ? (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="flex flex-col items-center justify-center py-16 text-center"
+                >
+                  <div className="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+                    <Gift className="w-10 h-10 text-muted-foreground" />
                   </div>
-                ) : (
-                  <>
-                    <div className="rounded-xl border overflow-hidden bg-muted/20">
-                      <Table>
-                        <TableHeader>
-                          {table.getHeaderGroups().map((headerGroup) => (
-                            <TableRow
-                              key={headerGroup.id}
-                              className="bg-muted/50 hover:bg-muted/50"
+                  <h3 className="text-lg font-semibold text-foreground mb-2">
+                    {activeTab === "today"
+                      ? "ยังไม่มี Airdrop วันนี้"
+                      : activeTab === "upcoming"
+                        ? "ยังไม่มี Airdrop ที่กำลังจะมา"
+                        : "ไม่พบ Airdrop"}
+                  </h3>
+                  <p className="text-sm text-muted-foreground max-w-md">
+                    {hasFilters
+                      ? "ลองปรับตัวกรองใหม่เพื่อดูผลลัพธ์ที่มากขึ้น"
+                      : "รอติดตามการอัปเดตจาก Binance Alpha"}
+                  </p>
+                </motion.div>
+              ) : (
+                <div className="mt-4 rounded-xl overflow-hidden border border-primary/10">
+                  <Table>
+                    <TableHeader>
+                      {table.getHeaderGroups().map((headerGroup) => (
+                        <TableRow
+                          key={headerGroup.id}
+                          className="bg-muted/30 hover:bg-muted/40"
+                        >
+                          {headerGroup.headers.map((header) => (
+                            <TableHead
+                              key={header.id}
+                              className="text-muted-foreground font-medium"
                             >
-                              {headerGroup.headers.map((header) => (
-                                <TableHead
-                                  key={header.id}
-                                  className="font-semibold"
+                              {header.isPlaceholder ? null : (
+                                <div
+                                  className={
+                                    header.column.getCanSort()
+                                      ? "cursor-pointer select-none flex items-center gap-1"
+                                      : ""
+                                  }
+                                  onClick={header.column.getToggleSortingHandler()}
                                 >
-                                  {header.isPlaceholder ? null : (
-                                    <div
-                                      className={
-                                        header.column.getCanSort()
-                                          ? "flex items-center gap-2 cursor-pointer select-none hover:text-foreground transition-colors"
-                                          : ""
-                                      }
-                                      onClick={header.column.getToggleSortingHandler()}
-                                    >
-                                      {flexRender(
-                                        header.column.columnDef.header as never,
-                                        header.getContext() as never,
-                                      )}
-                                      {header.column.getCanSort() && (
-                                        <span className="text-muted-foreground">
-                                          {{
-                                            asc: (
-                                              <ChevronUp className="w-4 h-4" />
-                                            ),
-                                            desc: (
-                                              <ChevronDown className="w-4 h-4" />
-                                            ),
-                                          }[
-                                            header.column.getIsSorted() as string
-                                          ] ?? (
-                                            <ChevronsUpDown className="w-4 h-4 opacity-50" />
-                                          )}
-                                        </span>
-                                      )}
-                                    </div>
+                                  {flexRender(
+                                    header.column.columnDef.header as string,
+                                    header.getContext() as never,
                                   )}
-                                </TableHead>
-                              ))}
-                            </TableRow>
+                                  {{
+                                    asc: (
+                                      <ChevronUp className="w-4 h-4 text-primary" />
+                                    ),
+                                    desc: (
+                                      <ChevronDown className="w-4 h-4 text-primary" />
+                                    ),
+                                  }[header.column.getIsSorted() as string] ??
+                                    (header.column.getCanSort() ? (
+                                      <ChevronsUpDown className="w-4 h-4 opacity-50" />
+                                    ) : null)}
+                                </div>
+                              )}
+                            </TableHead>
                           ))}
-                        </TableHeader>
-                        <TableBody>
-                          {table.getRowModel().rows?.length ? (
-                            table.getRowModel().rows.map((row, index) => (
-                              <motion.tr
-                                key={row.id}
-                                initial={{ opacity: 0, x: -10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{
-                                  delay: index * 0.03,
-                                  duration: 0.2,
-                                }}
-                                className="border-b border-muted/30 transition-all hover:bg-muted/30 group"
-                              >
-                                {row.getVisibleCells().map((cell) => (
-                                  <TableCell key={cell.id} className="py-4">
-                                    {flexRender(
-                                      cell.column.columnDef.cell as never,
-                                      cell.getContext() as never,
-                                    )}
-                                  </TableCell>
-                                ))}
-                              </motion.tr>
-                            ))
-                          ) : (
-                            <TableRow>
-                              <TableCell
-                                colSpan={table.getAllColumns().length}
-                                className="h-40"
-                              >
-                                <motion.div
-                                  initial={{ opacity: 0, scale: 0.9 }}
-                                  animate={{ opacity: 1, scale: 1 }}
-                                  className="flex flex-col items-center gap-3 text-muted-foreground"
-                                >
-                                  {activeTab === "today" ? (
-                                    <>
-                                      <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center">
-                                        <AlertCircle className="w-8 h-8 opacity-50" />
-                                      </div>
-                                      <div className="text-center">
-                                        <p className="font-medium">
-                                          ไม่มี Airdrop ที่เคลมได้วันนี้
-                                        </p>
-                                        <p className="text-sm">
-                                          ลองดูแท็บ &ldquo;กำลังจะมา&rdquo;
-                                          สำหรับ Airdrop ที่กำลังจะเปิด
-                                        </p>
-                                      </div>
-                                    </>
-                                  ) : activeTab === "upcoming" ? (
-                                    <>
-                                      <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center">
-                                        <Calendar className="w-8 h-8 opacity-50" />
-                                      </div>
-                                      <div className="text-center">
-                                        <p className="font-medium">
-                                          ยังไม่มี Airdrop ที่กำลังจะมา
-                                        </p>
-                                        <p className="text-sm">
-                                          กดปุ่ม Sync เพื่ออัพเดทข้อมูลล่าสุด
-                                        </p>
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center">
-                                        <History className="w-8 h-8 opacity-50" />
-                                      </div>
-                                      <div className="text-center">
-                                        <p className="font-medium">
-                                          ยังไม่มีประวัติการเคลม
-                                        </p>
-                                        <p className="text-sm">
-                                          Airdrop ที่เคลมแล้วจะแสดงที่นี่
-                                        </p>
-                                      </div>
-                                    </>
-                                  )}
-                                </motion.div>
+                        </TableRow>
+                      ))}
+                    </TableHeader>
+                    <TableBody>
+                      <AnimatePresence>
+                        {table.getRowModel().rows.map((row, index) => (
+                          <motion.tr
+                            key={row.id}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{
+                              delay: index * 0.02,
+                              duration: 0.2,
+                            }}
+                            className="border-b border-primary/5 hover:bg-primary/5 transition-colors cursor-pointer"
+                            onClick={() =>
+                              handleAirdropClick(row.original as Airdrop)
+                            }
+                          >
+                            {row.getVisibleCells().map((cell) => (
+                              <TableCell key={cell.id} className="py-3">
+                                {flexRender(
+                                  cell.column.columnDef.cell as never,
+                                  cell.getContext() as never,
+                                )}
                               </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
+                            ))}
+                          </motion.tr>
+                        ))}
+                      </AnimatePresence>
+                    </TableBody>
+                  </Table>
 
-                    {/* Pagination */}
-                    {table.getPageCount() > 1 && (
-                      <div className="flex items-center justify-between mt-4 px-2">
-                        <div className="text-sm text-muted-foreground">
-                          หน้า {table.getState().pagination.pageIndex + 1} จาก{" "}
-                          {table.getPageCount()} (
-                          {table.getFilteredRowModel().rows.length} รายการ)
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => table.previousPage()}
-                            disabled={!table.getCanPreviousPage()}
-                          >
-                            ก่อนหน้า
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => table.nextPage()}
-                            disabled={!table.getCanNextPage()}
-                          >
-                            ถัดไป
-                          </Button>
-                        </div>
+                  {/* Pagination */}
+                  {table.getPageCount() > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-primary/10 bg-muted/20">
+                      <div className="text-sm text-muted-foreground">
+                        หน้า {table.getState().pagination.pageIndex + 1} จาก{" "}
+                        {table.getPageCount()} ({filteredData.length} รายการ)
                       </div>
-                    )}
-                  </>
-                )}
-              </TabsContent>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => table.previousPage()}
+                          disabled={!table.getCanPreviousPage()}
+                          className="border-primary/20"
+                        >
+                          ก่อนหน้า
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => table.nextPage()}
+                          disabled={!table.getCanNextPage()}
+                          className="border-primary/20"
+                        >
+                          ถัดไป
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </Tabs>
           </CardHeader>
         </Card>
@@ -1275,156 +1226,122 @@ export function AirdropsTable() {
         open={!!selectedAirdrop}
         onOpenChange={() => setSelectedAirdrop(null)}
       >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/30 to-purple-500/30 flex items-center justify-center text-2xl">
-                {selectedAirdrop?.logo || "🎁"}
-              </div>
-              <div>
-                <DialogTitle className="text-2xl">
-                  {selectedAirdrop?.projectName}
-                </DialogTitle>
-                <DialogDescription className="flex items-center gap-2 mt-1">
-                  <span className="text-lg font-medium">
-                    {selectedAirdrop?.symbol}
-                  </span>
-                  {selectedAirdrop && (
-                    <>
+        <DialogContent className="max-w-lg">
+          {selectedAirdrop && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center text-2xl font-bold border border-primary/20">
+                    {selectedAirdrop.logo === "🎁" ? (
+                      <Sparkles className="w-6 h-6 text-primary" />
+                    ) : (
+                      selectedAirdrop.symbol.charAt(0)
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      {selectedAirdrop.projectName}
                       <Badge
                         variant="outline"
-                        className={
-                          chainColors[selectedAirdrop.chain] || chainColors.BSC
-                        }
-                      >
-                        {selectedAirdrop.chain}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className={
-                          typeColors[selectedAirdrop.type] || typeColors.Airdrop
-                        }
+                        className={`${typeColors[selectedAirdrop.type] || typeColors["AIRDROP"]} font-medium`}
                       >
                         {selectedAirdrop.type}
                       </Badge>
-                    </>
-                  )}
+                    </div>
+                    <div className="text-sm text-muted-foreground font-normal">
+                      ${selectedAirdrop.symbol} • {selectedAirdrop.chain}
+                    </div>
+                  </div>
+                </DialogTitle>
+                <DialogDescription>
+                  {selectedAirdrop.description || "รายละเอียด Airdrop"}
                 </DialogDescription>
-              </div>
-            </div>
-          </DialogHeader>
+              </DialogHeader>
 
-          {selectedAirdrop && (
-            <div className="space-y-6 mt-4">
-              {selectedAirdrop.description && (
-                <div className="p-4 rounded-xl bg-muted/30">
-                  <h4 className="font-semibold mb-2 text-sm text-muted-foreground">
-                    คำอธิบาย
-                  </h4>
-                  <p className="text-sm">{selectedAirdrop.description}</p>
+              <div className="space-y-4 mt-4">
+                {/* Alpha Points Info */}
+                <div className="p-4 rounded-xl bg-gradient-to-br from-amber-500/10 to-yellow-500/5 border border-amber-500/20">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Star className="w-5 h-5 text-amber-400" />
+                    <span className="font-semibold text-amber-400">
+                      Alpha Points
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">
+                        Points ที่ต้องการ
+                      </div>
+                      <div className="text-xl font-bold text-amber-400">
+                        {selectedAirdrop.requiredPoints || 0}{" "}
+                        <span className="text-sm">pts</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">
+                        Points ที่จะถูกหัก
+                      </div>
+                      <div className="text-xl font-bold text-red-400">
+                        -{selectedAirdrop.deductPoints || 0}{" "}
+                        <span className="text-sm">pts</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <MagicCard className="p-4">
-                  <div className="text-sm text-muted-foreground mb-1">
-                    จำนวน Airdrop
-                  </div>
-                  <div className="text-2xl font-bold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
-                    {selectedAirdrop.airdropAmount}
-                  </div>
-                  {selectedAirdrop.estimatedValue && (
-                    <div className="text-sm text-emerald-400 mt-1">
-                      ≈ ${selectedAirdrop.estimatedValue.toLocaleString()} USD
+                {/* Time Info */}
+                {selectedAirdrop.claimStartDate && (
+                  <div className="p-4 rounded-xl bg-muted/30 border border-primary/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Clock className="w-4 h-4 text-primary" />
+                      <span className="font-medium">เวลาเริ่ม Claim</span>
                     </div>
-                  )}
-                </MagicCard>
-
-                <MagicCard className="p-4">
-                  <div className="text-sm text-muted-foreground mb-1">
-                    คะแนนที่ต้องการ
-                  </div>
-                  <div className="text-2xl font-bold text-amber-400">
-                    {selectedAirdrop.requiredPoints || 0}
-                  </div>
-                  {selectedAirdrop.deductPoints > 0 && (
-                    <div className="text-sm text-red-400 mt-1">
-                      หักแต้ม -{selectedAirdrop.deductPoints}
-                    </div>
-                  )}
-                </MagicCard>
-              </div>
-
-              {selectedAirdrop.claimStartDate && (
-                <div className="grid grid-cols-2 gap-4">
-                  <MagicCard className="p-4">
-                    <div className="text-sm text-muted-foreground mb-1">
-                      เริ่มเคลม
-                    </div>
-                    <div className="font-bold">
+                    <div className="text-lg font-semibold">
                       {format(
                         new Date(selectedAirdrop.claimStartDate),
-                        "dd MMM yyyy HH:mm",
+                        "dd MMMM yyyy HH:mm",
                         { locale: th },
                       )}
                     </div>
-                    <div className="text-sm text-cyan-400 mt-1">
+                    <div className="text-sm text-muted-foreground">
                       {formatDistanceToNow(
                         new Date(selectedAirdrop.claimStartDate),
                         { locale: th, addSuffix: true },
                       )}
                     </div>
-                  </MagicCard>
+                  </div>
+                )}
 
-                  {selectedAirdrop.claimEndDate && (
-                    <MagicCard className="p-4">
-                      <div className="text-sm text-muted-foreground mb-1">
-                        สิ้นสุด
+                {/* Contract Address */}
+                {selectedAirdrop.contractAddress && (
+                  <div className="p-4 rounded-xl bg-muted/30 border border-primary/10">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">
+                          Contract Address
+                        </div>
+                        <div className="text-sm font-mono">
+                          {selectedAirdrop.contractAddress.slice(0, 10)}...
+                          {selectedAirdrop.contractAddress.slice(-8)}
+                        </div>
                       </div>
-                      <div className="font-bold">
-                        {format(
-                          new Date(selectedAirdrop.claimEndDate),
-                          "dd MMM yyyy HH:mm",
-                          { locale: th },
-                        )}
-                      </div>
-                      <div className="text-sm text-orange-400 mt-1">
-                        {formatDistanceToNow(
-                          new Date(selectedAirdrop.claimEndDate),
-                          { locale: th, addSuffix: true },
-                        )}
-                      </div>
-                    </MagicCard>
-                  )}
-                </div>
-              )}
-
-              {selectedAirdrop.requirements &&
-                selectedAirdrop.requirements.length > 0 && (
-                  <div>
-                    <h4 className="font-semibold mb-3 text-sm text-muted-foreground">
-                      ความต้องการ
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedAirdrop.requirements.map((req, i) => (
-                        <Badge
-                          key={i}
-                          variant="secondary"
-                          className="text-sm py-1.5 px-3"
-                        >
-                          {req}
-                        </Badge>
-                      ))}
+                      <a
+                        href={`https://bscscan.com/token/${selectedAirdrop.contractAddress}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors"
+                      >
+                        <ExternalLink className="w-4 h-4 text-primary" />
+                      </a>
                     </div>
                   </div>
                 )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-                <ShimmerButton
-                  className="w-full py-4 text-base"
-                  background="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-                  onClick={() => {
-                    if (selectedAirdrop) {
+                {/* Actions */}
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1 gap-2"
+                    onClick={() => {
                       sendAirdropAlert({
                         name: selectedAirdrop.projectName,
                         symbol: selectedAirdrop.symbol,
@@ -1444,26 +1361,27 @@ export function AirdropsTable() {
                         deductPoints: selectedAirdrop.deductPoints,
                         contractAddress: selectedAirdrop.contractAddress,
                       });
-                    }
-                  }}
-                  disabled={isSendingTelegram}
-                >
-                  <Send className="w-5 h-5 mr-2" />
-                  ส่ง Telegram
-                </ShimmerButton>
-
-                <Button
-                  className="w-full bg-gradient-to-r from-primary via-purple-500 to-cyan-500 hover:opacity-90 text-white font-semibold py-4 text-base"
-                  onClick={() =>
-                    window.open("https://www.binance.com/en/alpha", "_blank")
-                  }
-                >
-                  {selectedAirdrop.status === "claimable"
-                    ? "🎁 เคลมเลย"
-                    : "⏰ ดูรายละเอียด"}
-                </Button>
+                    }}
+                    disabled={isSendingTelegram}
+                  >
+                    <Send className="w-4 h-4" />
+                    ส่งแจ้งเตือน Telegram
+                  </Button>
+                  {selectedAirdrop.contractAddress && (
+                    <Button variant="outline" className="gap-2" asChild>
+                      <a
+                        href={`https://bscscan.com/token/${selectedAirdrop.contractAddress}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        BscScan
+                      </a>
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
+            </>
           )}
         </DialogContent>
       </Dialog>

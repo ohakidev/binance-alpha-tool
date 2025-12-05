@@ -10,7 +10,7 @@ import {
   QueryClient,
   UseQueryOptions,
 } from "@tanstack/react-query";
-import { useCallback, useRef, useEffect } from "react";
+import { useCallback, useRef, useEffect, useState } from "react";
 
 // ============================================
 // Cache Configuration - Optimized for each data type
@@ -384,7 +384,12 @@ export function useVisibilityRefresh(
 ) {
   const { enabled = true, minInterval = 60000 } = options;
   const queryClient = useQueryClient();
-  const lastRefresh = useRef<number>(Date.now());
+  const lastRefresh = useRef<number>(0);
+
+  useEffect(() => {
+    // Initialize on mount
+    lastRefresh.current = Date.now();
+  }, []);
 
   useEffect(() => {
     if (!enabled || typeof document === "undefined") return;
@@ -406,7 +411,7 @@ export function useVisibilityRefresh(
     };
   }, [enabled, minInterval, queryClient, queryKey]);
 
-  return { lastRefresh: lastRefresh.current };
+  return { getLastRefresh: () => lastRefresh.current };
 }
 
 // ============================================
@@ -431,22 +436,32 @@ export function usePollingQuery<T>(
   } = options;
 
   const errorCount = useRef(0);
+  const [currentInterval, setCurrentInterval] = useState(baseInterval);
 
-  // Calculate interval based on errors (exponential backoff)
-  const currentInterval = Math.min(
-    baseInterval * Math.pow(2, errorCount.current),
-    maxInterval,
-  );
+  // Update interval in effect when errorCount changes
+  useEffect(() => {
+    const newInterval = Math.min(
+      baseInterval * Math.pow(2, errorCount.current),
+      maxInterval,
+    );
+    setCurrentInterval(newInterval);
+  }, [baseInterval, maxInterval]);
 
   return useQuery({
     queryKey,
     queryFn: async () => {
       try {
         const result = await queryFn();
-        errorCount.current = 0; // Reset on success
+        if (errorCount.current > 0) {
+          errorCount.current = 0;
+          setCurrentInterval(baseInterval);
+        }
         return result;
       } catch (error) {
         errorCount.current++;
+        setCurrentInterval(
+          Math.min(baseInterval * Math.pow(2, errorCount.current), maxInterval),
+        );
         onError?.(error as Error);
         throw error;
       }

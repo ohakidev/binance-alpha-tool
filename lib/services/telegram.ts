@@ -41,6 +41,18 @@ interface ClaimableAlertData {
   requiredPoints?: number;
 }
 
+interface AirdropReminderData {
+  name: string;
+  symbol: string;
+  scheduledTime: Date;
+  minutesUntil: number;
+  chain: string;
+  points?: number | null;
+  amount?: string | null;
+  contractAddress?: string | null;
+  type?: string;
+}
+
 interface StabilityWarningData {
   stabilityScore: number;
   riskLevel: string;
@@ -472,6 +484,158 @@ class TelegramService {
   }
 
   /**
+   * Send airdrop reminder notification (20 minutes before)
+   * Like alpha123.uk's pre-airdrop notifications
+   */
+  async sendAirdropReminder(data: AirdropReminderData): Promise<boolean> {
+    if (!this.isEnabled || !this.bot) {
+      console.log("Telegram airdrop reminder (disabled):", data.name);
+      return false;
+    }
+
+    try {
+      const timeText = data.scheduledTime.toLocaleString("en-US", {
+        timeZone: "Asia/Bangkok",
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+
+      const lines: string[] = [
+        `⏰ *Binance Alpha Airdrop Reminder*`,
+        ``,
+        `🚀 *${data.name}* ($${data.symbol}) starting soon!`,
+        ``,
+        `⏱️ Time: *${data.minutesUntil} minutes* from now`,
+        `📅 At: ${timeText} (Bangkok)`,
+        ``,
+      ];
+
+      if (data.points) {
+        lines.push(`🎯 Required Points: ${data.points}`);
+      }
+
+      if (data.amount) {
+        lines.push(`🎁 Amount: ${data.amount}`);
+      }
+
+      lines.push(`🔗 Chain: #${data.chain}`);
+
+      if (data.type) {
+        lines.push(`📋 Type: ${data.type}`);
+      }
+
+      if (data.contractAddress) {
+        lines.push(``, `📦 Contract:`);
+        lines.push(`\`${data.contractAddress}\``);
+      }
+
+      lines.push(``, `⚡ Get ready to claim!`);
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            {
+              text: "🌐 Binance Alpha",
+              url: "https://www.binance.com/en/alpha",
+            },
+            {
+              text: "📊 Trade",
+              url: `https://www.binance.com/en/trade/${data.symbol}_USDT`,
+            },
+          ],
+        ],
+      };
+
+      await this.bot.sendMessage(this.chatId, lines.join("\n"), {
+        parse_mode: "Markdown",
+        disable_web_page_preview: true,
+        reply_markup: keyboard,
+      });
+
+      console.log(
+        `✅ Airdrop reminder sent for: ${data.name} (${data.minutesUntil}m)`,
+      );
+      return true;
+    } catch (error) {
+      this.logError("sendAirdropReminder", error, data.name);
+      return false;
+    }
+  }
+
+  /**
+   * Send airdrop live notification (just started)
+   */
+  async sendAirdropLive(data: AirdropReminderData): Promise<boolean> {
+    if (!this.isEnabled || !this.bot) {
+      console.log("Telegram airdrop live (disabled):", data.name);
+      return false;
+    }
+
+    try {
+      const lines: string[] = [
+        `🔴 *LIVE NOW - Binance Alpha Airdrop*`,
+        ``,
+        `🎁 *${data.name}* ($${data.symbol}) is NOW CLAIMABLE!`,
+        ``,
+      ];
+
+      if (data.points) {
+        lines.push(`🎯 Required Points: ${data.points}`);
+      }
+
+      if (data.amount) {
+        lines.push(`🎁 Amount: ${data.amount}`);
+      }
+
+      lines.push(`🔗 Chain: #${data.chain}`);
+
+      if (data.contractAddress) {
+        lines.push(``, `📦 Contract:`);
+        lines.push(`\`${data.contractAddress}\``);
+      }
+
+      lines.push(``, `🚀 *CLAIM NOW!*`);
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            {
+              text: "🎯 CLAIM NOW",
+              url: "https://www.binance.com/en/alpha",
+            },
+          ],
+          [
+            {
+              text: "📊 Trade",
+              url: `https://www.binance.com/en/trade/${data.symbol}_USDT`,
+            },
+            {
+              text: "📈 MEXC",
+              url: `https://www.mexc.com/exchange/${data.symbol}_USDT`,
+            },
+          ],
+        ],
+      };
+
+      await this.bot.sendMessage(this.chatId, lines.join("\n"), {
+        parse_mode: "Markdown",
+        disable_web_page_preview: true,
+        reply_markup: keyboard,
+      });
+
+      console.log(`✅ Airdrop LIVE notification sent for: ${data.name}`);
+      return true;
+    } catch (error) {
+      this.logError("sendAirdropLive", error, data.name);
+      return false;
+    }
+  }
+
+  /**
    * Log error with context
    */
   private logError(method: string, error: unknown, context?: string): void {
@@ -500,4 +664,5 @@ export type {
   ClaimableAlertData,
   StabilityWarningData,
   TelegramConfig,
+  AirdropReminderData,
 };

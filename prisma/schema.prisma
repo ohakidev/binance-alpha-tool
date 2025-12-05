@@ -228,3 +228,146 @@ enum AirdropType {
   PRETGE    // Pre-TGE
   AIRDROP   // Standard Airdrop
 }
+
+// Airdrop Schedule model - Track airdrop timing like alpha123.uk
+model AirdropSchedule {
+  id              String    @id @default(uuid())
+  token           String    // Token symbol
+  name            String    // Project full name
+
+  // Schedule details
+  scheduledTime   DateTime  // When the airdrop will be available
+  endTime         DateTime? // When the airdrop ends (optional)
+
+  // Airdrop info
+  points          Int?      // Required points to claim
+  deductPoints    Int?      // Points deducted after claim
+  amount          String?   // Amount to receive (e.g., "100 POWER")
+
+  // Chain info
+  chain           String    @default("BSC")
+  contractAddress String?
+
+  // Status tracking
+  status          ScheduleStatus @default(UPCOMING)
+  type            AirdropType    @default(AIRDROP)
+
+  // Price/Value tracking
+  estimatedPrice  Float?    // Estimated price per token
+  estimatedValue  Float?    // Estimated total value
+
+  // Source info
+  source          String    @default("binance") // binance, manual, announcement
+  sourceUrl       String?   // Link to announcement/source
+
+  // Metadata
+  logoUrl         String?
+  description     String?
+
+  // Flags
+  isActive        Boolean   @default(true)
+  isVerified      Boolean   @default(false)
+  notified        Boolean   @default(false) // Has notification been sent
+
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([token, scheduledTime])
+  @@index([scheduledTime])
+  @@index([status])
+  @@index([token])
+  @@map("airdrop_schedules")
+}
+
+// Schedule status enum
+enum ScheduleStatus {
+  UPCOMING    // Not yet available
+  TODAY       // Available today
+  LIVE        // Currently claimable
+  ENDED       // Claim period ended
+  CANCELLED   // Cancelled
+}
+
+// Binance Alpha Token model - Store raw token data from Binance API
+model BinanceAlphaToken {
+  id              String    @id @default(uuid())
+  alphaId         String    @unique // Binance Alpha ID
+  tokenId         String
+  symbol          String    @unique
+  name            String
+
+  // Chain info
+  chainId         String
+  chainName       String
+  contractAddress String
+
+  // Price data
+  price           Float     @default(0)
+  priceChange24h  Float     @default(0)
+  priceHigh24h    Float     @default(0)
+  priceLow24h     Float     @default(0)
+  volume24h       Float     @default(0)
+
+  // Market data
+  marketCap       Float     @default(0)
+  fdv             Float     @default(0)
+  liquidity       Float     @default(0)
+  holders         Int       @default(0)
+  totalSupply     String?
+  circulatingSupply String?
+
+  // Alpha specific
+  score           Int       @default(0)
+  mulPoint        Int       @default(1) // Point multiplier (1x, 2x, 4x)
+  listingTime     DateTime?
+
+  // Flags
+  onlineTge       Boolean   @default(false)
+  onlineAirdrop   Boolean   @default(false)
+  hotTag          Boolean   @default(false)
+  offline         Boolean   @default(false)
+  listingCex      Boolean   @default(false)
+
+  // Status
+  isActive        Boolean   @default(true)
+
+  // Metadata
+  iconUrl         String?
+
+  // Timestamps
+  lastSyncAt      DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([symbol])
+  @@index([onlineAirdrop])
+  @@index([onlineTge])
+  @@map("binance_alpha_tokens")
+}
+
+// Sync log for tracking API syncs
+model SyncLog {
+  id          String    @id @default(uuid())
+  source      String    // binance-alpha, alpha123, etc.
+  action      String    // fetch, sync, update
+
+  // Results
+  success     Boolean
+  tokensCount Int       @default(0)
+  created     Int       @default(0)
+  updated     Int       @default(0)
+  errors      Int       @default(0)
+
+  // Timing
+  duration    Int       @default(0) // milliseconds
+
+  // Details
+  details     String?   // JSON string with additional info
+  errorMessage String?
+
+  createdAt   DateTime  @default(now())
+
+  @@index([source, createdAt])
+  @@map("sync_logs")
+}

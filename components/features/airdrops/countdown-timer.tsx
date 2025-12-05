@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
 /**
  * Countdown Timer Component
  * Flip animation countdown for airdrop drop times
  */
 
-import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect, useState, useRef } from 'react';
+import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useState, useRef } from "react";
 
 interface TimeLeft {
   days: number;
@@ -21,15 +21,14 @@ interface CountdownTimerProps {
 }
 
 function FlipDigit({ value, label }: { value: number; label: string }) {
-  const [prevValue, setPrevValue] = useState(value);
+  const prevValueRef = useRef(value);
 
+  // Update ref after render completes
   useEffect(() => {
-    if (value !== prevValue) {
-      setPrevValue(value);
-    }
-  }, [value, prevValue]);
+    prevValueRef.current = value;
+  });
 
-  const displayValue = value.toString().padStart(2, '0');
+  const displayValue = value.toString().padStart(2, "0");
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -40,9 +39,9 @@ function FlipDigit({ value, label }: { value: number; label: string }) {
             initial={{ rotateX: 90, opacity: 0 }}
             animate={{ rotateX: 0, opacity: 1 }}
             exit={{ rotateX: -90, opacity: 0 }}
-            transition={{ duration: 0.6, ease: 'easeOut' }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
             className="absolute inset-0 flex items-center justify-center glass-card rounded-lg"
-            style={{ transformStyle: 'preserve-3d' }}
+            style={{ transformStyle: "preserve-3d" }}
           >
             <span className="text-2xl md:text-3xl font-bold gradient-text-gold">
               {displayValue}
@@ -60,7 +59,10 @@ function FlipDigit({ value, label }: { value: number; label: string }) {
   );
 }
 
-export function CountdownTimer({ targetDate, onComplete }: CountdownTimerProps) {
+export function CountdownTimer({
+  targetDate,
+  onComplete,
+}: CountdownTimerProps) {
   const [timeLeft, setTimeLeft] = useState<TimeLeft>({
     days: 0,
     hours: 0,
@@ -96,7 +98,9 @@ export function CountdownTimer({ targetDate, onComplete }: CountdownTimerProps) 
 
       return {
         days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-        hours: Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+        hours: Math.floor(
+          (difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
+        ),
         minutes: Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60)),
         seconds: Math.floor((difference % (1000 * 60)) / 1000),
       };
@@ -120,7 +124,9 @@ export function CountdownTimer({ targetDate, onComplete }: CountdownTimerProps) 
         animate={{ scale: 1, opacity: 1 }}
         className="glass-card px-4 py-2 rounded-lg text-center"
       >
-        <span className="text-sm font-bold gradient-text-gold">🎉 LIVE NOW!</span>
+        <span className="text-sm font-bold gradient-text-gold">
+          🎉 LIVE NOW!
+        </span>
       </motion.div>
     );
   }

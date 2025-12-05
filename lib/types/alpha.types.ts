@@ -5,6 +5,14 @@
 
 import { AirdropType, AirdropStatus } from "@prisma/client";
 
+// Schedule status type (matches Prisma enum)
+export type ScheduleStatus =
+  | "UPCOMING"
+  | "TODAY"
+  | "LIVE"
+  | "ENDED"
+  | "CANCELLED";
+
 // ============= Enums =============
 
 export enum AlphaDataSourceType {
@@ -262,7 +270,7 @@ export interface IAlphaService {
   /** Get tokens by status */
   getTokensByStatus(
     status: AirdropStatus,
-    forceRefresh?: boolean
+    forceRefresh?: boolean,
   ): Promise<AlphaServiceResponse>;
 
   /** Get active airdrops */
@@ -394,3 +402,130 @@ export interface AlphaEvent {
  * Event handler type
  */
 export type AlphaEventHandler = (event: AlphaEvent) => void;
+
+// ============= Airdrop Schedule Types =============
+
+/**
+ * Airdrop schedule data like alpha123.uk displays
+ */
+export interface AirdropScheduleData {
+  id?: string;
+  token: string;
+  name: string;
+  scheduledTime: Date;
+  endTime?: Date | null;
+  points?: number | null;
+  deductPoints?: number | null;
+  amount?: string | null;
+  chain: string;
+  contractAddress?: string | null;
+  status: ScheduleStatus;
+  type: AirdropType;
+  estimatedPrice?: number | null;
+  estimatedValue?: number | null;
+  source: string;
+  sourceUrl?: string | null;
+  logoUrl?: string | null;
+  description?: string | null;
+  isActive: boolean;
+  isVerified: boolean;
+  notified: boolean;
+}
+
+/**
+ * Today's airdrop display format (like alpha123.uk)
+ */
+export interface TodayAirdrop {
+  token: string;
+  name: string;
+  points: number | null;
+  amount: string | null;
+  time: string; // e.g., "05:00 PM"
+  chain: string;
+  contractAddress?: string | null;
+  logoUrl?: string | null;
+  status: "upcoming" | "live" | "ended";
+  estimatedValue?: number | null;
+}
+
+/**
+ * Upcoming airdrop display format
+ */
+export interface UpcomingAirdrop {
+  token: string;
+  name: string;
+  points: number | null;
+  amount: string | null;
+  date: string; // e.g., "2024-01-15"
+  time: string; // e.g., "05:00 PM"
+  chain: string;
+  contractAddress?: string | null;
+  logoUrl?: string | null;
+  daysUntil: number;
+  estimatedValue?: number | null;
+}
+
+/**
+ * Schedule service response
+ */
+export interface ScheduleServiceResponse {
+  success: boolean;
+  today: TodayAirdrop[];
+  upcoming: UpcomingAirdrop[];
+  lastUpdate: Date;
+  source: string;
+}
+
+/**
+ * Raw announcement data from Binance
+ */
+export interface BinanceAnnouncementRaw {
+  id: string;
+  title: string;
+  code: string;
+  publishDate: number;
+  type: string;
+  catalogId: string;
+  catalogName: string;
+}
+
+/**
+ * Parsed announcement with airdrop info
+ */
+export interface ParsedAirdropAnnouncement {
+  token: string;
+  name: string;
+  scheduledTime: Date;
+  points?: number;
+  amount?: string;
+  chain?: string;
+  source: string;
+  sourceUrl: string;
+}
+
+/**
+ * Sync result for schedule data
+ */
+export interface ScheduleSyncResult {
+  success: boolean;
+  created: number;
+  updated: number;
+  errors: number;
+  source: string;
+  duration: number;
+  timestamp: Date;
+}
+
+/**
+ * Schedule filter options
+ */
+export interface ScheduleFilterOptions {
+  status?: ScheduleStatus | ScheduleStatus[];
+  type?: AirdropType | AirdropType[];
+  chain?: string | string[];
+  fromDate?: Date;
+  toDate?: Date;
+  token?: string;
+  limit?: number;
+  offset?: number;
+}

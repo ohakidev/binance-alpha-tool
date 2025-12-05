@@ -9,11 +9,12 @@
  * - KOGE prioritized first, then sorted by stability (Green > Yellow > Red)
  * - Professional dark theme with glass morphism effects
  * - Responsive 2-column layout
+ * - Optimized performance with useMemo and useCallback
  */
 
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -35,9 +36,6 @@ import {
   ChevronsLeft,
   ChevronsRight,
   ChevronDown,
-  Activity,
-  DollarSign,
-  BarChart3,
   Info,
   Zap,
   Crown,
@@ -102,44 +100,7 @@ interface StabilityApiResponse {
 
 const POLLING_INTERVAL = 10000; // 10 seconds
 
-// ============= API Function =============
-
-async function fetchStabilityData(): Promise<StabilityApiResponse> {
-  const response = await fetch("/api/binance/alpha/stability-data");
-
-  if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
-  }
-
-  const data: StabilityApiResponse = await response.json();
-
-  if (!data.success) {
-    throw new Error(data.error || "Failed to fetch stability data");
-  }
-
-  return data;
-}
-
-// ============= Column Helper =============
-
-const columnHelper = createColumnHelper<StabilityData>();
-
-// ============= Utility Functions =============
-
-const formatVolume = (v: number) => {
-  if (v >= 1000000) return `$${(v / 1000000).toFixed(2)}M`;
-  if (v >= 1000) return `$${(v / 1000).toFixed(2)}K`;
-  return `$${v.toFixed(0)}`;
-};
-
-const formatPrice = (p: number) => {
-  if (p >= 1000) return `$${p.toFixed(2)}`;
-  if (p >= 1) return `$${p.toFixed(4)}`;
-  if (p >= 0.0001) return `$${p.toFixed(6)}`;
-  return `$${p.toFixed(8)}`;
-};
-
-// Stability badge configuration
+// Stability badge configuration - moved outside component to prevent recreation
 const stabilityConfig: Record<
   StabilityLevel,
   {
@@ -193,6 +154,247 @@ const stabilityConfig: Record<
   },
 };
 
+// ============= Utility Functions (moved outside component) =============
+
+const formatVolume = (v: number): string => {
+  if (v >= 1000000) return `$${(v / 1000000).toFixed(2)}M`;
+  if (v >= 1000) return `$${(v / 1000).toFixed(2)}K`;
+  return `$${v.toFixed(0)}`;
+};
+
+const formatPrice = (p: number): string => {
+  if (p >= 1000) return `$${p.toFixed(2)}`;
+  if (p >= 1) return `$${p.toFixed(4)}`;
+  if (p >= 0.0001) return `$${p.toFixed(6)}`;
+  return `$${p.toFixed(8)}`;
+};
+
+// ============= API Function =============
+
+async function fetchStabilityData(): Promise<StabilityApiResponse> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const response = await fetch("/api/binance/alpha/stability-data", {
+      signal: controller.signal,
+      headers: {
+        "Cache-Control": "no-cache",
+      },
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data: StabilityApiResponse = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || "Failed to fetch stability data");
+    }
+
+    return data;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
+// ============= Column Helper =============
+
+const columnHelper = createColumnHelper<StabilityData>();
+
+// ============= Memoized Sub-Components =============
+
+const ProjectCell = memo(function ProjectCell({
+  symbol,
+  chain,
+  isKoge,
+  isSpotPair,
+}: {
+  symbol: string;
+  chain: string;
+  isKoge: boolean;
+  isSpotPair?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <div
+        className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shadow-lg ${
+          isKoge
+            ? "bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-amber-500/30"
+            : isSpotPair
+              ? "bg-gradient-to-br from-cyan-400 to-blue-500 text-white shadow-cyan-500/30"
+              : "bg-gradient-to-br from-slate-600 to-slate-700 text-slate-200"
+        }`}
+      >
+        {symbol.substring(0, 2)}
+      </div>
+      <div className="flex flex-col">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-white text-base">{symbol}</span>
+          {isKoge && <Crown className="w-4 h-4 text-amber-400" />}
+          {isSpotPair && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+              SPOT
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-slate-500">{chain}</span>
+      </div>
+    </div>
+  );
+});
+
+const StabilityBadge = memo(function StabilityBadge({
+  stability,
+}: {
+  stability: StabilityLevel;
+}) {
+  const config = stabilityConfig[stability];
+  const Icon = config.icon;
+
+  return (
+    <div
+      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${config.bgClass} ${config.textClass} border ${config.borderClass}`}
+    >
+      <span
+        className={`w-2 h-2 rounded-full ${config.dotClass} ${
+          stability === "STABLE" ? "animate-pulse" : ""
+        }`}
+      />
+      <Icon className="w-3.5 h-3.5" />
+      {config.label}
+    </div>
+  );
+});
+
+const SpreadCell = memo(function SpreadCell({
+  spreadPercent,
+  spreadBps,
+  stability,
+}: {
+  spreadPercent: number;
+  spreadBps: number;
+  stability: StabilityLevel;
+}) {
+  const config = stabilityConfig[stability];
+
+  if (spreadBps === 0) {
+    return <span className="text-slate-500 text-sm">—</span>;
+  }
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center gap-2">
+        <span className={`w-2 h-2 rounded-full ${config.dotClass}`} />
+        <span className={`font-bold text-base ${config.textClass}`}>
+          {spreadPercent.toFixed(2)}%
+        </span>
+      </div>
+      <span className="text-xs text-slate-500 ml-4">
+        {spreadBps.toFixed(0)} bps
+      </span>
+    </div>
+  );
+});
+
+const PriceCell = memo(function PriceCell({
+  price,
+  change,
+}: {
+  price: number;
+  change: number;
+}) {
+  return (
+    <div className="flex flex-col">
+      <span className="font-semibold text-white text-base">
+        {formatPrice(price)}
+      </span>
+      {change !== 0 && (
+        <span
+          className={`text-xs font-medium ${
+            change >= 0 ? "text-emerald-400" : "text-rose-400"
+          }`}
+        >
+          {change >= 0 ? "+" : ""}
+          {change.toFixed(2)}%
+        </span>
+      )}
+    </div>
+  );
+});
+
+const FourXDaysCell = memo(function FourXDaysCell({ days }: { days: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className={`font-bold text-base ${
+          days <= 5
+            ? "text-red-400"
+            : days <= 10
+              ? "text-amber-400"
+              : "text-emerald-400"
+        }`}
+      >
+        {days}
+      </span>
+      <span className="text-xs text-slate-500">days</span>
+    </div>
+  );
+});
+
+const TopVolumeItem = memo(function TopVolumeItem({
+  item,
+  index,
+}: {
+  item: StabilityData;
+  index: number;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between p-3 rounded-xl bg-slate-900/50 border border-slate-800/50 hover:border-slate-700/50 transition-all`}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold ${
+            index === 0
+              ? "bg-amber-500/20 text-amber-400"
+              : index === 1
+                ? "bg-slate-400/20 text-slate-400"
+                : "bg-orange-700/20 text-orange-400"
+          }`}
+        >
+          {index + 1}
+        </span>
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-white">{item.symbol}</span>
+            {item.symbol === "KOGE" && (
+              <Crown className="w-3.5 h-3.5 text-amber-400" />
+            )}
+            {item.isSpotPair && (
+              <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-400">
+                SPOT
+              </span>
+            )}
+          </div>
+          <span className="text-xs text-slate-500">
+            {formatPrice(item.price)}
+          </span>
+        </div>
+      </div>
+      <div className="text-right">
+        <span className="text-cyan-400 font-bold">
+          {formatVolume(item.volume24h)}
+        </span>
+      </div>
+    </div>
+  );
+});
+
 // ============= Main Component =============
 
 export default function StabilityPage() {
@@ -217,159 +419,88 @@ export default function StabilityPage() {
     queryFn: fetchStabilityData,
     refetchInterval: POLLING_INTERVAL,
     staleTime: POLLING_INTERVAL - 1000,
-    retry: 3,
+    retry: 2,
     retryDelay: 1000,
+    refetchOnWindowFocus: false,
   });
 
-  // Data is already sorted from API (KOGE first, then by stability)
+  // Memoized data
   const stabilityData = useMemo(
     () => apiResponse?.data || [],
     [apiResponse?.data],
   );
-  const summary = apiResponse?.summary;
 
-  // Countdown timer effect
+  // Countdown timer effect - optimized
   useEffect(() => {
     if (!dataUpdatedAt) return;
 
-    const updateCountdown = () => {
-      const elapsed = Date.now() - dataUpdatedAt;
-      const remaining = Math.max(0, (POLLING_INTERVAL - elapsed) / 1000);
-      setCountdown(remaining);
-      setIsRefreshing(remaining < 0.5 || isFetching);
+    let animationFrameId: number;
+    let lastUpdate = performance.now();
+
+    const updateCountdown = (currentTime: number) => {
+      if (currentTime - lastUpdate >= 100) {
+        const elapsed = Date.now() - dataUpdatedAt;
+        const remaining = Math.max(0, (POLLING_INTERVAL - elapsed) / 1000);
+        setCountdown(remaining);
+        setIsRefreshing(remaining < 0.5 || isFetching);
+        lastUpdate = currentTime;
+      }
+      animationFrameId = requestAnimationFrame(updateCountdown);
     };
 
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 100);
+    animationFrameId = requestAnimationFrame(updateCountdown);
 
-    return () => clearInterval(interval);
+    return () => cancelAnimationFrame(animationFrameId);
   }, [dataUpdatedAt, isFetching]);
 
-  // Top 3 most participated (highest volume)
+  // Top 3 most participated (highest volume) - memoized
   const topParticipated = useMemo(() => {
+    if (stabilityData.length === 0) return [];
     return [...stabilityData]
       .filter((item) => item.volume24h > 0)
       .sort((a, b) => b.volume24h - a.volume24h)
       .slice(0, 3);
   }, [stabilityData]);
 
-  // Table columns with pro design
+  // Table columns - memoized with stable references
   const columns = useMemo(
     () => [
       columnHelper.accessor("symbol", {
         header: "Project",
         cell: (info) => {
           const row = info.row.original;
-          const isKoge = row.symbol === "KOGE";
-
           return (
-            <div className="flex items-center gap-3">
-              {/* Token Icon */}
-              <div
-                className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shadow-lg ${
-                  isKoge
-                    ? "bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-amber-500/30"
-                    : row.isSpotPair
-                      ? "bg-gradient-to-br from-cyan-400 to-blue-500 text-white shadow-cyan-500/30"
-                      : "bg-gradient-to-br from-slate-600 to-slate-700 text-slate-200"
-                }`}
-              >
-                {row.symbol.substring(0, 2)}
-              </div>
-
-              <div className="flex flex-col">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-white text-base">
-                    {row.symbol}
-                  </span>
-                  {isKoge && <Crown className="w-4 h-4 text-amber-400" />}
-                  {row.isSpotPair && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-                      SPOT
-                    </span>
-                  )}
-                </div>
-                <span className="text-xs text-slate-500">{row.chain}</span>
-              </div>
-            </div>
+            <ProjectCell
+              symbol={row.symbol}
+              chain={row.chain}
+              isKoge={row.symbol === "KOGE"}
+              isSpotPair={row.isSpotPair}
+            />
           );
         },
       }),
       columnHelper.accessor("stability", {
         header: "Status",
-        cell: (info) => {
-          const stability = info.getValue() as StabilityLevel;
-          const config = stabilityConfig[stability];
-          const Icon = config.icon;
-
-          return (
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${config.bgClass} ${config.textClass} border ${config.borderClass}`}
-            >
-              <span
-                className={`w-2 h-2 rounded-full ${config.dotClass} ${
-                  stability === "STABLE" ? "animate-pulse" : ""
-                }`}
-              />
-              <Icon className="w-3.5 h-3.5" />
-              {config.label}
-            </motion.div>
-          );
-        },
+        cell: (info) => <StabilityBadge stability={info.getValue()} />,
       }),
       columnHelper.accessor("spreadPercent", {
         header: "24h Range",
-        cell: (info) => {
-          const spreadPercent = info.getValue();
-          const bps = info.row.original.spreadBps;
-          const stability = info.row.original.stability;
-          const config = stabilityConfig[stability];
-
-          if (bps === 0) {
-            return <span className="text-slate-500 text-sm">—</span>;
-          }
-
-          return (
-            <div className="flex flex-col">
-              <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${config.dotClass}`} />
-                <span className={`font-bold text-base ${config.textClass}`}>
-                  {spreadPercent.toFixed(2)}%
-                </span>
-              </div>
-              <span className="text-xs text-slate-500 ml-4">
-                {bps.toFixed(0)} bps
-              </span>
-            </div>
-          );
-        },
+        cell: (info) => (
+          <SpreadCell
+            spreadPercent={info.getValue()}
+            spreadBps={info.row.original.spreadBps}
+            stability={info.row.original.stability}
+          />
+        ),
       }),
       columnHelper.accessor("price", {
         header: "Price",
-        cell: (info) => {
-          const price = info.getValue();
-          const change = info.row.original.priceChange24h || 0;
-
-          return (
-            <div className="flex flex-col">
-              <span className="font-semibold text-white text-base">
-                {formatPrice(price)}
-              </span>
-              {change !== 0 && (
-                <span
-                  className={`text-xs font-medium ${
-                    change >= 0 ? "text-emerald-400" : "text-rose-400"
-                  }`}
-                >
-                  {change >= 0 ? "+" : ""}
-                  {change.toFixed(2)}%
-                </span>
-              )}
-            </div>
-          );
-        },
+        cell: (info) => (
+          <PriceCell
+            price={info.getValue()}
+            change={info.row.original.priceChange24h || 0}
+          />
+        ),
       }),
       columnHelper.accessor("volume24h", {
         header: "Volume 24h",
@@ -381,43 +512,47 @@ export default function StabilityPage() {
       }),
       columnHelper.accessor("fourXDays", {
         header: "4x Days",
-        cell: (info) => {
-          const days = info.getValue();
-          // Days remaining: more days = better (green), fewer days = worse (red)
-          return (
-            <div className="flex items-center gap-2">
-              <span
-                className={`font-bold text-base ${
-                  days <= 5
-                    ? "text-red-400"
-                    : days <= 10
-                      ? "text-amber-400"
-                      : "text-emerald-400"
-                }`}
-              >
-                {days}
-              </span>
-              <span className="text-xs text-slate-500">days</span>
-            </div>
-          );
-        },
+        cell: (info) => <FourXDaysCell days={info.getValue()} />,
       }),
     ],
     [],
   );
 
-  // Table instance - data is already sorted from API
+  // Custom global filter function that searches across symbol, project, and chain
+  const globalFilterFn = useCallback(
+    (
+      row: { original: StabilityData },
+      columnId: string,
+      filterValue: string,
+    ) => {
+      const search = filterValue.toLowerCase();
+      const { symbol, project, chain } = row.original;
+      return (
+        symbol.toLowerCase().includes(search) ||
+        project.toLowerCase().includes(search) ||
+        chain.toLowerCase().includes(search)
+      );
+    },
+    [],
+  );
+
+  // Table instance - memoized configuration
   const table = useReactTable({
     data: stabilityData,
     columns,
     state: { sorting, globalFilter },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
-    getRowId: (row, index) => `${row.symbol}-${row.chain}-${index}`,
+    getRowId: useCallback(
+      (row: StabilityData, index: number) =>
+        `${row.symbol}-${row.chain}-${index}`,
+      [],
+    ),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    globalFilterFn: globalFilterFn,
     initialState: {
       pagination: {
         pageSize: 10,
@@ -425,9 +560,9 @@ export default function StabilityPage() {
     },
   });
 
-  // Stability alert
+  // Stability alert - memoized callback
   const checkStabilityAlert = useCallback(() => {
-    if (!alertEnabled) return;
+    if (!alertEnabled || stabilityData.length === 0) return;
 
     const stableProjects = stabilityData.filter(
       (item) => item.stability === "STABLE",
@@ -442,7 +577,7 @@ export default function StabilityPage() {
     }
   }, [alertEnabled, stabilityData]);
 
-  // Request notification permission
+  // Request notification permission - memoized callback
   const enableAlerts = useCallback(async () => {
     if ("Notification" in window) {
       const permission = await Notification.requestPermission();
@@ -451,6 +586,15 @@ export default function StabilityPage() {
       }
     }
   }, []);
+
+  // Toggle alerts - memoized callback
+  const handleToggleAlerts = useCallback(() => {
+    if (alertEnabled) {
+      setAlertEnabled(false);
+    } else {
+      enableAlerts();
+    }
+  }, [alertEnabled, enableAlerts]);
 
   // Mount effect
   useEffect(() => {
@@ -465,11 +609,24 @@ export default function StabilityPage() {
     }
   }, [alertEnabled, checkStabilityAlert]);
 
-  // Manual refresh handler
+  // Manual refresh handler - memoized callback
   const handleManualRefresh = useCallback(() => {
     setIsRefreshing(true);
     refetch();
   }, [refetch]);
+
+  // Search handler - memoized callback
+  const handleSearchChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setGlobalFilter(e.target.value);
+    },
+    [],
+  );
+
+  // Toggle notes - memoized callback
+  const handleToggleNotes = useCallback(() => {
+    setShowNotes((prev) => !prev);
+  }, []);
 
   if (!mounted || isLoading) {
     return (
@@ -502,12 +659,7 @@ export default function StabilityPage() {
       </div>
 
       {/* Content */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="relative z-10 max-w-7xl mx-auto"
-      >
+      <div className="relative z-10 max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-4">
@@ -561,9 +713,7 @@ export default function StabilityPage() {
 
             {/* Alert Button */}
             <button
-              onClick={() =>
-                alertEnabled ? setAlertEnabled(false) : enableAlerts()
-              }
+              onClick={handleToggleAlerts}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all ${
                 alertEnabled
                   ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-lg shadow-emerald-500/10"
@@ -641,7 +791,7 @@ export default function StabilityPage() {
                       type="text"
                       placeholder="Search tokens..."
                       value={globalFilter}
-                      onChange={(e) => setGlobalFilter(e.target.value)}
+                      onChange={handleSearchChange}
                       className="w-full pl-11 pr-4 py-3 text-sm bg-slate-900/50 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/10 transition-all"
                     />
                   </div>
@@ -663,11 +813,7 @@ export default function StabilityPage() {
 
               {/* Table */}
               <div className="overflow-x-auto">
-                <motion.table
-                  className="w-full"
-                  animate={{ opacity: isRefreshing ? 0.7 : 1 }}
-                  transition={{ duration: 0.2 }}
-                >
+                <table className="w-full">
                   <thead>
                     <tr className="border-b border-slate-800/50 bg-slate-900/30">
                       {table.getHeaderGroups().map((headerGroup) =>
@@ -706,16 +852,13 @@ export default function StabilityPage() {
                         </td>
                       </tr>
                     ) : (
-                      table.getRowModel().rows.map((row, index) => {
+                      table.getRowModel().rows.map((row) => {
                         const isKoge = row.original.symbol === "KOGE";
                         const stability = row.original.stability;
 
                         return (
-                          <motion.tr
+                          <tr
                             key={row.id}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.02 }}
                             className={`border-b border-slate-800/30 transition-all ${
                               isKoge
                                 ? "bg-amber-500/5 hover:bg-amber-500/10"
@@ -734,12 +877,12 @@ export default function StabilityPage() {
                                 )}
                               </td>
                             ))}
-                          </motion.tr>
+                          </tr>
                         );
                       })
                     )}
                   </tbody>
-                </motion.table>
+                </table>
               </div>
 
               {/* Pagination */}
@@ -838,12 +981,11 @@ export default function StabilityPage() {
                   </span>
                 </div>
                 <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                  <motion.div
-                    className="h-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-400 rounded-full"
-                    animate={{
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-400 rounded-full transition-all duration-100"
+                    style={{
                       width: `${(countdown / (POLLING_INTERVAL / 1000)) * 100}%`,
                     }}
-                    transition={{ duration: 0.1 }}
                   />
                 </div>
                 <div className="flex items-center justify-between mt-3 text-xs text-slate-500">
@@ -857,94 +999,6 @@ export default function StabilityPage() {
               </div>
             </MagicCard>
 
-            {/* Summary Stats */}
-            {summary && (
-              <MagicCard
-                className="overflow-hidden rounded-2xl border-slate-800/50 p-5"
-                gradientColor="rgba(251, 191, 36, 0.03)"
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <Activity className="w-5 h-5 text-amber-400" />
-                  <h3 className="text-base font-bold text-white">
-                    Market Overview
-                  </h3>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Stable */}
-                  <div className="bg-emerald-500/10 rounded-xl p-4 border border-emerald-500/20">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Shield className="w-4 h-4 text-emerald-400" />
-                      <span className="text-xs text-emerald-400 font-medium">
-                        Stable
-                      </span>
-                    </div>
-                    <span className="text-2xl font-bold text-emerald-400">
-                      {summary.stableCount}
-                    </span>
-                  </div>
-                  {/* Moderate */}
-                  <div className="bg-amber-500/10 rounded-xl p-4 border border-amber-500/20">
-                    <div className="flex items-center gap-2 mb-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-400" />
-                      <span className="text-xs text-amber-400 font-medium">
-                        Moderate
-                      </span>
-                    </div>
-                    <span className="text-2xl font-bold text-amber-400">
-                      {summary.moderateCount || 0}
-                    </span>
-                  </div>
-                  {/* Unstable */}
-                  <div className="bg-rose-500/10 rounded-xl p-4 border border-rose-500/20">
-                    <div className="flex items-center gap-2 mb-2">
-                      <XCircle className="w-4 h-4 text-rose-400" />
-                      <span className="text-xs text-rose-400 font-medium">
-                        Unstable
-                      </span>
-                    </div>
-                    <span className="text-2xl font-bold text-rose-400">
-                      {summary.unstableCount}
-                    </span>
-                  </div>
-                  {/* Volume */}
-                  <div className="bg-cyan-500/10 rounded-xl p-4 border border-cyan-500/20">
-                    <div className="flex items-center gap-2 mb-2">
-                      <DollarSign className="w-4 h-4 text-cyan-400" />
-                      <span className="text-xs text-cyan-400 font-medium">
-                        Total Volume
-                      </span>
-                    </div>
-                    <span className="text-xl font-bold text-cyan-400">
-                      {formatVolume(summary.totalVolume24h)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Avg Spread */}
-                <div className="mt-4 bg-slate-900/50 rounded-xl p-4 border border-slate-800/50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <BarChart3 className="w-4 h-4 text-amber-400" />
-                      <span className="text-sm text-slate-400">Avg Spread</span>
-                    </div>
-                    <span className="text-lg font-bold text-amber-400">
-                      {summary.avgSpreadPercent.toFixed(2)}%
-                    </span>
-                  </div>
-                </div>
-
-                {summary.spotPairsCount > 0 && (
-                  <div className="mt-3 flex items-center gap-2 p-3 bg-cyan-500/10 rounded-xl border border-cyan-500/20">
-                    <Zap className="w-4 h-4 text-cyan-400" />
-                    <span className="text-xs text-cyan-400">
-                      {summary.spotPairsCount} Spot pair with real-time
-                      orderbook
-                    </span>
-                  </div>
-                )}
-              </MagicCard>
-            )}
-
             {/* Top 3 Most Participated */}
             <MagicCard
               className="overflow-hidden rounded-2xl border-slate-800/50 p-5"
@@ -956,50 +1010,11 @@ export default function StabilityPage() {
               </div>
               <div className="space-y-3">
                 {topParticipated.map((item, index) => (
-                  <motion.div
+                  <TopVolumeItem
                     key={`top-${item.symbol}-${index}`}
-                    className="flex items-center justify-between p-3 rounded-xl bg-slate-900/50 border border-slate-800/50 hover:border-slate-700/50 transition-all"
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold ${
-                          index === 0
-                            ? "bg-amber-500/20 text-amber-400"
-                            : index === 1
-                              ? "bg-slate-400/20 text-slate-400"
-                              : "bg-orange-700/20 text-orange-400"
-                        }`}
-                      >
-                        {index + 1}
-                      </span>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-white">
-                            {item.symbol}
-                          </span>
-                          {item.symbol === "KOGE" && (
-                            <Crown className="w-3.5 h-3.5 text-amber-400" />
-                          )}
-                          {item.isSpotPair && (
-                            <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-400">
-                              SPOT
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-xs text-slate-500">
-                          {formatPrice(item.price)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-cyan-400 font-bold">
-                        {formatVolume(item.volume24h)}
-                      </span>
-                    </div>
-                  </motion.div>
+                    item={item}
+                    index={index}
+                  />
                 ))}
                 {topParticipated.length === 0 && (
                   <div className="text-center text-slate-500 py-6">
@@ -1013,7 +1028,7 @@ export default function StabilityPage() {
             {/* Notes Section */}
             <div className="rounded-2xl border border-slate-800/50 overflow-hidden bg-slate-900/20">
               <button
-                onClick={() => setShowNotes(!showNotes)}
+                onClick={handleToggleNotes}
                 className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-800/30 transition-all"
               >
                 <div className="flex items-center gap-2">
@@ -1062,7 +1077,7 @@ export default function StabilityPage() {
                         </div>
                       </div>
                       <div className="flex items-start gap-3 p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/10">
-                        <BarChart3 className="w-4 h-4 text-cyan-400 mt-0.5" />
+                        <TrendingUp className="w-4 h-4 text-cyan-400 mt-0.5" />
                         <div>
                           <span className="text-xs font-semibold text-cyan-400">
                             Spread Definition
@@ -1086,7 +1101,7 @@ export default function StabilityPage() {
             </div>
           </div>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }

@@ -1,9 +1,67 @@
 /**
  * TypeScript Type Definitions
  * Centralized types for the Binance Alpha Tool
+ *
+ * This module consolidates all type exports for easy importing throughout the application.
+ * Types are organized by domain and re-exported from their respective modules.
  */
 
-// ============= Airdrop Types =============
+// ============= Re-export Alpha Types =============
+
+export { AlphaDataSourceType } from "./alpha.types";
+
+export type {
+  // Enums & Constants
+  ScheduleStatus,
+  ChainId,
+  ChainName,
+  PointMultiplier,
+
+  // Raw API Types
+  BinanceAlphaTokenRaw,
+  Alpha123ProjectRaw,
+  BinanceAlphaApiResponse,
+  BinanceAnnouncementRaw,
+
+  // Processed Types
+  AlphaToken,
+  AlphaProject,
+  AlphaServiceResponse,
+  AlphaSyncResult,
+  AlphaStats,
+  AlphaPrismaData,
+
+  // Cache Types
+  CacheEntry,
+  CacheConfig,
+
+  // Interface Types
+  IAlphaDataSource,
+  IAlphaService,
+
+  // Filter & Options Types
+  AlphaFilterOptions,
+  ScheduleFilterOptions,
+
+  // Event Types
+  AlphaEventType,
+  AlphaEvent,
+  AlphaEventHandler,
+
+  // Schedule Types
+  AirdropScheduleData,
+  TodayAirdrop,
+  UpcomingAirdrop,
+  ScheduleServiceResponse,
+  ScheduleSyncResult,
+  ParsedAirdropAnnouncement,
+} from "./alpha.types";
+
+// ============= UI & App Types =============
+
+/**
+ * Airdrop display type for UI components
+ */
 export interface Airdrop {
   id: string;
   projectName: string;
@@ -27,6 +85,7 @@ export interface AirdropFilters {
 }
 
 // ============= Stability Types =============
+
 export interface StabilityData {
   symbol: string;
   name: string;
@@ -50,6 +109,7 @@ export interface StabilityFilters {
 }
 
 // ============= Income Calendar Types =============
+
 export interface IncomeEntry {
   id: string;
   userId: string;
@@ -75,6 +135,7 @@ export interface IncomeStats {
 }
 
 // ============= User Types =============
+
 export interface User {
   id: string;
   username: string;
@@ -82,12 +143,13 @@ export interface User {
   color?: string;
   totalEarnings: number;
   entryCount: number;
-  balance: number; // Available balance for trading
+  balance: number;
   createdAt: Date;
   lastActive: Date;
 }
 
 // ============= BNB Calculator Types =============
+
 export interface BNBCalculation {
   targetBNB: number;
   raisedBNB: number;
@@ -105,6 +167,7 @@ export interface CalculationHistory {
 }
 
 // ============= Settings Types =============
+
 export interface NotificationSettings {
   enabled: boolean;
   airdropAlerts: boolean;
@@ -143,6 +206,7 @@ export interface UserSettings {
 }
 
 // ============= Backup Types =============
+
 export interface BackupData {
   version: string;
   timestamp: Date;
@@ -161,6 +225,7 @@ export interface BackupMetadata {
 }
 
 // ============= Toast Types =============
+
 export interface Toast {
   id: string;
   type: "success" | "error" | "warning" | "info" | "airdrop";
@@ -174,6 +239,7 @@ export interface Toast {
 }
 
 // ============= Chart Types =============
+
 export interface ChartDataPoint {
   timestamp: Date;
   value: number;
@@ -185,3 +251,31 @@ export interface PriceHistory {
   timeframe: "1h" | "4h" | "24h" | "7d";
   data: ChartDataPoint[];
 }
+
+// ============= Utility Types =============
+
+/**
+ * Make all properties of T optional recursively
+ */
+export type DeepPartial<T> = {
+  [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
+};
+
+/**
+ * Make specific keys required
+ */
+export type WithRequired<T, K extends keyof T> = T & { [P in K]-?: T[P] };
+
+/**
+ * Extract non-nullable type
+ */
+export type NonNullableFields<T> = {
+  [P in keyof T]: NonNullable<T[P]>;
+};
+
+/**
+ * Async function return type
+ */
+export type AsyncReturnType<
+  T extends (...args: unknown[]) => Promise<unknown>,
+> = T extends (...args: unknown[]) => Promise<infer R> ? R : never;

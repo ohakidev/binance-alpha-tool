@@ -74,7 +74,7 @@ export const AIRDROP_TYPE_MAP: Record<string, AirdropType> = {
  */
 export function normalizeChainName(
   chainId?: string,
-  chainName?: string
+  chainName?: string,
 ): string {
   // Try chain ID first (more reliable)
   if (chainId && CHAIN_ID_MAP[chainId]) {
@@ -127,7 +127,7 @@ export function determineAirdropStatus(
   options?: {
     isOffline?: boolean;
     onlineAirdrop?: boolean;
-  }
+  },
 ): AirdropStatus {
   const { isOffline = false, onlineAirdrop = false } = options || {};
 

@@ -40,7 +40,7 @@
 3. รัน script:
 
 ```bash
-node get-chat-id.js
+npx ts-node scripts/get-chat-id.ts
 ```
 
 4. คัดลอก Chat ID ที่แสดง
@@ -178,13 +178,13 @@ Check your Telegram channel.
 1. ตรวจสอบ `TELEGRAM_BOT_TOKEN` ในไฟล์ `.env.local`
 2. ลอง revoke token และสร้างใหม่ที่ @BotFather โดยใช้ `/token`
 
-### ❌ ไม่แสดง Chat ID เมื่อรัน get-chat-id.js
+### ❌ ไม่แสดง Chat ID เมื่อรัน get-chat-id.ts
 
 **สาเหตุ:**
 - ยังไม่ได้ส่งข้อความให้บอท
 
 **วิธีแก้:**
-1. รัน `node get-chat-id.js` ก่อน
+1. รัน `npx ts-node scripts/get-chat-id.ts` ก่อน
 2. **จากนั้น** ค่อยเปิด Telegram และส่งข้อความให้บอท
 3. Chat ID จะแสดงใน terminal
 

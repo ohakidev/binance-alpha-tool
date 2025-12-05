@@ -6,6 +6,12 @@
 // Main Service
 export { AlphaService, alphaService } from "./AlphaService";
 
+// Airdrop Schedule Service
+export {
+  AirdropScheduleService,
+  airdropScheduleService,
+} from "./AirdropScheduleService";
+
 // Data Sources
 export { BinanceAlphaSource, binanceAlphaSource } from "./BinanceAlphaSource";
 export { Alpha123Source, alpha123Source } from "./Alpha123Source";
@@ -24,6 +30,13 @@ export type {
   AlphaEvent,
   AlphaEventHandler,
   AlphaEventType,
+  // Schedule types
+  AirdropScheduleData,
+  TodayAirdrop,
+  UpcomingAirdrop,
+  ScheduleServiceResponse,
+  ScheduleSyncResult,
+  ScheduleFilterOptions,
 } from "@/lib/types/alpha.types";
 
 export { AlphaDataSourceType } from "@/lib/types/alpha.types";
