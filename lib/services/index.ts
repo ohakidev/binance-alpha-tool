@@ -30,10 +30,7 @@ export type {
 } from "./alpha";
 
 // Telegram Service - Notification service
-export {
-  TelegramService,
-  telegramService,
-} from "./telegram";
+export { TelegramService, telegramService } from "./telegram";
 
 export type {
   Language,
