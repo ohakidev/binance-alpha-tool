@@ -17,9 +17,10 @@ export async function GET() {
     const tickerData = await binanceClient.get24hrTicker();
 
     // Filter for popular pairs only
+    const popularPairsArray: string[] = [...POPULAR_PAIRS];
     const filteredData = Array.isArray(tickerData)
       ? tickerData.filter((ticker: { symbol: string }) =>
-          POPULAR_PAIRS.includes(ticker.symbol)
+          popularPairsArray.includes(ticker.symbol),
         )
       : [];
 
@@ -32,7 +33,7 @@ export async function GET() {
         volume: string;
         highPrice: string;
         lowPrice: string;
-      }) => formatTickerData(ticker)
+      }) => formatTickerData(ticker),
     );
 
     return NextResponse.json({
@@ -51,7 +52,7 @@ export async function GET() {
         error: "Failed to fetch market data from Binance",
         message: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

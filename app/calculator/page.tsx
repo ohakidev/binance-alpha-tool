@@ -6,18 +6,23 @@
  * Modern crypto-themed airdrop profit calculator with full i18n support
  */
 
-import { useState, useEffect } from "react";
+import { useSyncExternalStore } from "react";
 import { motion } from "framer-motion";
 import { UnifiedCalculator } from "@/components/features/calculator/unified-calculator";
 import { useLanguage } from "@/lib/stores/language-store";
 
+// Hydration-safe mounting hook using useSyncExternalStore
+const emptySubscribe = () => () => {};
+const getSnapshot = () => true;
+const getServerSnapshot = () => false;
+
+function useHydrated() {
+  return useSyncExternalStore(emptySubscribe, getSnapshot, getServerSnapshot);
+}
+
 export default function CalculatorPage() {
   const { language } = useLanguage();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useHydrated();
 
   // Show loading skeleton during hydration
   if (!mounted) {
@@ -25,7 +30,7 @@ export default function CalculatorPage() {
       <div className="min-h-screen bg-[#030305] p-4 md:p-8">
         {/* Premium gradient mesh background */}
         <div className="fixed inset-0 pointer-events-none">
-          <div className="absolute inset-0 bg-gradient-to-br from-[#030305] via-[#0a0a0c] to-[#030305]" />
+          <div className="absolute inset-0 bg-linear-to-br from-[#030305] via-[#0a0a0c] to-[#030305]" />
           <div className="absolute top-20 left-10 w-[500px] h-[500px] bg-[radial-gradient(circle,rgba(212,169,72,0.1)_0%,transparent_60%)] blur-3xl" />
           <div className="absolute bottom-20 right-20 w-[400px] h-[400px] bg-[radial-gradient(circle,rgba(184,134,11,0.08)_0%,transparent_60%)] blur-3xl" />
         </div>
@@ -34,7 +39,7 @@ export default function CalculatorPage() {
           <div className="animate-pulse space-y-6">
             {/* Header skeleton */}
             <div className="flex justify-center">
-              <div className="h-14 w-72 bg-gradient-to-r from-[rgba(212,169,72,0.15)] to-[rgba(184,134,11,0.08)] rounded-full border border-[rgba(212,169,72,0.2)]" />
+              <div className="h-14 w-72 bg-linear-to-r from-[rgba(212,169,72,0.15)] to-[rgba(184,134,11,0.08)] rounded-full border border-[rgba(212,169,72,0.2)]" />
             </div>
 
             {/* Tabs skeleton */}
@@ -45,12 +50,12 @@ export default function CalculatorPage() {
             {/* Content grid skeleton */}
             <div className="grid lg:grid-cols-2 gap-6">
               <div className="space-y-6">
-                <div className="h-72 bg-gradient-to-br from-[rgba(212,169,72,0.08)] via-[#0a0a0c] to-[rgba(184,134,11,0.04)] rounded-2xl border border-[rgba(212,169,72,0.15)]" />
-                <div className="h-72 bg-gradient-to-br from-[rgba(212,169,72,0.06)] via-[#0a0a0c] to-[rgba(184,134,11,0.03)] rounded-2xl border border-[rgba(212,169,72,0.12)]" />
+                <div className="h-72 bg-linear-to-br from-[rgba(212,169,72,0.08)] via-[#0a0a0c] to-[rgba(184,134,11,0.04)] rounded-2xl border border-[rgba(212,169,72,0.15)]" />
+                <div className="h-72 bg-linear-to-br from-[rgba(212,169,72,0.06)] via-[#0a0a0c] to-[rgba(184,134,11,0.03)] rounded-2xl border border-[rgba(212,169,72,0.12)]" />
               </div>
               <div className="space-y-6">
-                <div className="h-72 bg-gradient-to-br from-[rgba(212,169,72,0.06)] via-[#0a0a0c] to-[rgba(184,134,11,0.03)] rounded-2xl border border-[rgba(212,169,72,0.12)]" />
-                <div className="h-72 bg-gradient-to-br from-[rgba(212,169,72,0.04)] via-[#0a0a0c] to-[rgba(184,134,11,0.02)] rounded-2xl border border-[rgba(212,169,72,0.1)]" />
+                <div className="h-72 bg-linear-to-br from-[rgba(212,169,72,0.06)] via-[#0a0a0c] to-[rgba(184,134,11,0.03)] rounded-2xl border border-[rgba(212,169,72,0.12)]" />
+                <div className="h-72 bg-linear-to-br from-[rgba(212,169,72,0.04)] via-[#0a0a0c] to-[rgba(184,134,11,0.02)] rounded-2xl border border-[rgba(212,169,72,0.1)]" />
               </div>
             </div>
           </div>
@@ -67,7 +72,7 @@ export default function CalculatorPage() {
       {/* Premium animated background */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         {/* Base gradient */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[#030305] via-[#0a0a0c] to-[#030305]" />
+        <div className="absolute inset-0 bg-linear-to-br from-[#030305] via-[#0a0a0c] to-[#030305]" />
 
         {/* Gold ambient glow - top left */}
         <motion.div
@@ -180,7 +185,7 @@ export default function CalculatorPage() {
       </motion.div>
 
       {/* Bottom gradient fade */}
-      <div className="fixed bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-[#030305] to-transparent pointer-events-none z-0" />
+      <div className="fixed bottom-0 left-0 right-0 h-24 bg-linear-to-t from-[#030305] to-transparent pointer-events-none z-0" />
     </div>
   );
 }

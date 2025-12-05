@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useSyncExternalStore } from "react";
 import { motion } from "framer-motion";
 import { useLanguage } from "@/lib/stores/language-store";
 import { useUserStore } from "@/lib/stores/user-store";
@@ -30,15 +30,19 @@ interface CalculatorState {
   dailyCostPerUnit: number;
 }
 
+// Hydration-safe mounting hook using useSyncExternalStore
+const emptySubscribe = () => () => {};
+const getSnapshot = () => true;
+const getServerSnapshot = () => false;
+
+function useHydrated() {
+  return useSyncExternalStore(emptySubscribe, getSnapshot, getServerSnapshot);
+}
+
 export function UnifiedCalculator() {
   const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState("calculator");
-  const [mounted, setMounted] = useState(false);
-
-  // Mount effect
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useHydrated();
 
   // Get active user
   const activeUserId = useUserStore((state) => state.activeUserId);
@@ -158,12 +162,12 @@ export function UnifiedCalculator() {
   // Show loading skeleton during hydration
   if (!mounted) {
     return (
-      <div className="min-h-screen bg-[#fafbfc] dark:bg-gradient-to-br dark:from-slate-950 dark:via-blue-950 dark:to-slate-900 p-4 md:p-8">
+      <div className="min-h-screen bg-[#fafbfc] dark:bg-linear-to-br dark:from-slate-950 dark:via-blue-950 dark:to-slate-900 p-4 md:p-8">
         <div className="max-w-7xl mx-auto">
           <div className="animate-pulse space-y-6">
             {/* Header skeleton */}
             <div className="flex justify-center">
-              <div className="h-12 w-64 bg-gradient-to-r from-amber-500/20 to-orange-500/20 rounded-full" />
+              <div className="h-12 w-64 bg-linear-to-r from-amber-500/20 to-orange-500/20 rounded-full" />
             </div>
 
             {/* Tabs skeleton */}
@@ -174,12 +178,12 @@ export function UnifiedCalculator() {
             {/* Content grid skeleton */}
             <div className="grid lg:grid-cols-2 gap-6">
               <div className="space-y-6">
-                <div className="h-64 bg-gradient-to-br from-amber-500/10 to-orange-500/10 rounded-2xl border border-amber-500/20" />
-                <div className="h-64 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 rounded-2xl border border-cyan-500/20" />
+                <div className="h-64 bg-linear-to-br from-amber-500/10 to-orange-500/10 rounded-2xl border border-amber-500/20" />
+                <div className="h-64 bg-linear-to-br from-cyan-500/10 to-blue-500/10 rounded-2xl border border-cyan-500/20" />
               </div>
               <div className="space-y-6">
-                <div className="h-64 bg-gradient-to-br from-emerald-500/10 to-green-500/10 rounded-2xl border border-emerald-500/20" />
-                <div className="h-64 bg-gradient-to-br from-rose-500/10 to-pink-500/10 rounded-2xl border border-rose-500/20" />
+                <div className="h-64 bg-linear-to-br from-emerald-500/10 to-green-500/10 rounded-2xl border border-emerald-500/20" />
+                <div className="h-64 bg-linear-to-br from-rose-500/10 to-pink-500/10 rounded-2xl border border-rose-500/20" />
               </div>
             </div>
           </div>
@@ -191,7 +195,7 @@ export function UnifiedCalculator() {
   return (
     <div
       key={`calculator-${language}`}
-      className="min-h-screen bg-[#fafbfc] dark:bg-gradient-to-br dark:from-slate-950 dark:via-blue-950 dark:to-slate-900 p-4 md:p-8"
+      className="min-h-screen bg-[#fafbfc] dark:bg-linear-to-br dark:from-slate-950 dark:via-blue-950 dark:to-slate-900 p-4 md:p-8"
     >
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -205,10 +209,10 @@ export function UnifiedCalculator() {
             initial={{ scale: 0.9 }}
             animate={{ scale: 1 }}
             transition={{ type: "spring", stiffness: 200, damping: 20 }}
-            className="inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-amber-500/20 to-orange-500/20 rounded-full border border-amber-500/30 mb-4"
+            className="inline-flex items-center gap-3 px-6 py-3 bg-linear-to-r from-amber-500/20 to-orange-500/20 rounded-full border border-amber-500/30 mb-4"
           >
             <Calculator className="w-6 h-6 text-amber-400" />
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-amber-200 to-orange-300 bg-clip-text text-transparent">
+            <h1 className="text-2xl font-bold bg-linear-to-r from-amber-200 to-orange-300 bg-clip-text text-transparent">
               {t("calc.title")}
             </h1>
           </motion.div>
@@ -246,8 +250,8 @@ export function UnifiedCalculator() {
                     step={100}
                     format={(v) => `$${v.toLocaleString()}`}
                     hint={`${(values.accountCost / 365).toFixed(2)} ${t("common.perDay")}`}
-                    showTicks
-                    tickValues={[100, 1000, 100000, 500000, 1000000]}
+                    quickSelectValues={[1000, 10000, 100000, 500000, 1000000]}
+                    useLogScale
                   />
 
                   {/* Daily Transactions Slider - Changed from Dropdown */}
@@ -262,8 +266,8 @@ export function UnifiedCalculator() {
                     step={1}
                     format={(v) => `$${v.toLocaleString()}`}
                     hint={`${t("calc.transactionBonus")}: ${Math.floor((values.dailyTransactions / 1000) * (values.includeBSC ? 4 : 1))}`}
-                    showTicks
-                    tickValues={[2, 16000, 65000, 131000, 262000]}
+                    quickSelectValues={[1000, 10000, 50000, 100000, 262000]}
+                    useLogScale
                   />
 
                   <CheckboxControl
@@ -295,8 +299,7 @@ export function UnifiedCalculator() {
                     max={5000}
                     step={10}
                     format={(v) => `${v} ${t("calc.points")}`}
-                    showTicks
-                    tickValues={[50, 500, 1000, 2000, 3000, 5000]}
+                    quickSelectValues={[100, 500, 1000, 2000, 5000]}
                   />
 
                   <SliderControl
@@ -307,8 +310,7 @@ export function UnifiedCalculator() {
                     max={500}
                     step={10}
                     format={(v) => `$${v}`}
-                    showTicks
-                    tickValues={[10, 50, 100, 200, 300, 500]}
+                    quickSelectValues={[20, 50, 100, 200, 500]}
                   />
 
                   <SliderControl
@@ -319,8 +321,7 @@ export function UnifiedCalculator() {
                     max={50}
                     step={1}
                     format={(v) => `$${v}`}
-                    showTicks
-                    tickValues={[0, 10, 20, 30, 40, 50]}
+                    quickSelectValues={[0, 5, 10, 20, 50]}
                   />
                 </SectionCard>
               </div>
@@ -408,7 +409,7 @@ export function UnifiedCalculator() {
                             -${calculations.cost30Days.toLocaleString()}
                           </td>
                         </tr>
-                        <tr className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-t-2 border-amber-500/30">
+                        <tr className="bg-linear-to-r from-amber-500/10 to-orange-500/10 border-t-2 border-amber-500/30">
                           <td className="px-4 py-4 text-sm font-bold text-amber-200">
                             {t("calc.netProfit")}
                           </td>
@@ -450,7 +451,7 @@ export function UnifiedCalculator() {
                       <div
                         className={`w-6 h-6 rounded-full ${
                           isProfitable ? "bg-emerald-500/20" : "bg-rose-500/20"
-                        } flex items-center justify-center flex-shrink-0 mt-0.5`}
+                        } flex items-center justify-center shrink-0 mt-0.5`}
                       >
                         {isProfitable ? (
                           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -492,7 +493,7 @@ export function UnifiedCalculator() {
             >
               <div className="space-y-4">
                 {/* Latest Volume - Highlighted */}
-                <div className="p-6 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border-2 border-amber-500/40 shadow-lg">
+                <div className="p-6 rounded-xl bg-linear-to-br from-amber-500/20 to-orange-500/20 border-2 border-amber-500/40 shadow-lg">
                   <div className="flex items-center gap-3 mb-3">
                     <Activity className="w-6 h-6 text-amber-400" />
                     <h3 className="text-lg font-bold text-amber-200">
@@ -500,7 +501,7 @@ export function UnifiedCalculator() {
                     </h3>
                   </div>
                   <div className="flex items-baseline gap-3">
-                    <p className="text-5xl font-bold bg-gradient-to-r from-amber-200 to-orange-300 bg-clip-text text-transparent">
+                    <p className="text-5xl font-bold bg-linear-to-r from-amber-200 to-orange-300 bg-clip-text text-transparent">
                       $
                       {dailyVolumeData[
                         dailyVolumeData.length - 1
@@ -523,7 +524,7 @@ export function UnifiedCalculator() {
 
                 {/* Summary Stats */}
                 <div className="grid grid-cols-3 gap-4">
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/30">
+                  <div className="p-4 rounded-xl bg-linear-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/30">
                     <p className="text-xs text-blue-300 mb-1">
                       {t("calc.totalPoints")}
                     </p>
@@ -533,7 +534,7 @@ export function UnifiedCalculator() {
                         .toLocaleString()}
                     </p>
                   </div>
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30">
+                  <div className="p-4 rounded-xl bg-linear-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30">
                     <p className="text-xs text-purple-300 mb-1">
                       {t("calc.totalVolume")}
                     </p>
@@ -544,7 +545,7 @@ export function UnifiedCalculator() {
                         .toLocaleString()}
                     </p>
                   </div>
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-500/10 to-green-500/10 border border-emerald-500/30">
+                  <div className="p-4 rounded-xl bg-linear-to-br from-emerald-500/10 to-green-500/10 border border-emerald-500/30">
                     <p className="text-xs text-emerald-300 mb-1">
                       {t("calc.avgDaily")}
                     </p>
@@ -655,7 +656,7 @@ function SectionCard({
       gradientColor={colorMap[colorName] || "rgba(255, 255, 255, 0.1)"}
     >
       <div
-        className={`px-6 py-4 bg-gradient-to-r ${gradient} border-b ${border}`}
+        className={`px-6 py-4 bg-linear-to-r ${gradient} border-b ${border}`}
       >
         <div className="flex items-center gap-3">
           <div className="text-white">{icon}</div>
@@ -667,7 +668,7 @@ function SectionCard({
   );
 }
 
-// Slider Control Component with Direct Input and Tick Marks
+// Slider Control Component with Direct Input and Quick Select Buttons
 interface SliderControlProps {
   label: string;
   value: number;
@@ -677,8 +678,8 @@ interface SliderControlProps {
   step: number;
   format: (value: number) => string;
   hint?: string;
-  showTicks?: boolean;
-  tickValues?: number[];
+  quickSelectValues?: number[];
+  useLogScale?: boolean;
 }
 
 function SliderControl({
@@ -690,12 +691,40 @@ function SliderControl({
   step,
   format,
   hint,
-  showTicks = false,
-  tickValues = [],
+  quickSelectValues = [],
+  useLogScale = false,
 }: SliderControlProps) {
+  // Use value directly for display, avoiding useEffect for sync
   const [inputValue, setInputValue] = useState(value.toString());
   const [isEditing, setIsEditing] = useState(false);
-  const percentage = ((value - min) / (max - min)) * 100;
+
+  // Sync input value with prop value without useEffect
+  const displayValue = isEditing ? inputValue : value.toString();
+
+  // Logarithmic scale helpers
+  const minLog = useLogScale ? Math.log(Math.max(min, 1)) : min;
+  const maxLog = useLogScale ? Math.log(max) : max;
+
+  // Convert actual value to slider position (0-100)
+  const valueToSlider = (val: number) => {
+    if (useLogScale) {
+      const logVal = Math.log(Math.max(val, 1));
+      return ((logVal - minLog) / (maxLog - minLog)) * 100;
+    }
+    return ((val - min) / (max - min)) * 100;
+  };
+
+  // Convert slider position to actual value
+  const sliderToValue = (sliderVal: number) => {
+    if (useLogScale) {
+      const logVal = minLog + (sliderVal / 100) * (maxLog - minLog);
+      return Math.round(Math.exp(logVal));
+    }
+    return min + (sliderVal / 100) * (max - min);
+  };
+
+  const percentage = valueToSlider(value);
+  const sliderPosition = percentage;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
@@ -713,93 +742,108 @@ function SliderControl({
     }
   };
 
-  const handleInputFocus = () => {
-    setIsEditing(true);
-    setInputValue(value.toString());
-  };
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       (e.target as HTMLInputElement).blur();
     }
   };
 
-  // Update input value when value prop changes (from slider)
-  useEffect(() => {
-    if (!isEditing) {
-      setInputValue(value.toString());
-    }
-  }, [value, isEditing]);
+  // Update inputValue when focus is gained (instead of useEffect)
+  const handleInputFocusWithSync = () => {
+    setIsEditing(true);
+    setInputValue(value.toString());
+  };
 
-  // Format tick value for display - shorter format
-  const formatTick = (val: number) => {
-    if (val >= 1000000) return `${(val / 1000000).toFixed(0)}M`;
-    if (val >= 1000) return `${(val / 1000).toFixed(0)}K`;
+  // Format quick select value for display - shorter format
+  const formatQuickSelect = (val: number) => {
+    if (val >= 1000000)
+      return `${(val / 1000000).toFixed(val % 1000000 === 0 ? 0 : 1)}M`;
+    if (val >= 1000)
+      return `${(val / 1000).toFixed(val % 1000 === 0 ? 0 : 1)}K`;
     return `${val}`;
   };
 
   return (
     <div className="space-y-4">
+      {/* Label and Input */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <label className="text-sm font-medium text-slate-300 flex-shrink-0">
+        <label className="text-sm font-medium text-slate-300 shrink-0">
           {label}
         </label>
         <input
           type="text"
-          value={isEditing ? inputValue : format(value)}
+          value={isEditing ? displayValue : format(value)}
           onChange={handleInputChange}
           onBlur={handleInputBlur}
-          onFocus={handleInputFocus}
+          onFocus={handleInputFocusWithSync}
           onKeyDown={handleKeyDown}
-          className="text-lg font-bold text-white px-4 py-2 bg-white/10 border-2 border-white/20 hover:border-orange-500/50 focus:border-orange-500 rounded-xl backdrop-blur-sm transition-all outline-none text-right w-full sm:w-auto sm:min-w-[140px]"
+          className="text-lg font-bold text-white px-4 py-2.5 bg-white/10 border-2 border-white/20 hover:border-amber-500/50 focus:border-amber-500 rounded-xl backdrop-blur-sm transition-all outline-none text-right w-full sm:w-auto sm:min-w-40"
         />
       </div>
 
-      <div className="relative pt-1">
-        <div className="h-3 bg-slate-700/50 rounded-full overflow-hidden backdrop-blur-sm">
+      {/* Slider Track */}
+      <div className="relative pt-2 pb-1">
+        <div className="h-2.5 bg-slate-700/60 rounded-full overflow-hidden backdrop-blur-sm border border-slate-600/30">
           <motion.div
-            className="h-full bg-gradient-to-r from-amber-400 via-orange-500 to-orange-600 shadow-lg shadow-orange-500/30"
-            initial={{ width: 0 }}
+            key={`slider-bar-${value}`}
+            className="h-full bg-linear-to-r from-amber-400 via-amber-500 to-orange-500 shadow-lg shadow-amber-500/20"
+            initial={{ width: `${percentage}%` }}
             animate={{ width: `${percentage}%` }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
           />
         </div>
         <input
           type="range"
-          min={min}
-          max={max}
-          step={step}
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="absolute inset-0 w-full h-3 opacity-0 cursor-pointer z-10"
+          min={0}
+          max={100}
+          step={0.1}
+          value={sliderPosition}
+          onChange={(e) => {
+            const newValue = sliderToValue(Number(e.target.value));
+            const roundedValue = useLogScale
+              ? newValue
+              : Math.round(newValue / step) * step;
+            onChange(Math.min(Math.max(roundedValue, min), max));
+          }}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
         />
         <motion.div
-          className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 shadow-xl shadow-orange-500/60 pointer-events-none border-2 border-white/20"
-          style={{
-            left: `calc(${percentage}% - 12px)`,
-            top: "calc(50% + 2px)",
+          key={`slider-thumb-${value}`}
+          className="absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-linear-to-br from-amber-300 to-orange-500 shadow-lg shadow-amber-500/50 pointer-events-none border-2 border-white/30 ring-2 ring-amber-400/20"
+          initial={{
+            left: `calc(${percentage}% - 10px)`,
+            top: "calc(50% + 4px)",
           }}
-          whileHover={{ scale: 1.2 }}
-          transition={{ type: "spring", stiffness: 400, damping: 25 }}
+          animate={{
+            left: `calc(${percentage}% - 10px)`,
+            top: "calc(50% + 4px)",
+          }}
+          transition={{ type: "spring", stiffness: 500, damping: 30 }}
         />
       </div>
 
-      {/* Tick marks with values - improved spacing */}
-      {showTicks && tickValues.length > 0 && (
-        <div className="flex justify-between items-center px-1 mt-1">
-          {tickValues.slice(0, 5).map((tickVal, index) => {
-            const isFirst = index === 0;
-            const isLast = index === tickValues.slice(0, 5).length - 1;
+      {/* Quick Select Buttons */}
+      {quickSelectValues.length > 0 && (
+        <div className="flex flex-wrap gap-2 justify-center">
+          {quickSelectValues.map((quickVal) => {
+            const isSelected = value === quickVal;
             return (
-              <button
-                key={tickVal}
-                onClick={() => onChange(tickVal)}
-                className={`text-[10px] text-slate-400 hover:text-cyan-400 font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                  isFirst ? "text-left" : isLast ? "text-right" : "text-center"
-                }`}
+              <motion.button
+                key={quickVal}
+                onClick={() => onChange(quickVal)}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className={`
+                  px-3 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200
+                  ${
+                    isSelected
+                      ? "bg-linear-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30 border border-amber-400/50"
+                      : "bg-slate-800/80 text-slate-300 hover:bg-slate-700/80 hover:text-white border border-slate-600/50 hover:border-amber-500/30"
+                  }
+                `}
               >
-                {formatTick(tickVal)}
-              </button>
+                {formatQuickSelect(quickVal)}
+              </motion.button>
             );
           })}
         </div>
@@ -807,8 +851,8 @@ function SliderControl({
 
       {/* Hint text */}
       {hint && (
-        <div className="text-center mt-2">
-          <span className="text-xs text-cyan-400 font-medium px-3 py-1 bg-cyan-500/10 rounded-full">
+        <div className="text-center">
+          <span className="text-xs text-cyan-400/90 font-medium px-3 py-1.5 bg-cyan-500/10 rounded-full border border-cyan-500/20">
             {hint}
           </span>
         </div>
@@ -915,7 +959,7 @@ function ResultRow({ label, value, color, highlight, hint }: ResultRowProps) {
       transition={{ duration: 0.5 }}
       className={`flex items-center justify-between p-4 rounded-lg transition-all ${
         highlight
-          ? "bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 shadow-lg shadow-emerald-500/20"
+          ? "bg-linear-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 shadow-lg shadow-emerald-500/20"
           : "bg-white/5 hover:bg-white/10"
       }`}
     >

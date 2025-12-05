@@ -65,7 +65,10 @@ export function sanitizeFilename(filename: string): string {
 /**
  * Sanitize URL to prevent open redirect vulnerabilities
  */
-export function sanitizeUrl(url: string, allowedDomains: string[] = []): string | null {
+export function sanitizeUrl(
+  url: string,
+  allowedDomains: string[] = [],
+): string | null {
   if (!url || typeof url !== "string") return null;
 
   try {
@@ -80,7 +83,7 @@ export function sanitizeUrl(url: string, allowedDomains: string[] = []): string 
     if (allowedDomains.length > 0) {
       const isAllowed = allowedDomains.some(
         (domain) =>
-          parsed.hostname === domain || parsed.hostname.endsWith(`.${domain}`)
+          parsed.hostname === domain || parsed.hostname.endsWith(`.${domain}`),
       );
       if (!isAllowed) return null;
     }
@@ -124,7 +127,7 @@ export function generateCSRFToken(sessionId: string): string {
   const array = new Uint8Array(CSRF_TOKEN_LENGTH);
   crypto.getRandomValues(array);
   const token = Array.from(array, (b) => b.toString(16).padStart(2, "0")).join(
-    ""
+    "",
   );
 
   // Store token with timestamp
@@ -142,10 +145,7 @@ export function generateCSRFToken(sessionId: string): string {
 /**
  * Validate a CSRF token
  */
-export function validateCSRFToken(
-  sessionId: string,
-  token: string
-): boolean {
+export function validateCSRFToken(sessionId: string, token: string): boolean {
   const stored = csrfTokens.get(sessionId);
 
   if (!stored) return false;
@@ -180,17 +180,23 @@ function cleanupExpiredTokens(): void {
  * Timing-safe string comparison to prevent timing attacks
  */
 export function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    // Still compare to prevent length-based timing attacks
-    b = a;
-  }
+  // Store original lengths before any modification
+  const aLen = a.length;
+  const bLen = b.length;
+
+  // Use the longer string for comparison to prevent timing attacks
+  const maxLen = Math.max(aLen, bLen);
 
   let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  for (let i = 0; i < maxLen; i++) {
+    // Use 0 as fallback for out-of-bounds to maintain constant time
+    const aChar = i < aLen ? a.charCodeAt(i) : 0;
+    const bChar = i < bLen ? b.charCodeAt(i) : 0;
+    result |= aChar ^ bChar;
   }
 
-  return result === 0 && a.length === b.length;
+  // Only return true if both strings are equal AND have same length
+  return result === 0 && aLen === bLen;
 }
 
 // ============================================
@@ -247,11 +253,7 @@ export function isNonNegativeInteger(value: unknown): value is number {
 /**
  * Validate string length
  */
-export function isValidLength(
-  str: string,
-  min: number,
-  max: number
-): boolean {
+export function isValidLength(str: string, min: number, max: number): boolean {
   if (!str || typeof str !== "string") return false;
   return str.length >= min && str.length <= max;
 }
@@ -299,7 +301,7 @@ const rateLimitStore = new Map<string, RateLimitEntry>();
 export function shouldRateLimit(
   key: string,
   limit: number,
-  windowMs: number
+  windowMs: number,
 ): { limited: boolean; remaining: number; resetIn: number } {
   const now = Date.now();
   const entry = rateLimitStore.get(key);
@@ -376,7 +378,7 @@ export function generateOTP(length: number = 6): string {
  */
 export function isTrustedOrigin(
   origin: string | null,
-  trustedOrigins: string[]
+  trustedOrigins: string[],
 ): boolean {
   if (!origin) return false;
 
@@ -385,7 +387,7 @@ export function isTrustedOrigin(
     return trustedOrigins.some(
       (trusted) =>
         parsed.origin === trusted ||
-        parsed.hostname.endsWith(`.${new URL(trusted).hostname}`)
+        parsed.hostname.endsWith(`.${new URL(trusted).hostname}`),
     );
   } catch {
     return false;
@@ -397,7 +399,7 @@ export function isTrustedOrigin(
  */
 export function isValidContentType(
   contentType: string | null,
-  expected: string[]
+  expected: string[],
 ): boolean {
   if (!contentType) return false;
 
@@ -447,7 +449,7 @@ export function validateEnvVars(required: string[]): {
  */
 export function getEnvVar(
   key: string,
-  defaultValue?: string
+  defaultValue?: string,
 ): string | undefined {
   const value = process.env[key];
   if (!value && defaultValue === undefined) {
@@ -507,9 +509,12 @@ export function buildCSP(directives: CSPDirectives, nonce?: string): string {
   addDirective("default-src", directives.defaultSrc || ["'self'"]);
   addDirective(
     "script-src",
-    directives.scriptSrc || ["'self'", defaultNonce].filter(Boolean)
+    directives.scriptSrc || ["'self'", defaultNonce].filter(Boolean),
   );
-  addDirective("style-src", directives.styleSrc || ["'self'", "'unsafe-inline'"]);
+  addDirective(
+    "style-src",
+    directives.styleSrc || ["'self'", "'unsafe-inline'"],
+  );
   addDirective("img-src", directives.imgSrc || ["'self'", "data:", "https:"]);
   addDirective("font-src", directives.fontSrc || ["'self'", "data:"]);
   addDirective("connect-src", directives.connectSrc || ["'self'"]);
@@ -521,7 +526,8 @@ export function buildCSP(directives: CSPDirectives, nonce?: string): string {
 
   if (directives.mediaSrc) addDirective("media-src", directives.mediaSrc);
   if (directives.workerSrc) addDirective("worker-src", directives.workerSrc);
-  if (directives.manifestSrc) addDirective("manifest-src", directives.manifestSrc);
+  if (directives.manifestSrc)
+    addDirective("manifest-src", directives.manifestSrc);
 
   if (directives.upgradeInsecureRequests !== false) {
     parts.push("upgrade-insecure-requests");

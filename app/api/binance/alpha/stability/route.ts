@@ -44,11 +44,11 @@ function calculateEnhancedStabilityScore(ticker: {
   symbol: string;
   priceChangePercent: string;
   volume: string;
-  quoteVolume: string;
+  quoteVolume?: string;
   highPrice: string;
   lowPrice: string;
   lastPrice: string;
-  count: string; // Number of trades
+  count?: string; // Number of trades
 }): {
   stabilityScore: number;
   riskLevel: "LOW" | "MEDIUM" | "HIGH";
@@ -62,8 +62,8 @@ function calculateEnhancedStabilityScore(ticker: {
   const high = parseFloat(ticker.highPrice);
   const low = parseFloat(ticker.lowPrice);
   const last = parseFloat(ticker.lastPrice);
-  const volume = parseFloat(ticker.quoteVolume);
-  const trades = parseInt(ticker.count);
+  const volume = parseFloat(ticker.quoteVolume || ticker.volume);
+  const trades = parseInt(ticker.count || "1000");
 
   // 1. Price Range Analysis
   const priceRange = ((high - low) / last) * 100;
@@ -209,7 +209,16 @@ export async function GET() {
           hasAbnormalSpike,
           volumeSwing,
           trend,
-        } = calculateEnhancedStabilityScore(ticker);
+        } = calculateEnhancedStabilityScore({
+          symbol: ticker.symbol,
+          priceChangePercent: ticker.priceChangePercent,
+          volume: ticker.volume,
+          quoteVolume: (ticker as { quoteVolume?: string }).quoteVolume,
+          highPrice: ticker.highPrice,
+          lowPrice: ticker.lowPrice,
+          lastPrice: ticker.lastPrice,
+          count: (ticker as { count?: string }).count,
+        });
 
         return {
           symbol: project.symbol,
@@ -218,7 +227,9 @@ export async function GET() {
           isBaseline: project.isBaseline,
           price: parseFloat(ticker.lastPrice),
           change24h: parseFloat(ticker.priceChangePercent),
-          volume24h: parseFloat(ticker.quoteVolume),
+          volume24h: parseFloat(
+            (ticker as { quoteVolume?: string }).quoteVolume || ticker.volume,
+          ),
           stabilityScore,
           riskLevel,
           volatilityIndex,
