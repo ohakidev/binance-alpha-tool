@@ -129,12 +129,34 @@ function calculateEnhancedStabilityScore(ticker: {
 export async function GET() {
   try {
     // Fetch from new Binance Alpha projects API
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/binance/alpha/projects`,
-      {
-        cache: "no-store",
-      },
-    );
+    // Get base URL with proper production handling
+    const getBaseUrl = (): string => {
+      if (process.env.VERCEL_URL) {
+        return `https://${process.env.VERCEL_URL}`;
+      }
+      if (process.env.NEXT_PUBLIC_APP_URL) {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+        if (
+          (appUrl.includes("localhost") || appUrl.includes("127.0.0.1")) &&
+          process.env.NODE_ENV === "production"
+        ) {
+          throw new Error(
+            "NEXT_PUBLIC_APP_URL cannot be localhost in production",
+          );
+        }
+        return appUrl;
+      }
+      if (process.env.NODE_ENV === "development") {
+        return "http://localhost:3000";
+      }
+      throw new Error(
+        "NEXT_PUBLIC_APP_URL or VERCEL_URL must be set in production",
+      );
+    };
+
+    const response = await fetch(`${getBaseUrl()}/api/binance/alpha/projects`, {
+      cache: "no-store",
+    });
 
     if (!response.ok) {
       throw new Error("Failed to fetch from projects API");

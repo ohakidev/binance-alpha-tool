@@ -11,7 +11,10 @@
   "regions": ["sin1"],
   "functions": {
     "app/api/**/*.ts": {
-      "maxDuration": 30
+      "maxDuration": 60
+    },
+    "app/api/cron/**/*.ts": {
+      "maxDuration": 120
     }
   },
   "headers": [
@@ -20,9 +23,34 @@
       "headers": [
         {
           "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/api/binance/alpha/airdrops",
+      "headers": [
+        {
+          "key": "Cache-Control",
           "value": "s-maxage=60, stale-while-revalidate=300"
         }
       ]
+    },
+    {
+      "source": "/api/binance/alpha/stability",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "s-maxage=30, stale-while-revalidate=60"
+        }
+      ]
     }
-  ]
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
 }

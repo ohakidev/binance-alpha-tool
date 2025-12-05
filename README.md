@@ -143,6 +143,11 @@ TELEGRAM_LANGUAGE="th"
 | `GET` | `/api/airdrops` | List all airdrops |
 | `GET` | `/api/airdrops/[id]` | Get single airdrop |
 | `GET` | `/api/airdrops/export` | Export to JSON |
+| `GET` | `/api/alpha/live` | Live airdrop data from API |
+| `GET` | `/api/alpha/schedule` | Today & upcoming airdrops |
+| `GET` | `/api/alpha/today` | Today's airdrops (alias) |
+| `GET` | `/api/alpha/upcoming` | Upcoming airdrops (alias) |
+| `POST` | `/api/alpha/sync` | Sync data from Binance Alpha |
 | `GET` | `/api/binance/alpha/projects` | Binance Alpha projects |
 | `GET` | `/api/binance/alpha/stability` | Stability data |
 

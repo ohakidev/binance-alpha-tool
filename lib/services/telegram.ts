@@ -1,6 +1,7 @@
 /**
  * Telegram Notification Service
  * Clean OOP implementation with proper type safety
+ * Updated: Thai timezone support, dexscreener links, website link
  */
 
 import TelegramBot from "node-telegram-bot-api";
@@ -23,6 +24,7 @@ interface AirdropAlertData {
   requiredPoints?: number;
   deductPoints?: number;
   contractAddress?: string;
+  marketCap?: number;
 }
 
 interface SnapshotAlertData {
@@ -51,6 +53,8 @@ interface AirdropReminderData {
   amount?: string | null;
   contractAddress?: string | null;
   type?: string;
+  estimatedValue?: number | null;
+  marketCap?: number | null;
 }
 
 interface StabilityWarningData {
@@ -66,11 +70,53 @@ interface TelegramConfig {
   language?: Language;
 }
 
+// ============= Constants =============
+
+// Website URL for check more info
+// Telegram doesn't allow localhost URLs in inline keyboard buttons
+// Always use production URL for inline buttons, fallback to default if localhost
+const getWebsiteUrl = (): string => {
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL;
+  // If no env URL or it's localhost, use the production fallback
+  if (!envUrl || envUrl.includes("localhost") || envUrl.includes("127.0.0.1")) {
+    return "https://binance-alpha-tool.vercel.app";
+  }
+  return envUrl;
+};
+
+const WEBSITE_URL = getWebsiteUrl();
+
+// Chain mapping for dexscreener
+const CHAIN_TO_DEXSCREENER: Record<string, string> = {
+  BSC: "bsc",
+  BNB: "bsc",
+  "BNB Smart Chain": "bsc",
+  Ethereum: "ethereum",
+  ETH: "ethereum",
+  Polygon: "polygon",
+  MATIC: "polygon",
+  Arbitrum: "arbitrum",
+  ARB: "arbitrum",
+  Optimism: "optimism",
+  OP: "optimism",
+  Avalanche: "avalanche",
+  AVAX: "avalanche",
+  Base: "base",
+  zkSync: "zksync",
+  Scroll: "scroll",
+  Linea: "linea",
+  Fantom: "fantom",
+  FTM: "fantom",
+  Solana: "solana",
+  SOL: "solana",
+  SUI: "sui",
+};
+
 // ============= Translations =============
 
 const TRANSLATIONS: Record<Language, Record<string, string>> = {
   th: {
-    newAirdrop: "Airdrop ใหม่มาแล้ว",
+    newAirdrop: "🚀 Airdrop ใหม่มาแล้ว!",
     snapshot: "การ Snapshot กำลังจะมาถึง",
     claimable: "พร้อม Claim แล้ว",
     ending: "ใกล้สิ้นสุด",
@@ -79,8 +125,9 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     chain: "เชน",
     airdrop: "Airdrop",
     start: "เริ่ม",
-    end: "สิ้นสุด",
-    threshold: "เงื่อนไข",
+    date: "วันที่",
+    time: "เวลา",
+    threshold: "Alpha Points ขั้นต่ำ",
     deductPoints: "หักคะแนน",
     amount: "จำนวน",
     contract: "Contract",
@@ -89,9 +136,15 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     makeReady: "เตรียมตัวให้พร้อม!",
     snapshotSoon: "Snapshot เร็วๆ นี้!",
     hours: "ชั่วโมง",
+    estimatedValue: "มูลค่าโดยประมาณ",
+    estimatedFromMcap: "คาดการณ์จาก Market Cap",
+    checkMore: "ดูรายละเอียดเพิ่มเติมที่เว็บไซต์",
+    liveNow: "🔴 LIVE แล้ว!",
+    startingSoon: "⏰ เริ่มเร็วๆ นี้!",
+    minutes: "นาที",
   },
   en: {
-    newAirdrop: "New Alpha Drop Available",
+    newAirdrop: "🚀 New Alpha Drop Available!",
     snapshot: "Snapshot Coming Soon",
     claimable: "Claim Available",
     ending: "Ending Soon",
@@ -100,8 +153,9 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     chain: "Chain",
     airdrop: "Airdrop",
     start: "Start",
-    end: "End",
-    threshold: "Threshold",
+    date: "Date",
+    time: "Time",
+    threshold: "Alpha Points Required",
     deductPoints: "Deduct Points",
     amount: "Amount",
     contract: "Contract",
@@ -110,6 +164,12 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     makeReady: "Get Ready!",
     snapshotSoon: "Snapshot Soon!",
     hours: "hours",
+    estimatedValue: "Estimated Value",
+    estimatedFromMcap: "Estimated from Market Cap",
+    checkMore: "Check more details on website",
+    liveNow: "🔴 LIVE NOW!",
+    startingSoon: "⏰ Starting Soon!",
+    minutes: "minutes",
   },
 };
 
@@ -183,41 +243,96 @@ class TelegramService {
   }
 
   /**
-   * Format date to Thai timezone string
+   * Format date to Thai timezone - Date only (DD/MM/YYYY)
    */
-  private formatDateThai(date: Date): string {
-    const thaiTime = new Date(date.getTime() + 7 * 60 * 60 * 1000);
-    return (
-      thaiTime.toLocaleString("en-US", {
-        weekday: "short",
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        timeZone: "UTC",
-      }) + " UTC"
-    );
+  private formatThaiDate(date: Date): string {
+    return date.toLocaleDateString("th-TH", {
+      timeZone: "Asia/Bangkok",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
   }
 
   /**
-   * Format date based on language
+   * Format time to Thai timezone - Time only (HH:MM น.)
    */
-  private formatDate(date: Date): string {
-    const options: Intl.DateTimeFormatOptions = {
-      weekday: "short",
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
+  private formatThaiTime(date: Date): string {
+    const time = date.toLocaleTimeString("th-TH", {
+      timeZone: "Asia/Bangkok",
       hour: "2-digit",
       minute: "2-digit",
-    };
+      hour12: false,
+    });
+    return `${time} น.`;
+  }
 
-    if (this.language === "th") {
-      return date.toLocaleDateString("th-TH", options);
+  /**
+   * Format datetime to Thai timezone - Full format
+   */
+  private formatThaiDateTime(date: Date): string {
+    return `${this.formatThaiDate(date)} ${this.formatThaiTime(date)}`;
+  }
+
+  /**
+   * Get dexscreener URL for a token
+   */
+  private getDexscreenerUrl(chain: string, contractAddress?: string): string {
+    const dexChain = CHAIN_TO_DEXSCREENER[chain] || chain.toLowerCase();
+    if (contractAddress) {
+      return `https://dexscreener.com/${dexChain}/${contractAddress}`;
     }
-    return date.toLocaleDateString("en-US", options) + " UTC";
+    return `https://dexscreener.com/${dexChain}`;
+  }
+
+  /**
+   * Estimate value from market cap if no direct value
+   */
+  private estimateValueFromMcap(
+    marketCap?: number,
+  ): { value: number; isEstimated: boolean } | null {
+    if (!marketCap || marketCap <= 0) return null;
+
+    // Rough estimation: assume typical airdrop is 1-5% of supply
+    // And typical claim amount based on mcap tier
+    let estimatedValue = 0;
+
+    if (marketCap >= 1000000000) {
+      // >= $1B mcap
+      estimatedValue = 50; // ~$50 estimated
+    } else if (marketCap >= 100000000) {
+      // >= $100M mcap
+      estimatedValue = 20; // ~$20 estimated
+    } else if (marketCap >= 10000000) {
+      // >= $10M mcap
+      estimatedValue = 10; // ~$10 estimated
+    } else if (marketCap >= 1000000) {
+      // >= $1M mcap
+      estimatedValue = 5; // ~$5 estimated
+    } else {
+      estimatedValue = 1; // ~$1 estimated for smaller mcap
+    }
+
+    return { value: estimatedValue, isEstimated: true };
+  }
+
+  /**
+   * Format value with estimation indicator
+   */
+  private formatValue(
+    estimatedValue?: number,
+    marketCap?: number,
+  ): string | null {
+    if (estimatedValue && estimatedValue > 0) {
+      return `~$${estimatedValue.toFixed(2)}`;
+    }
+
+    const mcapEstimate = this.estimateValueFromMcap(marketCap);
+    if (mcapEstimate) {
+      return `~$${mcapEstimate.value.toFixed(2)} (${this.t("estimatedFromMcap")})`;
+    }
+
+    return null;
   }
 
   /**
@@ -259,7 +374,11 @@ class TelegramService {
 
     try {
       const message = this.buildAirdropMessage(airdrop);
-      const keyboard = this.buildAirdropKeyboard(airdrop.symbol);
+      const keyboard = this.buildAirdropKeyboard(
+        airdrop.symbol,
+        airdrop.chain,
+        airdrop.contractAddress,
+      );
 
       await this.bot.sendMessage(this.chatId, message, {
         parse_mode: "Markdown",
@@ -277,31 +396,26 @@ class TelegramService {
 
   /**
    * Build airdrop message content
+   * NO end time - only start date/time separated
    */
   private buildAirdropMessage(airdrop: AirdropAlertData): string {
     const lines: string[] = [
       `🎁 *Binance Alpha Airdrop Tracker*`,
-      `${this.t("newAirdrop")} 🎉\n`,
-      `🍄 ${this.t("airdrop")}: *${airdrop.name}*`,
-      `💎 ${this.t("symbol")}: $${airdrop.symbol}`,
+      `${this.t("newAirdrop")}\n`,
+      `🍄 *${airdrop.name}*`,
+      `💎 Symbol: $${airdrop.symbol}`,
     ];
 
-    // Timeline
+    // Date and Time - SEPARATED (Thai timezone)
     if (airdrop.claimStartDate) {
-      lines.push(
-        `📅 ${this.t("start")}: ${this.formatDateThai(new Date(airdrop.claimStartDate))}`,
-      );
-    }
-
-    if (airdrop.claimEndDate) {
-      lines.push(
-        `🏆 ${this.t("end")}: ${this.formatDateThai(new Date(airdrop.claimEndDate))}`,
-      );
+      const startDate = new Date(airdrop.claimStartDate);
+      lines.push(`📅 ${this.t("date")}: ${this.formatThaiDate(startDate)}`);
+      lines.push(`⏰ ${this.t("time")}: ${this.formatThaiTime(startDate)}`);
     }
 
     lines.push("");
 
-    // Requirements
+    // Requirements - Points
     if (airdrop.requiredPoints) {
       lines.push(`🎯 ${this.t("threshold")}: ${airdrop.requiredPoints} pts`);
     }
@@ -310,14 +424,18 @@ class TelegramService {
       lines.push(`⚖️ ${this.t("deductPoints")}: -${airdrop.deductPoints} pts`);
     }
 
-    // Airdrop amount
+    // Airdrop amount with value estimation
     if (airdrop.airdropAmount) {
-      const valueText = airdrop.estimatedValue
-        ? ` ($${airdrop.estimatedValue})`
-        : "";
-      lines.push(
-        `🎁 ${this.t("airdrop")}: ${airdrop.airdropAmount}${valueText}`,
-      );
+      lines.push(`🎁 ${this.t("amount")}: ${airdrop.airdropAmount}`);
+    }
+
+    // Value estimation
+    const valueText = this.formatValue(
+      airdrop.estimatedValue,
+      airdrop.marketCap,
+    );
+    if (valueText) {
+      lines.push(`💰 ${this.t("estimatedValue")}: ${valueText}`);
     }
 
     lines.push("");
@@ -330,22 +448,34 @@ class TelegramService {
       lines.push(`\`${airdrop.contractAddress}\``);
     }
 
+    // Footer with website link
+    lines.push("");
+    lines.push(`━━━━━━━━━━━━━━━━━━━━`);
+    lines.push(`🌐 ดูเว็บไซต์: ${WEBSITE_URL}`);
+
     return lines.join("\n");
   }
 
   /**
    * Build inline keyboard for airdrop message
+   * Uses dexscreener instead of Binance DEX
    */
-  private buildAirdropKeyboard(symbol: string) {
+  private buildAirdropKeyboard(
+    symbol: string,
+    chain: string,
+    contractAddress?: string,
+  ) {
+    const dexscreenerUrl = this.getDexscreenerUrl(chain, contractAddress);
+
     return {
       inline_keyboard: [
         [
           {
-            text: "🌐 DEX",
-            url: `https://www.binance.com/en/trade/${symbol}_USDT`,
+            text: "📊 DEXScreener",
+            url: dexscreenerUrl,
           },
           {
-            text: "📊 MEXC",
+            text: "📈 MEXC",
             url: `https://www.mexc.com/exchange/${symbol}_USDT`,
           },
         ],
@@ -371,8 +501,12 @@ class TelegramService {
       ];
 
       if (airdrop.snapshotDate) {
+        const snapshotDate = new Date(airdrop.snapshotDate);
         lines.push(
-          `📸 Snapshot: ${this.formatDate(new Date(airdrop.snapshotDate))}\n`,
+          `📅 ${this.t("date")}: ${this.formatThaiDate(snapshotDate)}`,
+        );
+        lines.push(
+          `⏰ ${this.t("time")}: ${this.formatThaiTime(snapshotDate)}\n`,
         );
       }
 
@@ -383,6 +517,9 @@ class TelegramService {
       }
 
       lines.push(`⚠️ ${this.t("makeReady")}`);
+      lines.push("");
+      lines.push(`━━━━━━━━━━━━━━━━━━━━`);
+      lines.push(`🌐 ดูเว็บไซต์: ${WEBSITE_URL}`);
 
       await this.bot.sendMessage(this.chatId, lines.join("\n"), {
         parse_mode: "Markdown",
@@ -408,32 +545,20 @@ class TelegramService {
       const lines: string[] = [
         `💰 *Binance Alpha Airdrop Tracker*`,
         `${this.t("claimable")} 🎯\n`,
-        `🍄 ${airdrop.symbol} ${this.t("claimNow")}`,
+        `🍄 $${airdrop.symbol} ${this.t("claimNow")}`,
       ];
 
       if (airdrop.claimAmount) {
-        lines.push(`🎁 ${this.t("airdrop")}: ${airdrop.claimAmount}`);
+        lines.push(`🎁 ${this.t("amount")}: ${airdrop.claimAmount}`);
       }
 
       if (airdrop.requiredPoints) {
-        lines.push(`🎯 Minimum ${airdrop.requiredPoints} pts`);
+        lines.push(`🎯 ${this.t("threshold")}: ${airdrop.requiredPoints} pts`);
       }
 
-      if (airdrop.claimEndDate) {
-        const endDate = new Date(airdrop.claimEndDate);
-        const now = new Date();
-        const hoursLeft = Math.ceil(
-          (endDate.getTime() - now.getTime()) / (1000 * 60 * 60),
-        );
-
-        lines.push(
-          `\n⏰ ${this.t("claimBefore")}: ${this.formatDate(endDate)}`,
-        );
-
-        if (hoursLeft <= 24 && hoursLeft > 0) {
-          lines.push(`⚠️ ${hoursLeft} ${this.t("hours")} left!`);
-        }
-      }
+      lines.push("");
+      lines.push(`━━━━━━━━━━━━━━━━━━━━`);
+      lines.push(`🌐 ดูเว็บไซต์: ${WEBSITE_URL}`);
 
       await this.bot.sendMessage(this.chatId, lines.join("\n"), {
         parse_mode: "Markdown",
@@ -484,7 +609,7 @@ class TelegramService {
   }
 
   /**
-   * Send airdrop reminder notification (20 minutes before)
+   * Send airdrop reminder notification (before airdrop starts)
    * Like alpha123.uk's pre-airdrop notifications
    */
   async sendAirdropReminder(data: AirdropReminderData): Promise<boolean> {
@@ -494,57 +619,63 @@ class TelegramService {
     }
 
     try {
-      const timeText = data.scheduledTime.toLocaleString("en-US", {
-        timeZone: "Asia/Bangkok",
-        weekday: "short",
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      });
-
       const lines: string[] = [
         `⏰ *Binance Alpha Airdrop Reminder*`,
+        `${this.t("startingSoon")}\n`,
+        `🚀 *${data.name}* ($${data.symbol})`,
         ``,
-        `🚀 *${data.name}* ($${data.symbol}) starting soon!`,
-        ``,
-        `⏱️ Time: *${data.minutesUntil} minutes* from now`,
-        `📅 At: ${timeText} (Bangkok)`,
+        `⏱️ เริ่มใน *${data.minutesUntil} ${this.t("minutes")}*`,
+        `📅 ${this.t("date")}: ${this.formatThaiDate(data.scheduledTime)}`,
+        `⏰ ${this.t("time")}: ${this.formatThaiTime(data.scheduledTime)}`,
         ``,
       ];
 
       if (data.points) {
-        lines.push(`🎯 Required Points: ${data.points}`);
+        lines.push(`🎯 ${this.t("threshold")}: ${data.points} pts`);
       }
 
       if (data.amount) {
-        lines.push(`🎁 Amount: ${data.amount}`);
+        lines.push(`🎁 ${this.t("amount")}: ${data.amount}`);
       }
 
-      lines.push(`🔗 Chain: #${data.chain}`);
+      lines.push(`🔗 ${this.t("chain")}: #${data.chain}`);
 
       if (data.type) {
         lines.push(`📋 Type: ${data.type}`);
       }
 
+      // Value estimation
+      const valueText = this.formatValue(
+        data.estimatedValue ?? undefined,
+        data.marketCap ?? undefined,
+      );
+      if (valueText) {
+        lines.push(`💰 ${this.t("estimatedValue")}: ${valueText}`);
+      }
+
       if (data.contractAddress) {
-        lines.push(``, `📦 Contract:`);
+        lines.push(``, `📦 ${this.t("contract")}:`);
         lines.push(`\`${data.contractAddress}\``);
       }
 
-      lines.push(``, `⚡ Get ready to claim!`);
+      lines.push(``, `⚡ ${this.t("makeReady")}`);
+      lines.push("");
+      lines.push(`━━━━━━━━━━━━━━━━━━━━`);
+      lines.push(`🌐 ดูเว็บไซต์: ${WEBSITE_URL}`);
 
       const keyboard = {
         inline_keyboard: [
           [
             {
-              text: "🌐 Binance Alpha",
-              url: "https://www.binance.com/en/alpha",
+              text: "📊 DEXScreener",
+              url: this.getDexscreenerUrl(
+                data.chain,
+                data.contractAddress ?? undefined,
+              ),
             },
             {
-              text: "📊 Trade",
-              url: `https://www.binance.com/en/trade/${data.symbol}_USDT`,
+              text: "📈 MEXC",
+              url: `https://www.mexc.com/exchange/${data.symbol}_USDT`,
             },
           ],
         ],
@@ -579,26 +710,41 @@ class TelegramService {
       const lines: string[] = [
         `🔴 *LIVE NOW - Binance Alpha Airdrop*`,
         ``,
-        `🎁 *${data.name}* ($${data.symbol}) is NOW CLAIMABLE!`,
+        `🎁 *${data.name}* ($${data.symbol}) กำลัง LIVE!`,
+        ``,
+        `📅 ${this.t("date")}: ${this.formatThaiDate(data.scheduledTime)}`,
+        `⏰ ${this.t("time")}: ${this.formatThaiTime(data.scheduledTime)}`,
         ``,
       ];
 
       if (data.points) {
-        lines.push(`🎯 Required Points: ${data.points}`);
+        lines.push(`🎯 ${this.t("threshold")}: ${data.points} pts`);
       }
 
       if (data.amount) {
-        lines.push(`🎁 Amount: ${data.amount}`);
+        lines.push(`🎁 ${this.t("amount")}: ${data.amount}`);
       }
 
-      lines.push(`🔗 Chain: #${data.chain}`);
+      lines.push(`🔗 ${this.t("chain")}: #${data.chain}`);
+
+      // Value estimation
+      const valueText = this.formatValue(
+        data.estimatedValue ?? undefined,
+        data.marketCap ?? undefined,
+      );
+      if (valueText) {
+        lines.push(`💰 ${this.t("estimatedValue")}: ${valueText}`);
+      }
 
       if (data.contractAddress) {
-        lines.push(``, `📦 Contract:`);
+        lines.push(``, `📦 ${this.t("contract")}:`);
         lines.push(`\`${data.contractAddress}\``);
       }
 
       lines.push(``, `🚀 *CLAIM NOW!*`);
+      lines.push("");
+      lines.push(`━━━━━━━━━━━━━━━━━━━━`);
+      lines.push(`🌐 ดูเว็บไซต์: ${WEBSITE_URL}`);
 
       const keyboard = {
         inline_keyboard: [
@@ -610,8 +756,11 @@ class TelegramService {
           ],
           [
             {
-              text: "📊 Trade",
-              url: `https://www.binance.com/en/trade/${data.symbol}_USDT`,
+              text: "📊 DEXScreener",
+              url: this.getDexscreenerUrl(
+                data.chain,
+                data.contractAddress ?? undefined,
+              ),
             },
             {
               text: "📈 MEXC",
@@ -649,7 +798,8 @@ class TelegramService {
   }
 }
 
-// Export singleton instance
+// ============= Singleton Export =============
+
 export const telegramService = new TelegramService();
 
 // Export class for testing or custom instances
@@ -657,8 +807,6 @@ export { TelegramService };
 
 // Export types
 export type {
-  Language,
-  MessageType,
   AirdropAlertData,
   SnapshotAlertData,
   ClaimableAlertData,

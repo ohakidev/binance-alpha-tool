@@ -13,23 +13,35 @@
 Before deploying, prepare these environment variables:
 
 ```env
-# Database (Required)
-DATABASE_URL="file:./dev.db"
+# ================================
+# Production Environment Variables
+# ================================
+
+# Database (Required - Use PostgreSQL for production)
+DATABASE_URL="postgresql://user:password@host:5432/database?schema=public"
 
 # Admin Key for API operations (Required)
+# Generate with: openssl rand -base64 32
 ADMIN_KEY="your-secure-admin-key-here-min-32-chars"
 
 # App URL (Required for production)
-NEXT_PUBLIC_APP_URL="https://your-domain.vercel.app"
+# ⚠️ IMPORTANT: Must be valid HTTPS URL, NOT localhost
+# Telegram inline buttons will fail with localhost URLs
+NEXT_PUBLIC_APP_URL="https://binance-alpha-tool.vercel.app"
 
 # Telegram (Optional - for notifications)
 TELEGRAM_BOT_TOKEN="your-bot-token"
 TELEGRAM_CHAT_ID="your-chat-id"
 TELEGRAM_LANGUAGE="th"
 
-# Cron Security (Optional - for scheduled jobs)
+# Cron Security (Required for production)
+# Generate with: openssl rand -base64 32
 CRON_SECRET="your-random-secret-key-min-32-chars"
 ```
+
+> ⚠️ **IMPORTANT**: `NEXT_PUBLIC_APP_URL` must be a valid public HTTPS URL.
+> Telegram does not allow `localhost` or `127.0.0.1` in inline keyboard buttons.
+> The code will automatically fallback to `https://binance-alpha-tool.vercel.app` if localhost is detected.
 
 ### 3. Deploy to Vercel
 
@@ -147,22 +159,30 @@ Quick steps:
 
 ---
 
-## ⏰ Cron Jobs Setup (Optional)
+## ⏰ Cron Jobs Setup (Required for Auto-Sync)
 
 ### Option A: Vercel Cron (Pro Plan Required)
 
-Add to `vercel.json`:
+Already configured in `vercel.json`:
 
 ```json
 {
   "crons": [
     {
-      "path": "/api/cron/update-airdrops?secret=YOUR_CRON_SECRET",
-      "schedule": "0 * * * *"
+      "path": "/api/cron/update-airdrops",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
 ```
+
+The cron job automatically:
+- Syncs data from Binance Alpha API
+- Updates airdrop schedules and statuses
+- Sends Telegram notifications (20 min before airdrops)
+- Runs every 5 minutes for real-time updates
+
+**Security**: Vercel Cron requests include `x-vercel-cron` header which is automatically validated.
 
 ### Option B: External Cron Service (Free)
 
@@ -388,12 +408,25 @@ export const runtime = 'edge';
 ## 🔐 Security Best Practices
 
 - ✅ Use strong `ADMIN_KEY` (32+ characters, random)
-- ✅ Never commit `.env.local` to git
+- ✅ Never commit `.env` or `.env.local` to git
 - ✅ Rotate API keys quarterly
 - ✅ Enable HTTPS (automatic on Vercel)
 - ✅ Use environment variables for all secrets
 - ✅ Input validation with Zod
 - ✅ SQL injection prevention (Prisma)
+- ✅ `NEXT_PUBLIC_APP_URL` must be valid public URL (not localhost)
+- ✅ `CRON_SECRET` required for manual cron triggers
+- ✅ API routes validate authorization headers
+
+### Production URL Requirements
+
+The codebase automatically prevents localhost URLs from being used in:
+- Telegram inline keyboard buttons
+- Internal API calls in production mode
+
+If `NEXT_PUBLIC_APP_URL` is set to localhost in production:
+- Telegram notifications will use fallback URL
+- API routes will throw errors to prevent misconfiguration
 
 ---
 
@@ -412,6 +445,32 @@ export const runtime = 'edge';
 2. Check [DATABASE_SETUP.md](./DATABASE_SETUP.md) for database details
 3. Check [TELEGRAM_SETUP.md](./TELEGRAM_SETUP.md) for bot setup
 4. Review [ARCHITECTURE.md](./ARCHITECTURE.md) for technical details
+
+---
+
+---
+
+## 🔄 Quick Production Checklist
+
+```bash
+# 1. Generate secure keys
+openssl rand -base64 32  # For ADMIN_KEY
+openssl rand -base64 32  # For CRON_SECRET
+
+# 2. Set environment variables in Vercel Dashboard
+#    - DATABASE_URL (PostgreSQL recommended)
+#    - ADMIN_KEY
+#    - NEXT_PUBLIC_APP_URL (your-domain.vercel.app)
+#    - TELEGRAM_BOT_TOKEN
+#    - TELEGRAM_CHAT_ID
+#    - CRON_SECRET
+
+# 3. Deploy
+vercel --prod
+
+# 4. Verify deployment
+curl https://your-domain.vercel.app/api/airdrops
+```
 
 ---
 

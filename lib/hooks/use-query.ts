@@ -324,9 +324,9 @@ export function useSyncAirdrops() {
   return useMutation({
     mutationFn: async (force: boolean = false) => {
       const response = await fetch(
-        `/api/binance/alpha/real-sync${force ? "?force=true" : ""}`,
+        `/api/alpha/sync${force ? "?type=full" : ""}`,
         {
-          method: "GET",
+          method: "POST",
           headers: { Accept: "application/json" },
         },
       );

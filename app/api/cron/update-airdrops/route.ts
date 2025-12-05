@@ -290,6 +290,7 @@ export async function GET(request: Request) {
       deductPoints: number | null;
       estimatedValue: number | null;
       contractAddress: string | null;
+      marketCap: number | null;
     }> = [];
 
     for (const token of tokens) {
@@ -394,6 +395,7 @@ export async function GET(request: Request) {
               deductPoints: token.score ? Math.floor(token.score * 0.1) : null,
               estimatedValue,
               contractAddress: token.contractAddress || null,
+              marketCap: parseFloat(token.marketCap) || null,
             });
           }
         }
@@ -490,7 +492,6 @@ export async function GET(request: Request) {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
     // Update main Airdrop table statuses
     // UPCOMING -> CLAIMABLE (if listing time has passed)
@@ -553,17 +554,14 @@ export async function GET(request: Request) {
     // 5a. Notify for NEW airdrops (just discovered)
     for (const airdrop of newAirdrops) {
       try {
+        // No end time in notifications - only start date/time
         const sent = await telegramService.sendAirdropAlert({
           name: airdrop.name,
           symbol: airdrop.token,
           chain: airdrop.chain,
           status: airdrop.status.toLowerCase(),
           claimStartDate: airdrop.claimStartDate ?? undefined,
-          claimEndDate: airdrop.claimStartDate
-            ? new Date(
-                airdrop.claimStartDate.getTime() + 30 * 24 * 60 * 60 * 1000,
-              )
-            : undefined,
+          // Removed claimEndDate - user requested no end time
           estimatedValue: airdrop.estimatedValue ?? undefined,
           airdropAmount: airdrop.points
             ? `Alpha Score: ${airdrop.points}`
@@ -571,6 +569,7 @@ export async function GET(request: Request) {
           requiredPoints: airdrop.points ?? undefined,
           deductPoints: airdrop.deductPoints ?? undefined,
           contractAddress: airdrop.contractAddress ?? undefined,
+          marketCap: airdrop.marketCap ?? undefined,
         });
 
         if (sent) {
@@ -615,6 +614,10 @@ export async function GET(request: Request) {
               amount: schedule.amount,
               contractAddress: schedule.contractAddress,
               type: schedule.type,
+              estimatedValue: schedule.estimatedValue ?? null,
+              marketCap: schedule.estimatedPrice
+                ? schedule.estimatedPrice * 1000000
+                : null, // Rough estimate
             };
 
             const sent =
@@ -668,6 +671,10 @@ export async function GET(request: Request) {
             amount: schedule.amount,
             contractAddress: schedule.contractAddress,
             type: schedule.type,
+            estimatedValue: schedule.estimatedValue ?? null,
+            marketCap: schedule.estimatedPrice
+              ? schedule.estimatedPrice * 1000000
+              : null, // Rough estimate
           };
 
           await telegramService.sendAirdropLive(liveData);
