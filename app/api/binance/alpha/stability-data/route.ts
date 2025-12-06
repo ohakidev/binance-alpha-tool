@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 
+// Force dynamic rendering - no caching
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 /**
  * Stability Data API Route - Optimized Version
  * Fetches Alpha tokens from Binance Alpha API
@@ -41,7 +45,7 @@ interface CacheEntry<T> {
 }
 
 const cache = new Map<string, CacheEntry<unknown>>();
-const CACHE_TTL = 8000; // 8 seconds
+const CACHE_TTL = 5000; // 5 seconds - reduced for fresher data
 
 function getCached<T>(key: string): T | null {
   const entry = cache.get(key);
@@ -149,13 +153,23 @@ async function fetchWithTimeout(
 }
 
 // Calculate days remaining in 4x period (30 days total)
+// Uses UTC time for consistent calculation across timezones
 function calculateFourXDaysRemaining(listingTime: number | null): number {
   if (!listingTime || listingTime <= 0) return 0;
 
+  // Use current UTC time for consistency
   const now = Date.now();
   const FOUR_X_PERIOD_DAYS = 30;
-  const diffMs = now - listingTime;
-  const daysSinceListing = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  // Calculate elapsed milliseconds since listing
+  const elapsedMs = now - listingTime;
+
+  // Convert to days (using exact milliseconds per day)
+  // Use Math.ceil to count partial days as full days (matches Binance's counting method)
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const daysSinceListing = Math.ceil(elapsedMs / MS_PER_DAY);
+
+  // Calculate remaining days
   const daysRemaining = FOUR_X_PERIOD_DAYS - daysSinceListing;
 
   return Math.max(0, daysRemaining);
@@ -449,10 +463,10 @@ async function processToken(token: AlphaTokenRaw): Promise<StabilityData> {
 
 export async function GET() {
   try {
-    // Check cache first for full response
-    const cachedResponse = getCached<StabilityData[]>("stability_data");
+    // Always fetch fresh data - no early cache return
+    // Cache is only used as fallback on error
 
-    // Fetch Alpha data
+    // Fetch Alpha data with no-cache headers
     const alphaResponse = await fetchWithTimeout(
       BINANCE_ALPHA_API_URL,
       {
@@ -462,10 +476,16 @@ export async function GET() {
           "Accept-Encoding": "gzip, deflate, br",
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
         },
+        cache: "no-store",
       },
       6000,
     );
+
+    // Get cached response for fallback only
+    const cachedResponse = getCached<StabilityData[]>("stability_data");
 
     if (!alphaResponse.ok) {
       // Return cached data if available

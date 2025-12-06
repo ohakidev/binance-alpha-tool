@@ -178,8 +178,10 @@ async function fetchStabilityData(): Promise<StabilityApiResponse> {
   try {
     const response = await fetch("/api/binance/alpha/stability-data", {
       signal: controller.signal,
+      cache: "no-store",
       headers: {
-        "Cache-Control": "no-cache",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
       },
     });
 
@@ -418,10 +420,12 @@ export default function StabilityPage() {
     queryKey: ["stabilityData"],
     queryFn: fetchStabilityData,
     refetchInterval: POLLING_INTERVAL,
-    staleTime: POLLING_INTERVAL - 1000,
+    staleTime: 0, // Always fetch fresh data
+    gcTime: 0, // Don't cache old data
     retry: 2,
     retryDelay: 1000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
+    refetchOnMount: "always",
   });
 
   // Memoized data
@@ -484,7 +488,7 @@ export default function StabilityPage() {
         cell: (info) => <StabilityBadge stability={info.getValue()} />,
       }),
       columnHelper.accessor("spreadPercent", {
-        header: "24h Range",
+        header: "Spread",
         cell: (info) => (
           <SpreadCell
             spreadPercent={info.getValue()}
