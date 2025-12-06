@@ -7,7 +7,7 @@ name: Update Airdrops Cron
 on:
   schedule:
     # Run every 5 minutes
-    - cron: '*/5 * * * *'
+    - cron: "*/5 * * * *"
 
   # Allow manual trigger from GitHub Actions tab
   workflow_dispatch:
@@ -29,8 +29,8 @@ jobs:
           echo "🚀 Triggering airdrop update..."
           echo "URL: ${URL}/api/cron/update-airdrops"
 
-          # Make the request with timeout
-          RESPONSE=$(curl -s -w "\n%{http_code}" \
+          # Make the request with timeout and follow redirects (-L flag)
+          RESPONSE=$(curl -s -L -w "\n%{http_code}" \
             --max-time 120 \
             -H "Authorization: Bearer ${CRON_SECRET}" \
             "${URL}/api/cron/update-airdrops")
