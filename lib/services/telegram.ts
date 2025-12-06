@@ -8,10 +8,10 @@ import TelegramBot from "node-telegram-bot-api";
 
 // ============= Types =============
 
-type Language = "th" | "en";
-type MessageType = "info" | "warning" | "success" | "error";
+export type Language = "th" | "en";
+export type MessageType = "info" | "warning" | "success" | "error";
 
-interface AirdropAlertData {
+export interface AirdropAlertData {
   name: string;
   symbol: string;
   chain: string;
@@ -27,7 +27,7 @@ interface AirdropAlertData {
   marketCap?: number;
 }
 
-interface SnapshotAlertData {
+export interface SnapshotAlertData {
   name: string;
   symbol: string;
   snapshotDate?: Date;
@@ -35,7 +35,7 @@ interface SnapshotAlertData {
   requirements?: string[];
 }
 
-interface ClaimableAlertData {
+export interface ClaimableAlertData {
   name: string;
   symbol: string;
   claimEndDate?: Date;
@@ -43,7 +43,7 @@ interface ClaimableAlertData {
   requiredPoints?: number;
 }
 
-interface AirdropReminderData {
+export interface AirdropReminderData {
   name: string;
   symbol: string;
   scheduledTime: Date;
@@ -57,14 +57,14 @@ interface AirdropReminderData {
   marketCap?: number | null;
 }
 
-interface StabilityWarningData {
+export interface StabilityWarningData {
   stabilityScore: number;
   riskLevel: string;
   volatilityIndex: number;
   priceChange: number;
 }
 
-interface TelegramConfig {
+export interface TelegramConfig {
   token?: string;
   chatId?: string;
   language?: Language;
@@ -804,13 +804,3 @@ export const telegramService = new TelegramService();
 
 // Export class for testing or custom instances
 export { TelegramService };
-
-// Export types
-export type {
-  AirdropAlertData,
-  SnapshotAlertData,
-  ClaimableAlertData,
-  StabilityWarningData,
-  TelegramConfig,
-  AirdropReminderData,
-};

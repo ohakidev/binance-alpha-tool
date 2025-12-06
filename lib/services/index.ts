@@ -38,6 +38,7 @@ export type {
   AirdropAlertData,
   SnapshotAlertData,
   ClaimableAlertData,
+  AirdropReminderData,
   StabilityWarningData,
   TelegramConfig,
 } from "./telegram";
