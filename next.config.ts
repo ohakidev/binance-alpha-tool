@@ -381,11 +381,32 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        source: "/api/binance/alpha/stability-data",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-store, no-cache, must-revalidate, max-age=0",
+          },
+          {
+            key: "Pragma",
+            value: "no-cache",
+          },
+          {
+            key: "Expires",
+            value: "0",
+          },
+        ],
+      },
+      {
         source: "/api/binance/alpha/stability",
         headers: [
           {
             key: "Cache-Control",
-            value: "public, s-maxage=30, stale-while-revalidate=60",
+            value: "no-store, no-cache, must-revalidate, max-age=0",
+          },
+          {
+            key: "Pragma",
+            value: "no-cache",
           },
         ],
       },
@@ -398,9 +419,23 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      // Stability page - no cache for real-time data
+      {
+        source: "/stability",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-store, no-cache, must-revalidate, max-age=0",
+          },
+          {
+            key: "Pragma",
+            value: "no-cache",
+          },
+        ],
+      },
       // HTML pages - short cache with revalidation
       {
-        source: "/:path((?!api|_next|static).*)",
+        source: "/:path((?!api|_next|static|stability).*)",
         headers: [
           {
             key: "Cache-Control",
