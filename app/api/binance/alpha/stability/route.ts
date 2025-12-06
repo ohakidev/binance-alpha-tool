@@ -1,296 +1,343 @@
 /**
- * Binance Alpha Stability API Route
+ * Binance Alpha Stability API
  * GET /api/binance/alpha/stability
- * Returns stability scores for 4x multiplier Alpha projects
  *
- * ⚙️ Criteria: price range, volume swings, abnormal spikes, short-term trend
- * 💡 Spread bps: discrepancy across trade records (smaller = steadier)
- * 📊 Sorting: KOGE (1x) as baseline
+ * Fetches project data directly from Binance Alpha API
+ * Calculates stability scores and risk metrics
  */
 
 import { NextResponse } from "next/server";
-import { binanceClient } from "@/lib/api/binance-client";
 
-// Binance Alpha Projects with 4x multiplier only
-const ALPHA_4X_PROJECTS = [
-  { symbol: "KOGE", name: "KOGE", multiplier: 1, isBaseline: true },
-  { symbol: "BLUM", name: "Blum", multiplier: 4, isBaseline: false },
-  { symbol: "MAJOR", name: "Major", multiplier: 4, isBaseline: false },
-  { symbol: "SEED", name: "Seed", multiplier: 4, isBaseline: false },
-  { symbol: "TOMARKET", name: "Tomarket", multiplier: 4, isBaseline: false },
-  { symbol: "PLUTO", name: "Pluto", multiplier: 4, isBaseline: false },
-  { symbol: "CATS", name: "Cats", multiplier: 4, isBaseline: false },
-  { symbol: "DOGS", name: "Dogs", multiplier: 4, isBaseline: false },
-];
+export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
-// Calculate spread bps from price volatility
-function calculateSpreadBps(high: number, low: number, last: number): number {
-  // Spread in basis points (1 bps = 0.01%)
-  // Formula: ((high - low) / last) * 10000
-  return Math.round(((high - low) / last) * 10000);
-}
+// ============= Types =============
 
-// Detect abnormal price spikes
-function detectAbnormalSpikes(
-  priceChange: number,
-  volatilityIndex: number,
-): boolean {
-  // Spike if price change > 15% or volatility > 80
-  return Math.abs(priceChange) > 15 || volatilityIndex > 80;
-}
-
-// Calculate enhanced stability score
-function calculateEnhancedStabilityScore(ticker: {
+interface BinanceAlphaTokenRaw {
+  tokenId: string;
+  chainId: string;
+  chainName: string;
+  contractAddress: string;
+  name: string;
   symbol: string;
-  priceChangePercent: string;
-  volume: string;
-  quoteVolume?: string;
-  highPrice: string;
-  lowPrice: string;
-  lastPrice: string;
-  count?: string; // Number of trades
-}): {
+  iconUrl: string;
+  price: string;
+  percentChange24h: string;
+  volume24h: string;
+  marketCap: string;
+  fdv: string;
+  liquidity: string;
+  totalSupply: string;
+  circulatingSupply: string;
+  holders: string;
+  decimals: number;
+  listingCex: boolean;
+  hotTag: boolean;
+  alphaId: string;
+  priceHigh24h: string;
+  priceLow24h: string;
+  count24h: string;
+  onlineTge: boolean;
+  onlineAirdrop: boolean;
+  score: number;
+  listingTime: number;
+  mulPoint: number;
+}
+
+interface BinanceAlphaApiResponse {
+  code: string;
+  message: string | null;
+  data: BinanceAlphaTokenRaw[];
+}
+
+interface StabilityProject {
+  token: string;
+  name: string;
+  chain: string;
+  multiplier: number;
+  isBaseline: boolean;
+  price: number;
+  priceChange24h: number;
+  volume24h: number;
+  marketCap: number;
+  liquidity: number;
+  holders: number;
   stabilityScore: number;
-  riskLevel: "LOW" | "MEDIUM" | "HIGH";
+  riskLevel: "LOW" | "MEDIUM" | "HIGH" | "VERY_HIGH";
   volatilityIndex: number;
-  spreadBps: number;
-  hasAbnormalSpike: boolean;
-  volumeSwing: number;
-  trend: "UP" | "DOWN" | "STABLE";
-} {
-  const priceChange = parseFloat(ticker.priceChangePercent);
-  const high = parseFloat(ticker.highPrice);
-  const low = parseFloat(ticker.lowPrice);
-  const last = parseFloat(ticker.lastPrice);
-  const volume = parseFloat(ticker.quoteVolume || ticker.volume);
-  const trades = parseInt(ticker.count || "1000");
+  trend: "up" | "down" | "stable";
+  iconUrl: string;
+  contractAddress: string;
+  isAirdrop: boolean;
+  isTge: boolean;
+}
 
-  // 1. Price Range Analysis
-  const priceRange = ((high - low) / last) * 100;
+// ============= Constants =============
 
-  // 2. Volume Swings (higher = more volatile)
-  const volumeSwing = volume / Math.max(trades, 1); // Average per trade
+const BINANCE_API_URL =
+  "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list";
 
-  // 3. Spread bps calculation
-  const spreadBps = calculateSpreadBps(high, low, last);
+const CHAIN_MAP: Record<string, string> = {
+  "1": "Ethereum",
+  "56": "BSC",
+  "137": "Polygon",
+  "42161": "Arbitrum",
+  "10": "Optimism",
+  "43114": "Avalanche",
+  "8453": "Base",
+  "324": "zkSync",
+};
 
-  // 4. Volatility Index (0-100, lower is more volatile)
-  const volatilityIndex = Math.max(
-    0,
-    100 - (priceRange * 2 + Math.abs(priceChange)),
-  );
+// Simple in-memory cache
+let cache: {
+  data: StabilityProject[] | null;
+  timestamp: number;
+} = {
+  data: null,
+  timestamp: 0,
+};
 
-  // 5. Abnormal Spike Detection
-  const hasAbnormalSpike = detectAbnormalSpikes(priceChange, volatilityIndex);
+const CACHE_TTL = 30 * 1000; // 30 seconds
 
-  // 6. Short-term Trend
-  let trend: "UP" | "DOWN" | "STABLE";
-  if (priceChange > 3) trend = "UP";
-  else if (priceChange < -3) trend = "DOWN";
-  else trend = "STABLE";
+// ============= Helper Functions =============
 
-  // 7. Volume-adjusted stability
-  const volumeStability = Math.min(20, Math.log10(volume) * 2);
+function parseNumber(value: string | number | undefined): number {
+  if (value === undefined || value === null || value === "") return 0;
+  const num = typeof value === "string" ? parseFloat(value) : value;
+  return isNaN(num) ? 0 : num;
+}
 
-  // 8. Trade consistency score (more trades = more stable)
-  const tradeScore = Math.min(15, Math.log10(Math.max(trades, 1)) * 3);
+function calculateStabilityScore(token: BinanceAlphaTokenRaw): number {
+  const priceChange = Math.abs(parseNumber(token.percentChange24h));
+  const volume = parseNumber(token.volume24h);
+  const liquidity = parseNumber(token.liquidity);
+  const marketCap = parseNumber(token.marketCap);
+  const holders = parseNumber(token.holders);
+  const price = parseNumber(token.price);
+  const priceHigh = parseNumber(token.priceHigh24h);
+  const priceLow = parseNumber(token.priceLow24h);
 
-  // Final stability score calculation
-  let stabilityScore = volatilityIndex * 0.4 + volumeStability + tradeScore;
+  let score = 100;
 
-  // Penalties
-  if (hasAbnormalSpike) stabilityScore -= 20;
-  if (spreadBps > 100) stabilityScore -= 10; // High spread = unstable
-  if (trend === "DOWN") stabilityScore -= 5;
+  // Volatility penalty (0-30 points)
+  if (priceChange > 50) score -= 30;
+  else if (priceChange > 30) score -= 20;
+  else if (priceChange > 15) score -= 10;
+  else if (priceChange > 5) score -= 5;
 
-  stabilityScore = Math.min(100, Math.max(0, stabilityScore));
-
-  // Determine risk level
-  let riskLevel: "LOW" | "MEDIUM" | "HIGH";
-  if (stabilityScore >= 70 && spreadBps < 50) {
-    riskLevel = "LOW";
-  } else if (stabilityScore >= 45) {
-    riskLevel = "MEDIUM";
-  } else {
-    riskLevel = "HIGH";
+  // Price range volatility
+  if (price > 0 && priceHigh > 0 && priceLow > 0) {
+    const priceRange = ((priceHigh - priceLow) / price) * 100;
+    if (priceRange > 50) score -= 15;
+    else if (priceRange > 30) score -= 10;
+    else if (priceRange > 15) score -= 5;
   }
 
-  return {
-    stabilityScore: Math.round(stabilityScore),
-    riskLevel,
-    volatilityIndex: Math.round(volatilityIndex),
-    spreadBps,
-    hasAbnormalSpike,
-    volumeSwing: Math.round(volumeSwing),
-    trend,
-  };
+  // Volume bonus (0-15 points)
+  if (volume > 10000000) score += 15;
+  else if (volume > 1000000) score += 10;
+  else if (volume > 100000) score += 5;
+  else if (volume < 10000) score -= 10;
+
+  // Liquidity bonus (0-15 points)
+  if (liquidity > 5000000) score += 15;
+  else if (liquidity > 1000000) score += 10;
+  else if (liquidity > 100000) score += 5;
+  else if (liquidity < 50000) score -= 10;
+
+  // Market cap bonus (0-10 points)
+  if (marketCap > 100000000) score += 10;
+  else if (marketCap > 10000000) score += 5;
+  else if (marketCap < 1000000) score -= 5;
+
+  // Holders bonus (0-10 points)
+  if (holders > 10000) score += 10;
+  else if (holders > 1000) score += 5;
+  else if (holders < 100) score -= 5;
+
+  // Multiplier bonus (baseline = stable)
+  const multiplier = token.mulPoint || 1;
+  if (multiplier === 1) score += 10;
+  else if (multiplier > 3) score -= 5;
+
+  return Math.max(0, Math.min(100, Math.round(score)));
 }
 
-export async function GET() {
-  try {
-    // Fetch from new Binance Alpha projects API
-    // Get base URL with proper production handling
-    const getBaseUrl = (): string => {
-      if (process.env.VERCEL_URL) {
-        return `https://${process.env.VERCEL_URL}`;
-      }
-      if (process.env.NEXT_PUBLIC_APP_URL) {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-        if (
-          (appUrl.includes("localhost") || appUrl.includes("127.0.0.1")) &&
-          process.env.NODE_ENV === "production"
-        ) {
-          throw new Error(
-            "NEXT_PUBLIC_APP_URL cannot be localhost in production",
-          );
-        }
-        return appUrl;
-      }
-      if (process.env.NODE_ENV === "development") {
-        return "http://localhost:3000";
-      }
-      throw new Error(
-        "NEXT_PUBLIC_APP_URL or VERCEL_URL must be set in production",
-      );
-    };
+function calculateVolatilityIndex(token: BinanceAlphaTokenRaw): number {
+  const priceChange = Math.abs(parseNumber(token.percentChange24h));
+  const price = parseNumber(token.price);
+  const priceHigh = parseNumber(token.priceHigh24h);
+  const priceLow = parseNumber(token.priceLow24h);
 
-    const response = await fetch(`${getBaseUrl()}/api/binance/alpha/projects`, {
+  let volatility = priceChange;
+
+  if (price > 0 && priceHigh > 0 && priceLow > 0) {
+    const priceRange = ((priceHigh - priceLow) / price) * 100;
+    volatility = (volatility + priceRange) / 2;
+  }
+
+  return Math.round(volatility * 100) / 100;
+}
+
+function getRiskLevel(
+  stabilityScore: number,
+): "LOW" | "MEDIUM" | "HIGH" | "VERY_HIGH" {
+  if (stabilityScore >= 75) return "LOW";
+  if (stabilityScore >= 50) return "MEDIUM";
+  if (stabilityScore >= 25) return "HIGH";
+  return "VERY_HIGH";
+}
+
+function getTrend(priceChange: number): "up" | "down" | "stable" {
+  if (priceChange > 2) return "up";
+  if (priceChange < -2) return "down";
+  return "stable";
+}
+
+async function fetchBinanceAlphaData(): Promise<StabilityProject[]> {
+  // Check cache first
+  const now = Date.now();
+  if (cache.data && now - cache.timestamp < CACHE_TTL) {
+    return cache.data;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch(BINANCE_API_URL, {
+      method: "GET",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Accept: "application/json",
+        "Cache-Control": "no-cache",
+      },
+      signal: controller.signal,
       cache: "no-store",
     });
 
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
-      throw new Error("Failed to fetch from projects API");
+      throw new Error(`API responded with status: ${response.status}`);
     }
 
-    const projectsData = await response.json();
+    const json: BinanceAlphaApiResponse = await response.json();
 
-    if (!projectsData.success) {
-      throw new Error("Projects API returned error");
+    if (json.code !== "000000" || !json.data) {
+      throw new Error(json.message || "Invalid API response");
     }
 
-    return NextResponse.json(projectsData);
-  } catch (error) {
-    console.error("Error in stability route:", error);
+    const projects: StabilityProject[] = json.data.map((token) => {
+      const priceChange = parseNumber(token.percentChange24h);
+      const stabilityScore = calculateStabilityScore(token);
+      const volatilityIndex = calculateVolatilityIndex(token);
 
-    // Fallback to old method if new API fails
-    try {
-      const tickerData = await binanceClient.get24hrTicker();
-
-      // Map Alpha projects to real Binance symbols for demo
-      // In production, these would be actual Alpha project pairs
-      const symbolMapping: Record<string, string> = {
-        KOGE: "DOGEUSDT",
-        BLUM: "BTCUSDT",
-        MAJOR: "ETHUSDT",
-        SEED: "SOLUSDT",
-        TOMARKET: "BNBUSDT",
-        PLUTO: "XRPUSDT",
-        CATS: "MATICUSDT",
-        DOGS: "AVAXUSDT",
+      return {
+        token: token.symbol,
+        name: token.name,
+        chain: CHAIN_MAP[token.chainId] || token.chainName || "Unknown",
+        multiplier: token.mulPoint || 1,
+        isBaseline: (token.mulPoint || 1) === 1,
+        price: parseNumber(token.price),
+        priceChange24h: priceChange,
+        volume24h: parseNumber(token.volume24h),
+        marketCap: parseNumber(token.marketCap),
+        liquidity: parseNumber(token.liquidity),
+        holders: parseNumber(token.holders),
+        stabilityScore,
+        riskLevel: getRiskLevel(stabilityScore),
+        volatilityIndex,
+        trend: getTrend(priceChange),
+        iconUrl: token.iconUrl || "",
+        contractAddress: token.contractAddress || "",
+        isAirdrop: token.onlineAirdrop || false,
+        isTge: token.onlineTge || false,
       };
+    });
 
-      // Filter and map data for Alpha projects
-      const stabilityData = ALPHA_4X_PROJECTS.map((project) => {
-        const binanceSymbol = symbolMapping[project.symbol];
-        const ticker = Array.isArray(tickerData)
-          ? tickerData.find(
-              (t: {
-                symbol: string;
-                lastPrice?: string;
-                priceChangePercent?: string;
-                volume?: string;
-              }) => t.symbol === binanceSymbol,
-            )
-          : null;
+    // Sort by stability score descending
+    projects.sort((a, b) => b.stabilityScore - a.stabilityScore);
 
-        if (!ticker) {
-          // Return mock data if ticker not found
-          return {
-            symbol: project.symbol,
-            name: project.name,
-            multiplier: project.multiplier,
-            isBaseline: project.isBaseline,
-            price: Math.random() * 10,
-            change24h: (Math.random() - 0.5) * 20,
-            volume24h: Math.random() * 50000000,
-            stabilityScore: Math.round(Math.random() * 100),
-            riskLevel: "MEDIUM" as const,
-            volatilityIndex: Math.round(Math.random() * 100),
-            spreadBps: Math.round(Math.random() * 200),
-            hasAbnormalSpike: false,
-            volumeSwing: Math.round(Math.random() * 10000),
-            trend: "STABLE" as const,
-          };
-        }
+    // Update cache
+    cache = {
+      data: projects,
+      timestamp: now,
+    };
 
-        const {
-          stabilityScore,
-          riskLevel,
-          volatilityIndex,
-          spreadBps,
-          hasAbnormalSpike,
-          volumeSwing,
-          trend,
-        } = calculateEnhancedStabilityScore({
-          symbol: ticker.symbol,
-          priceChangePercent: ticker.priceChangePercent,
-          volume: ticker.volume,
-          quoteVolume: (ticker as { quoteVolume?: string }).quoteVolume,
-          highPrice: ticker.highPrice,
-          lowPrice: ticker.lowPrice,
-          lastPrice: ticker.lastPrice,
-          count: (ticker as { count?: string }).count,
-        });
+    return projects;
+  } catch (error) {
+    clearTimeout(timeoutId);
 
-        return {
-          symbol: project.symbol,
-          name: project.name,
-          multiplier: project.multiplier,
-          isBaseline: project.isBaseline,
-          price: parseFloat(ticker.lastPrice),
-          change24h: parseFloat(ticker.priceChangePercent),
-          volume24h: parseFloat(
-            (ticker as { quoteVolume?: string }).quoteVolume || ticker.volume,
-          ),
-          stabilityScore,
-          riskLevel,
-          volatilityIndex,
-          spreadBps,
-          hasAbnormalSpike,
-          volumeSwing,
-          trend,
-        };
-      });
-
-      // Sort by stability score, but keep KOGE (baseline) visible
-      const kogeData = stabilityData.find((d) => d.isBaseline);
-      const otherData = stabilityData
-        .filter((d) => !d.isBaseline)
-        .sort((a, b) => b.stabilityScore - a.stabilityScore);
-
-      const sortedData = kogeData ? [kogeData, ...otherData] : otherData;
-
-      return NextResponse.json({
-        success: true,
-        data: sortedData,
-        count: sortedData.length,
-        baseline: kogeData,
-        timestamp: new Date().toISOString(),
-        refreshInterval: 15,
-        source: "binance-alpha-4x-projects-fallback",
-        disclaimer:
-          "⚠️ Markets are unpredictable. DYOR; no liability for losses.",
-      });
-    } catch (fallbackError) {
-      console.error("Fallback also failed:", fallbackError);
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Failed to fetch stability data",
-          message: error instanceof Error ? error.message : "Unknown error",
-        },
-        { status: 500 },
-      );
+    // Return cached data if available, even if stale
+    if (cache.data) {
+      console.warn("Using stale cache due to fetch error:", error);
+      return cache.data;
     }
+
+    throw error;
+  }
+}
+
+// ============= API Handler =============
+
+export async function GET() {
+  try {
+    const projects = await fetchBinanceAlphaData();
+
+    // Calculate summary stats
+    const stats = {
+      total: projects.length,
+      lowRisk: projects.filter((p) => p.riskLevel === "LOW").length,
+      mediumRisk: projects.filter((p) => p.riskLevel === "MEDIUM").length,
+      highRisk: projects.filter((p) => p.riskLevel === "HIGH").length,
+      veryHighRisk: projects.filter((p) => p.riskLevel === "VERY_HIGH").length,
+      avgStabilityScore:
+        projects.length > 0
+          ? Math.round(
+              projects.reduce((sum, p) => sum + p.stabilityScore, 0) /
+                projects.length,
+            )
+          : 0,
+      withAirdrop: projects.filter((p) => p.isAirdrop).length,
+      withTge: projects.filter((p) => p.isTge).length,
+      baselineCount: projects.filter((p) => p.isBaseline).length,
+    };
+
+    return NextResponse.json({
+      success: true,
+      data: projects,
+      stats,
+      timestamp: new Date().toISOString(),
+      source: "binance-alpha-api",
+      cached: cache.timestamp > 0 && Date.now() - cache.timestamp < CACHE_TTL,
+    });
+  } catch (error) {
+    console.error("❌ Stability API Error:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch stability data",
+        data: [],
+        stats: {
+          total: 0,
+          lowRisk: 0,
+          mediumRisk: 0,
+          highRisk: 0,
+          veryHighRisk: 0,
+          avgStabilityScore: 0,
+          withAirdrop: 0,
+          withTge: 0,
+          baselineCount: 0,
+        },
+        timestamp: new Date().toISOString(),
+      },
+      { status: 500 },
+    );
   }
 }

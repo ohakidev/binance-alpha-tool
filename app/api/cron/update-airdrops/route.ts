@@ -151,66 +151,51 @@ function determineType(token: BinanceAlphaToken): AirdropType {
 }
 
 /**
- * Fetch tokens directly from Binance Alpha API with proper gzip handling
+ * Fetch tokens directly from Binance Alpha API using fetch API
+ * Better compatibility with Vercel serverless functions
  */
 async function fetchBinanceAlphaTokens(): Promise<BinanceAlphaToken[]> {
-  const https = await import("https");
-  const zlib = await import("zlib");
+  const BINANCE_API_URL =
+    "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list";
 
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: "www.binance.com",
-      path: "/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list",
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+  try {
+    const response = await fetch(BINANCE_API_URL, {
       method: "GET",
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         Accept: "application/json",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Cache-Control": "no-cache",
       },
-    };
-
-    const req = https.request(options, (res) => {
-      const chunks: Buffer[] = [];
-
-      // Handle gzip compression
-      let stream: NodeJS.ReadableStream = res;
-      const encoding = res.headers["content-encoding"];
-
-      if (encoding === "gzip") {
-        stream = res.pipe(zlib.createGunzip());
-      } else if (encoding === "deflate") {
-        stream = res.pipe(zlib.createInflate());
-      } else if (encoding === "br") {
-        stream = res.pipe(zlib.createBrotliDecompress());
-      }
-
-      stream.on("data", (chunk: Buffer) => chunks.push(chunk));
-      stream.on("end", () => {
-        try {
-          const data = Buffer.concat(chunks).toString("utf-8");
-          const json: BinanceAlphaResponse = JSON.parse(data);
-
-          if (json.code !== "000000") {
-            reject(new Error(`API Error: ${json.message || "Unknown error"}`));
-            return;
-          }
-
-          resolve(json.data || []);
-        } catch (e) {
-          reject(e);
-        }
-      });
-      stream.on("error", reject);
+      signal: controller.signal,
+      cache: "no-store",
     });
 
-    req.on("error", reject);
-    req.setTimeout(30000, () => {
-      req.destroy();
-      reject(new Error("Request timeout"));
-    });
-    req.end();
-  });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`API responded with status: ${response.status}`);
+    }
+
+    const json: BinanceAlphaResponse = await response.json();
+
+    if (json.code !== "000000") {
+      throw new Error(`API Error: ${json.message || "Unknown error"}`);
+    }
+
+    return json.data || [];
+  } catch (error) {
+    clearTimeout(timeoutId);
+
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Request timeout after 25 seconds");
+    }
+
+    throw error;
+  }
 }
 
 /**

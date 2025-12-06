@@ -1,111 +1,102 @@
 /**
  * Upcoming Airdrops API Route
- * GET /api/alpha/upcoming - Redirects to /api/alpha/schedule?type=upcoming
+ * GET /api/alpha/upcoming - Get upcoming airdrops directly from database
  *
- * This endpoint is a convenience alias for the schedule API.
- * For more options, use /api/alpha/schedule directly.
+ * Optimized to query database directly instead of calling another API
  */
 
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db/prisma";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/alpha/upcoming
- * Redirects to schedule API with type=upcoming filter
- *
- * Query params (passed through):
- * - limit: number (default: 20)
- * - chain: string - Filter by chain
- * - days: number - Only show airdrops within X days
+ * Get upcoming airdrops directly from database
  */
 export async function GET(request: Request) {
-  const { origin, searchParams } = new URL(request.url);
-
-  // Build schedule URL with type=upcoming and pass through other params
-  const scheduleParams = new URLSearchParams();
-  scheduleParams.set("type", "upcoming");
-
-  // Pass through optional params
-  const limit = searchParams.get("limit");
-  if (limit) scheduleParams.set("limit", limit);
-
-  const chain = searchParams.get("chain");
-  if (chain) scheduleParams.set("chain", chain);
-
-  const scheduleUrl = `${origin}/api/alpha/schedule?${scheduleParams.toString()}`;
-
   try {
-    const response = await fetch(scheduleUrl, {
-      headers: {
-        "Content-Type": "application/json",
+    const { searchParams } = new URL(request.url);
+    const limit = parseInt(searchParams.get("limit") || "50");
+    const chain = searchParams.get("chain");
+
+    const now = new Date();
+
+    // Build where clause
+    const where: Record<string, unknown> = {
+      scheduledTime: {
+        gt: now,
       },
-    });
+      isActive: true,
+      status: {
+        in: ["UPCOMING", "SCHEDULED"],
+      },
+    };
 
-    const data = await response.json();
-
-    // Transform response to match the original upcoming endpoint format
-    if (data.success && data.data?.upcoming) {
-      const airdrops = data.data.upcoming;
-
-      // Group by date for display
-      const byDate: Record<
-        string,
-        {
-          date: string;
-          count: number;
-          airdrops: typeof airdrops;
-        }
-      > = {};
-
-      airdrops.forEach((airdrop: { date: string }) => {
-        if (!byDate[airdrop.date]) {
-          byDate[airdrop.date] = {
-            date: airdrop.date,
-            count: 0,
-            airdrops: [],
-          };
-        }
-        byDate[airdrop.date].count++;
-        byDate[airdrop.date].airdrops.push(airdrop);
-      });
-
-      // Get unique chains
-      const chains = [
-        ...new Set(airdrops.map((a: { chain: string }) => a.chain)),
-      ];
-
-      // Get next airdrop
-      const nextAirdrop = airdrops.length > 0 ? airdrops[0] : null;
-
-      return NextResponse.json({
-        success: true,
-        data: {
-          airdrops,
-          count: airdrops.length,
-          byDate: Object.values(byDate),
-          uniqueDates: Object.keys(byDate).length,
-          chains,
-          nextAirdrop: nextAirdrop
-            ? {
-                token: nextAirdrop.token,
-                name: nextAirdrop.name,
-                date: nextAirdrop.date,
-                time: nextAirdrop.time,
-                daysUntil: nextAirdrop.daysUntil,
-                chain: nextAirdrop.chain,
-              }
-            : null,
-          stats: data.data.stats || {},
-          lastSync: data.data.lastUpdate || null,
-        },
-        timestamp: data.timestamp || new Date().toISOString(),
-        autoSync: true,
-        _redirectedFrom: `/api/alpha/schedule?type=upcoming`,
-      });
+    // Add chain filter if provided
+    if (chain) {
+      where.chain = chain;
     }
 
-    return NextResponse.json(data);
+    // Query directly from airdropSchedule table
+    const upcomingAirdrops = await prisma.airdropSchedule.findMany({
+      where,
+      orderBy: {
+        scheduledTime: "asc",
+      },
+      take: limit,
+    });
+
+    // Get total count for pagination info
+    const totalCount = await prisma.airdropSchedule.count({ where });
+
+    // Group by date for better organization
+    const groupedByDate: Record<string, typeof upcomingAirdrops> = {};
+    upcomingAirdrops.forEach((airdrop) => {
+      const dateKey = new Date(airdrop.scheduledTime)
+        .toISOString()
+        .split("T")[0];
+      if (!groupedByDate[dateKey]) {
+        groupedByDate[dateKey] = [];
+      }
+      groupedByDate[dateKey].push(airdrop);
+    });
+
+    // Find the next airdrop (soonest)
+    const nextAirdrop = upcomingAirdrops[0] || null;
+
+    // Calculate time until next airdrop
+    let timeUntilNext = null;
+    if (nextAirdrop) {
+      const diff =
+        new Date(nextAirdrop.scheduledTime).getTime() - now.getTime();
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      timeUntilNext = {
+        milliseconds: diff,
+        hours,
+        minutes,
+        formatted: `${hours}h ${minutes}m`,
+      };
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        airdrops: upcomingAirdrops,
+        groupedByDate,
+        count: upcomingAirdrops.length,
+        totalCount,
+        nextAirdrop,
+        timeUntilNext,
+        stats: {
+          total: totalCount,
+          returned: upcomingAirdrops.length,
+          hasMore: totalCount > upcomingAirdrops.length,
+        },
+      },
+      timestamp: now.toISOString(),
+    });
   } catch (error) {
     console.error("❌ Upcoming API Error:", error);
     return NextResponse.json(

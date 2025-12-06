@@ -1,62 +1,79 @@
 /**
  * Today's Airdrops API Route
- * GET /api/alpha/today - Redirects to /api/alpha/schedule?type=today
+ * GET /api/alpha/today - Get today's airdrops directly from database
  *
- * This endpoint is a convenience alias for the schedule API.
- * For more options, use /api/alpha/schedule directly.
+ * Optimized to query database directly instead of calling another API
  */
 
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db/prisma";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/alpha/today
- * Redirects to schedule API with type=today filter
+ * Get today's airdrops directly from database
  */
-export async function GET(request: Request) {
-  const { origin } = new URL(request.url);
-  const scheduleUrl = `${origin}/api/alpha/schedule?type=today`;
-
+export async function GET() {
   try {
-    const response = await fetch(scheduleUrl, {
-      headers: {
-        "Content-Type": "application/json",
+    // Get today's date range (start and end of day in UTC)
+    const now = new Date();
+    const startOfDay = new Date(now);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(now);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+
+    // Query directly from airdropSchedule table
+    const todayAirdrops = await prisma.airdropSchedule.findMany({
+      where: {
+        scheduledTime: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+        isActive: true,
+      },
+      orderBy: {
+        scheduledTime: "asc",
       },
     });
 
-    const data = await response.json();
+    // Count by status
+    const liveCount = todayAirdrops.filter((a) => a.status === "LIVE").length;
+    const upcomingCount = todayAirdrops.filter(
+      (a) => a.status === "UPCOMING" || a.status === "TODAY",
+    ).length;
+    const endedCount = todayAirdrops.filter(
+      (a) => a.status === "ENDED" || a.status === "CANCELLED",
+    ).length;
 
-    // Transform response to match the original today endpoint format
-    if (data.success && data.data?.today) {
-      return NextResponse.json({
-        success: true,
-        data: {
-          airdrops: data.data.today,
-          count: data.data.today.length,
-          liveCount: data.data.today.filter(
-            (a: { status: string }) => a.status === "live",
-          ).length,
-          upcomingCount: data.data.today.filter(
-            (a: { status: string }) => a.status === "upcoming",
-          ).length,
-          endedCount: data.data.today.filter(
-            (a: { status: string }) => a.status === "ended",
-          ).length,
-          nextAirdrop:
-            data.data.today.find(
-              (a: { status: string }) => a.status === "upcoming",
-            ) || null,
-          stats: data.data.stats || {},
-          lastSync: data.data.lastUpdate || null,
+    // Find next upcoming airdrop
+    const nextAirdrop =
+      todayAirdrops.find(
+        (a) =>
+          (a.status === "UPCOMING" || a.status === "TODAY") &&
+          new Date(a.scheduledTime) > now,
+      ) || null;
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        airdrops: todayAirdrops,
+        count: todayAirdrops.length,
+        liveCount,
+        upcomingCount,
+        endedCount,
+        nextAirdrop,
+        stats: {
+          total: todayAirdrops.length,
+          live: liveCount,
+          upcoming: upcomingCount,
+          ended: endedCount,
         },
-        timestamp: data.timestamp || new Date().toISOString(),
-        autoSync: true,
-        _redirectedFrom: "/api/alpha/schedule?type=today",
-      });
-    }
-
-    return NextResponse.json(data);
+        lastSync: now.toISOString(),
+      },
+      timestamp: now.toISOString(),
+    });
   } catch (error) {
     console.error("❌ Today API Error:", error);
     return NextResponse.json(
