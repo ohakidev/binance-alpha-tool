@@ -1,0 +1,63 @@
+# GitHub Actions Cron Job for Airdrop Updates
+# Runs every 5 minutes to sync data from Binance Alpha API
+# Free alternative to Vercel Pro cron jobs
+
+name: Update Airdrops Cron
+
+on:
+  schedule:
+    # Run every 5 minutes
+    - cron: '*/5 * * * *'
+
+  # Allow manual trigger from GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  update-airdrops:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Trigger Airdrop Update
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          # Default to production URL if APP_URL not set
+          URL="${APP_URL:-https://binance-alpha-tool.vercel.app}"
+
+          echo "🚀 Triggering airdrop update..."
+          echo "URL: ${URL}/api/cron/update-airdrops"
+
+          # Make the request with timeout
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            --max-time 120 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${URL}/api/cron/update-airdrops")
+
+          # Extract HTTP status code (last line)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          # Extract response body (all but last line)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "📊 Response (HTTP ${HTTP_CODE}):"
+          echo "$BODY" | head -c 1000
+
+          # Check if request was successful
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo ""
+            echo "✅ Airdrop update completed successfully!"
+          else
+            echo ""
+            echo "❌ Airdrop update failed with HTTP ${HTTP_CODE}"
+            exit 1
+          fi
+
+      - name: Report Status
+        if: failure()
+        run: |
+          echo "⚠️ Cron job failed. Check the logs above for details."
+          echo "Common issues:"
+          echo "  - CRON_SECRET not set in repository secrets"
+          echo "  - APP_URL incorrect or app not deployed"
+          echo "  - API endpoint timeout or error"

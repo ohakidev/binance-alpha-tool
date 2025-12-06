@@ -161,9 +161,28 @@ Quick steps:
 
 ## ⏰ Cron Jobs Setup (Required for Auto-Sync)
 
-### Option A: Vercel Cron (Pro Plan Required)
+### Option A: Vercel Cron (Hobby Plan - Daily Only)
 
-Already configured in `vercel.json`:
+Vercel Hobby plan only supports **daily** cron jobs. Already configured in `vercel.json`:
+
+```json
+{
+  "crons": [
+    {
+      "path": "/api/cron/update-airdrops",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}
+```
+
+This runs once per day at midnight UTC. For more frequent updates, use **Option B, C, or D** below.
+
+**Security**: Vercel Cron requests include `x-vercel-cron` header which is automatically validated.
+
+### Option A2: Vercel Pro (Unlimited Cron)
+
+Upgrade to Vercel Pro ($20/month) for unlimited cron frequency:
 
 ```json
 {
@@ -176,48 +195,46 @@ Already configured in `vercel.json`:
 }
 ```
 
-The cron job automatically:
-- Syncs data from Binance Alpha API
-- Updates airdrop schedules and statuses
-- Sends Telegram notifications (20 min before airdrops)
-- Runs every 5 minutes for real-time updates
+### Option B: cron-job.org (Free - Recommended) ⭐
 
-**Security**: Vercel Cron requests include `x-vercel-cron` header which is automatically validated.
+Best free alternative for frequent cron jobs:
 
-### Option B: External Cron Service (Free)
+1. Go to [https://cron-job.org](https://cron-job.org)
+2. Create free account
+3. Create new cron job:
+   - **Title**: `Binance Alpha Update`
+   - **URL**: `https://your-domain.vercel.app/api/cron/update-airdrops?secret=YOUR_CRON_SECRET`
+   - **Schedule**: Every 5 minutes
+   - **Method**: GET
+   - **Timeout**: 120 seconds
 
-Use services like:
-- [cron-job.org](https://cron-job.org)
-- [EasyCron](https://www.easycron.com)
-- [UptimeRobot](https://uptimerobot.com)
+### Option C: UptimeRobot (Free)
 
-Setup:
-- **URL**: `https://your-domain.vercel.app/api/cron/update-airdrops?secret=YOUR_CRON_SECRET`
-- **Schedule**: `0 * * * *` (every hour)
-- **Method**: GET
+Use monitoring as cron:
 
-### Option C: GitHub Actions (Free)
+1. Go to [https://uptimerobot.com](https://uptimerobot.com)
+2. Create free account
+3. Add new monitor:
+   - **Type**: HTTP(s)
+   - **URL**: `https://your-domain.vercel.app/api/cron/update-airdrops?secret=YOUR_CRON_SECRET`
+   - **Interval**: 5 minutes (free tier minimum)
 
-Create `.github/workflows/cron.yml`:
+### Option D: GitHub Actions (Free)
 
-```yaml
-name: Hourly Airdrop Update
+Already configured! File: `.github/workflows/cron-update-airdrops.yml`
 
-on:
-  schedule:
-    - cron: '0 * * * *'  # Every hour
-  workflow_dispatch:      # Manual trigger
+Runs every 5 minutes automatically.
 
-jobs:
-  update:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger Cron
-        run: |
-          curl -X GET "https://your-domain.vercel.app/api/cron/update-airdrops?secret=${{ secrets.CRON_SECRET }}"
-```
+**Setup required:**
+1. Go to your GitHub repository
+2. Navigate to **Settings > Secrets and variables > Actions**
+3. Add these secrets:
+   - `CRON_SECRET`: Your cron secret key
+   - `APP_URL`: `https://your-domain.vercel.app` (optional, has default)
 
-Add `CRON_SECRET` to GitHub repository secrets.
+**Note**: GitHub Actions cron may have delays of 1-5 minutes due to GitHub's queue system.
+
+**Manual trigger**: Go to Actions tab > "Update Airdrops Cron" > Run workflow
 
 ---
 
