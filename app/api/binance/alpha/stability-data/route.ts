@@ -5,9 +5,9 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 /**
- * Stability Data API Route - DexScreener Order Book Spread Version
+ * Stability Data API Route - Optimized Version
  * Fetches Alpha tokens from Binance Alpha API
- * Uses DexScreener API to calculate real-time spread from liquidity depth
+ * Uses parallel processing and caching for maximum performance
  *
  * Sorting Priority:
  * 1. Stable tokens (green) - lowest spread
@@ -20,15 +20,23 @@ export const revalidate = 0;
 // API URLs
 const BINANCE_ALPHA_API_URL =
   "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list";
-const DEXSCREENER_TOKEN_PAIRS_URL =
-  "https://api.dexscreener.com/token-pairs/v1";
+const BINANCE_BOOK_TICKER_URL =
+  "https://api.binance.com/api/v3/ticker/bookTicker";
+const BINANCE_24H_TICKER_URL = "https://api.binance.com/api/v3/ticker/24hr";
+
+// Moralis API configuration
+const MORALIS_API_KEY = process.env.MORALIS_API_KEY || "";
+const MORALIS_BASE_URL = "https://deep-index.moralis.io/api/v2.2";
+
+// Tokens that have Spot USDT pairs on Binance CEX
+const SPOT_EXCEPTIONS: string[] = [];
 
 // Request timeout in milliseconds
-const REQUEST_TIMEOUT = 8000;
+const REQUEST_TIMEOUT = 5000;
 
-// Stability thresholds (in basis points) - adjusted for order book spread
-const STABLE_THRESHOLD_BPS = 50; // 0.5% - very tight spread
-const MODERATE_THRESHOLD_BPS = 200; // 2% - moderate spread
+// Stability thresholds (in basis points)
+const STABLE_THRESHOLD_BPS = 500; // 5%
+const MODERATE_THRESHOLD_BPS = 1500; // 15%
 
 // Simple in-memory cache with TTL
 interface CacheEntry<T> {
@@ -37,7 +45,7 @@ interface CacheEntry<T> {
 }
 
 const cache = new Map<string, CacheEntry<unknown>>();
-const CACHE_TTL = 10000; // 10 seconds for fresher data
+const CACHE_TTL = 5000; // 5 seconds - reduced for fresher data
 
 function getCached<T>(key: string): T | null {
   const entry = cache.get(key);
@@ -71,46 +79,23 @@ interface AlphaTokenRaw {
   contractAddress?: string;
 }
 
-interface DexScreenerPair {
-  chainId: string;
-  dexId: string;
-  pairAddress: string;
-  baseToken: {
-    address: string;
-    name: string;
-    symbol: string;
-  };
-  quoteToken: {
-    address: string;
-    name: string;
-    symbol: string;
-  };
-  priceNative: string;
-  priceUsd: string;
-  txns: {
-    m5: { buys: number; sells: number };
-    h1: { buys: number; sells: number };
-    h6: { buys: number; sells: number };
-    h24: { buys: number; sells: number };
-  };
-  volume: {
-    h24: number;
-    h6: number;
-    h1: number;
-    m5: number;
-  };
-  priceChange?: {
-    h1?: number;
-    h6?: number;
-    h24?: number;
-  };
-  liquidity: {
-    usd: number;
-    base: number;
-    quote: number;
-  };
-  fdv?: number;
-  marketCap?: number;
+interface BookTickerData {
+  symbol: string;
+  bidPrice: string;
+  bidQty: string;
+  askPrice: string;
+  askQty: string;
+}
+
+interface Ticker24hData {
+  symbol: string;
+  priceChange: string;
+  priceChangePercent: string;
+  lastPrice: string;
+  volume: string;
+  quoteVolume: string;
+  highPrice: string;
+  lowPrice: string;
 }
 
 type StabilityLevel =
@@ -140,7 +125,14 @@ interface StabilityData {
   sortPriority: number;
 }
 
-// Fetch with timeout helper
+interface MoralisPairData {
+  spreadBps: number;
+  hasTrades: boolean;
+  volume24h: number;
+  price: number;
+}
+
+// Utility: Fetch with timeout and AbortController
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
@@ -160,90 +152,42 @@ async function fetchWithTimeout(
   }
 }
 
-// Calculate 4x days remaining
-function calculateFourXDaysRemaining(listingTimeMs: number): number {
-  if (!listingTimeMs || listingTimeMs <= 0) return 0;
+// Calculate days remaining in 4x period (30 days total)
+// Uses UTC time for consistent calculation across timezones
+function calculateFourXDaysRemaining(listingTime: number | null): number {
+  if (!listingTime || listingTime <= 0) return 0;
 
+  // Use current UTC time for consistency
   const now = Date.now();
   const FOUR_X_PERIOD_DAYS = 30;
 
-  // Calculate elapsed time
-  const elapsedMs = now - listingTimeMs;
-  if (elapsedMs < 0) return FOUR_X_PERIOD_DAYS;
+  // Calculate elapsed milliseconds since listing
+  const elapsedMs = now - listingTime;
 
+  // Convert to days (using exact milliseconds per day)
+  // Use Math.ceil to count partial days as full days (matches Binance's counting method)
   const MS_PER_DAY = 24 * 60 * 60 * 1000;
-  const daysSinceListing = elapsedMs / MS_PER_DAY;
+  const daysSinceListing = Math.ceil(elapsedMs / MS_PER_DAY);
 
-  // Use Math.ceil for partial day counting
-  const daysRemaining = Math.ceil(FOUR_X_PERIOD_DAYS - daysSinceListing);
+  // Calculate remaining days
+  const daysRemaining = FOUR_X_PERIOD_DAYS - daysSinceListing;
 
   return Math.max(0, daysRemaining);
 }
 
-/**
- * Calculate Order Book Spread from DexScreener liquidity data
- *
- * For AMM pools, the effective spread can be estimated using:
- * Spread ≈ 2 * (tradeSize / poolLiquidity) for constant product AMM
- *
- * We use a small trade size ($100) to estimate the minimum spread
- * This gives us the bid-ask equivalent spread for DEX tokens
- */
-function calculateOrderBookSpread(
-  liquidity: number,
-  volume24h: number,
-  priceUsd: number,
-  txns24h: number,
+// Calculate spread from price range
+function calculateSpreadFromPriceRange(
+  price: number,
+  priceHigh: number,
+  priceLow: number,
 ): { spreadPercent: number; spreadBps: number } {
-  // Default for no liquidity
-  if (liquidity <= 0 || priceUsd <= 0) {
+  if (price <= 0 || priceHigh <= 0 || priceLow <= 0) {
     return { spreadPercent: 0, spreadBps: 0 };
   }
 
-  // Trade size for spread calculation ($100 equivalent)
-  const tradeSize = 100;
-
-  // For AMM constant product formula: price impact ≈ tradeSize / (liquidity / 2)
-  // The effective spread is approximately 2x the price impact for a round trip
-  const priceImpact = tradeSize / (liquidity / 2);
-
-  // Adjust spread based on activity level
-  // Higher volume relative to liquidity = tighter effective spread due to arbitrage
-  let activityMultiplier = 1.0;
-  if (volume24h > 0 && liquidity > 0) {
-    const volumeToLiquidityRatio = volume24h / liquidity;
-    // High activity means tighter spreads due to more arbitrage
-    if (volumeToLiquidityRatio > 1) {
-      activityMultiplier = 0.5; // Very active pool
-    } else if (volumeToLiquidityRatio > 0.1) {
-      activityMultiplier = 0.7; // Active pool
-    } else if (volumeToLiquidityRatio < 0.01) {
-      activityMultiplier = 1.5; // Low activity = wider spread
-    }
-  }
-
-  // Transaction frequency adjustment
-  // More transactions = more efficient price discovery = tighter spread
-  if (txns24h > 1000) {
-    activityMultiplier *= 0.6;
-  } else if (txns24h > 100) {
-    activityMultiplier *= 0.8;
-  } else if (txns24h < 10) {
-    activityMultiplier *= 1.3;
-  }
-
-  // Calculate final spread (in percentage)
-  // We multiply by 100 to get percentage and by 2 for round-trip spread
-  let spreadPercent = priceImpact * 100 * 2 * activityMultiplier;
-
-  // Apply minimum spread based on typical DEX fees (0.3% for most AMMs)
-  const minSpread = 0.03; // 0.03% minimum (3 bps)
-  spreadPercent = Math.max(spreadPercent, minSpread);
-
-  // Cap maximum spread at reasonable level
-  const maxSpread = 50; // 50% max
-  spreadPercent = Math.min(spreadPercent, maxSpread);
-
+  const midPrice = (priceHigh + priceLow) / 2;
+  const priceRange = priceHigh - priceLow;
+  const spreadPercent = (priceRange / midPrice) * 100;
   const spreadBps = spreadPercent * 100;
 
   return {
@@ -252,7 +196,27 @@ function calculateOrderBookSpread(
   };
 }
 
-// Determine stability level based on spread
+// Calculate spread from orderbook
+function calculateSpreadFromOrderbook(
+  bidPrice: number,
+  askPrice: number,
+): { spreadPercent: number; spreadBps: number } {
+  if (bidPrice <= 0 || askPrice <= 0) {
+    return { spreadPercent: 0, spreadBps: 0 };
+  }
+
+  const midPrice = (bidPrice + askPrice) / 2;
+  const spread = askPrice - bidPrice;
+  const spreadPercent = (spread / midPrice) * 100;
+  const spreadBps = spreadPercent * 100;
+
+  return {
+    spreadPercent: Number(spreadPercent.toFixed(4)),
+    spreadBps: Number(spreadBps.toFixed(2)),
+  };
+}
+
+// Determine stability level
 function determineStability(
   spreadBps: number,
   hasVolume: boolean,
@@ -277,133 +241,199 @@ function getStabilitySortPriority(stability: StabilityLevel): number {
   return priorities[stability] ?? 6;
 }
 
-// Fetch DexScreener pair data for a token
-async function fetchDexScreenerData(
+// Fetch Moralis pair stats (with caching)
+async function fetchMoralisPairStats(
   contractAddress: string,
-  chainId: string = "bsc",
-): Promise<DexScreenerPair | null> {
-  if (!contractAddress) return null;
+): Promise<MoralisPairData> {
+  const defaultResult: MoralisPairData = {
+    spreadBps: 0,
+    hasTrades: false,
+    volume24h: 0,
+    price: 0,
+  };
 
-  const cacheKey = `dexscreener_${chainId}_${contractAddress}`;
-  const cached = getCached<DexScreenerPair>(cacheKey);
+  if (!MORALIS_API_KEY || !contractAddress) return defaultResult;
+
+  const cacheKey = `moralis_${contractAddress}`;
+  const cached = getCached<MoralisPairData>(cacheKey);
   if (cached) return cached;
 
   try {
     const response = await fetchWithTimeout(
-      `${DEXSCREENER_TOKEN_PAIRS_URL}/${chainId}/${contractAddress}`,
+      `${MORALIS_BASE_URL}/erc20/${contractAddress}/pairs?chain=bsc&limit=3`,
       {
-        headers: { Accept: "application/json" },
+        headers: {
+          Accept: "application/json",
+          "X-API-Key": MORALIS_API_KEY,
+        },
       },
-      5000,
+      3000,
+    );
+
+    if (!response.ok) return defaultResult;
+
+    const pairsData = await response.json();
+    const pairs = pairsData.pairs || [];
+
+    if (pairs.length === 0) return defaultResult;
+
+    // Get active pair with volume
+    const activePairs = pairs.filter(
+      (p: { inactive_pair?: boolean; volume_24h_usd?: number }) =>
+        !p.inactive_pair && p.volume_24h_usd,
+    );
+    const mainPair = activePairs.length > 0 ? activePairs[0] : pairs[0];
+
+    const volume24h = parseFloat(mainPair.volume_24h_usd || "0");
+    const currentPrice = parseFloat(mainPair.usd_price || "0");
+    const price24hAgo = parseFloat(mainPair.usd_price_24hr || "0");
+    const priceChangePercent = parseFloat(
+      mainPair.usd_price_24hr_percent_change || "0",
+    );
+
+    const hasTrades = volume24h > 0 || currentPrice > 0;
+    if (!hasTrades) return defaultResult;
+
+    let spreadBps = 0;
+    if (currentPrice > 0 && price24hAgo > 0) {
+      const highPrice = Math.max(currentPrice, price24hAgo);
+      const lowPrice = Math.min(currentPrice, price24hAgo);
+      const avgPrice = (highPrice + lowPrice) / 2;
+      const priceRange = highPrice - lowPrice;
+      spreadBps = (priceRange / avgPrice) * 10000;
+    } else if (Math.abs(priceChangePercent) > 0) {
+      spreadBps = Math.abs(priceChangePercent) * 100;
+    }
+
+    const result: MoralisPairData = {
+      spreadBps: Number(spreadBps.toFixed(2)),
+      hasTrades,
+      volume24h,
+      price: currentPrice,
+    };
+
+    setCache(cacheKey, result);
+    return result;
+  } catch {
+    return defaultResult;
+  }
+}
+
+// Fetch Spot book ticker (with caching)
+async function fetchSpotBookTicker(
+  symbol: string,
+): Promise<BookTickerData | null> {
+  const cacheKey = `book_${symbol}`;
+  const cached = getCached<BookTickerData>(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const response = await fetchWithTimeout(
+      `${BINANCE_BOOK_TICKER_URL}?symbol=${symbol}USDT`,
+      { headers: { Accept: "application/json" } },
+      2000,
     );
 
     if (!response.ok) return null;
 
-    const pairs = (await response.json()) as DexScreenerPair[];
-
-    if (!Array.isArray(pairs) || pairs.length === 0) return null;
-
-    // Find the best pair (highest liquidity with USDT/USDC/WBNB quote)
-    const stableQuotes = ["USDT", "USDC", "BUSD", "WBNB", "WETH"];
-    const validPairs = pairs.filter(
-      (p) =>
-        p.liquidity?.usd > 0 && stableQuotes.includes(p.quoteToken?.symbol),
-    );
-
-    // Sort by liquidity and pick the best one
-    validPairs.sort(
-      (a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0),
-    );
-
-    const bestPair = validPairs[0] || pairs[0];
-
-    if (bestPair) {
-      setCache(cacheKey, bestPair);
-    }
-
-    return bestPair;
+    const data = await response.json();
+    setCache(cacheKey, data);
+    return data as BookTickerData;
   } catch {
     return null;
   }
 }
 
-// Process a single token
+// Fetch Spot 24h ticker (with caching)
+async function fetchSpot24hTicker(
+  symbol: string,
+): Promise<Ticker24hData | null> {
+  const cacheKey = `ticker24h_${symbol}`;
+  const cached = getCached<Ticker24hData>(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const response = await fetchWithTimeout(
+      `${BINANCE_24H_TICKER_URL}?symbol=${symbol}USDT`,
+      { headers: { Accept: "application/json" } },
+      2000,
+    );
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    setCache(cacheKey, data);
+    return data as Ticker24hData;
+  } catch {
+    return null;
+  }
+}
+
+// Process a single token (optimized)
 async function processToken(token: AlphaTokenRaw): Promise<StabilityData> {
+  const isSpotException = SPOT_EXCEPTIONS.includes(token.symbol);
   let price = parseFloat(token.price) || 0;
-  const priceHigh24h = parseFloat(token.priceHigh24h) || 0;
-  const priceLow24h = parseFloat(token.priceLow24h) || 0;
+  let priceHigh24h = parseFloat(token.priceHigh24h) || 0;
+  let priceLow24h = parseFloat(token.priceLow24h) || 0;
   let volume24h = parseFloat(token.volume24h) || 0;
-  let liquidity = parseFloat(token.liquidity) || 0;
+  const liquidity = parseFloat(token.liquidity) || 0;
   let spreadPercent = 0;
   let spreadBps = 0;
   let priceChange24h = parseFloat(token.percentChange24h) || 0;
   let hasTrades = volume24h > 0;
-  let txns24h = 0;
 
-  // Try to get DexScreener data for better spread calculation
-  if (token.contractAddress) {
-    const chainId =
-      token.chainName?.toLowerCase() === "bsc"
-        ? "bsc"
-        : token.chainName?.toLowerCase() === "ethereum"
-          ? "ethereum"
-          : token.chainName?.toLowerCase() === "solana"
-            ? "solana"
-            : "bsc";
+  // Try Moralis for DEX tokens (parallel with Binance Alpha data)
+  if (MORALIS_API_KEY && token.contractAddress && !isSpotException) {
+    const moralisData = await fetchMoralisPairStats(token.contractAddress);
 
-    const dexData = await fetchDexScreenerData(token.contractAddress, chainId);
+    if (moralisData.hasTrades && moralisData.spreadBps > 0) {
+      spreadBps = moralisData.spreadBps;
+      spreadPercent = spreadBps / 100;
+      hasTrades = true;
 
-    if (dexData) {
-      // Update with DexScreener data
-      if (dexData.priceUsd) {
-        price = parseFloat(dexData.priceUsd);
+      if (moralisData.volume24h > 0) {
+        volume24h = Math.max(volume24h, moralisData.volume24h);
       }
-      if (dexData.liquidity?.usd > 0) {
-        liquidity = dexData.liquidity.usd;
+      if (moralisData.price > 0) {
+        price = moralisData.price;
       }
-      if (dexData.volume?.h24 > 0) {
-        volume24h = Math.max(volume24h, dexData.volume.h24);
-      }
-      if (dexData.priceChange?.h24 !== undefined) {
-        priceChange24h = dexData.priceChange.h24;
-      }
-
-      // Calculate total transactions
-      if (dexData.txns?.h24) {
-        txns24h = dexData.txns.h24.buys + dexData.txns.h24.sells;
-      }
-
-      hasTrades =
-        (dexData.txns?.h24?.buys || 0) + (dexData.txns?.h24?.sells || 0) > 0;
-
-      // Calculate order book spread from DexScreener liquidity
-      const spreadData = calculateOrderBookSpread(
-        liquidity,
-        volume24h,
-        price,
-        txns24h,
-      );
-      spreadPercent = spreadData.spreadPercent;
-      spreadBps = spreadData.spreadBps;
     }
   }
 
-  // Fallback: Calculate spread from 24h price range if no DexScreener data
+  // Handle Spot exceptions
+  if (isSpotException && spreadBps === 0) {
+    const [bookTicker, ticker24h] = await Promise.all([
+      fetchSpotBookTicker(token.symbol),
+      fetchSpot24hTicker(token.symbol),
+    ]);
+
+    if (bookTicker) {
+      const bidPrice = parseFloat(bookTicker.bidPrice);
+      const askPrice = parseFloat(bookTicker.askPrice);
+      const spreadData = calculateSpreadFromOrderbook(bidPrice, askPrice);
+      spreadPercent = spreadData.spreadPercent;
+      spreadBps = spreadData.spreadBps;
+      price = (bidPrice + askPrice) / 2;
+    }
+
+    if (ticker24h) {
+      priceHigh24h = parseFloat(ticker24h.highPrice) || priceHigh24h;
+      priceLow24h = parseFloat(ticker24h.lowPrice) || priceLow24h;
+      volume24h = parseFloat(ticker24h.quoteVolume) || volume24h;
+      priceChange24h =
+        parseFloat(ticker24h.priceChangePercent) || priceChange24h;
+    }
+  }
+
+  // Fallback: Calculate spread from 24h price range
   if (spreadBps === 0 && price > 0 && priceHigh24h > 0 && priceLow24h > 0) {
-    // Use 5-minute volatility estimate as spread proxy
-    // Typical relationship: spread ≈ 24h_range / 100 (rough approximation)
-    const midPrice = (priceHigh24h + priceLow24h) / 2;
-    const priceRange = priceHigh24h - priceLow24h;
-    const rangePercent = (priceRange / midPrice) * 100;
-
-    // Convert range to estimated spread (divide by time factor)
-    // 24h has ~288 5-minute intervals, spread is typically range / sqrt(intervals)
-    spreadPercent = rangePercent / Math.sqrt(288);
-    spreadBps = spreadPercent * 100;
-
-    // Apply minimum
-    if (spreadBps < 3) spreadBps = 3;
-    spreadPercent = spreadBps / 100;
+    const spreadData = calculateSpreadFromPriceRange(
+      price,
+      priceHigh24h,
+      priceLow24h,
+    );
+    spreadPercent = spreadData.spreadPercent;
+    spreadBps = spreadData.spreadBps;
   }
 
   const hasVolume = volume24h > 0;
@@ -415,26 +445,28 @@ async function processToken(token: AlphaTokenRaw): Promise<StabilityData> {
     symbol: token.symbol,
     mulPoint: token.mulPoint,
     stability,
-    spreadBps: Number(spreadBps.toFixed(2)),
+    spreadBps,
     fourXDays: calculateFourXDaysRemaining(token.listingTime),
     price,
     priceHigh24h,
     priceLow24h,
-    spreadPercent: Number(spreadPercent.toFixed(4)),
+    spreadPercent,
     lastUpdate: Date.now(),
     chain: token.chainName || "BSC",
     volume24h,
     liquidity,
-    isSpotPair: false,
+    isSpotPair: isSpotException,
     priceChange24h,
     sortPriority,
   };
 }
 
-// Main GET handler
 export async function GET() {
   try {
-    // Fetch Binance Alpha token list
+    // Always fetch fresh data - no early cache return
+    // Cache is only used as fallback on error
+
+    // Fetch Alpha data with no-cache headers
     const alphaResponse = await fetchWithTimeout(
       BINANCE_ALPHA_API_URL,
       {
@@ -449,12 +481,14 @@ export async function GET() {
         },
         cache: "no-store",
       },
-      REQUEST_TIMEOUT,
+      6000,
     );
 
+    // Get cached response for fallback only
+    const cachedResponse = getCached<StabilityData[]>("stability_data");
+
     if (!alphaResponse.ok) {
-      // Return cached response if available
-      const cachedResponse = getCached<StabilityData[]>("stability_data");
+      // Return cached data if available
       if (cachedResponse) {
         return NextResponse.json({
           success: true,
@@ -468,18 +502,16 @@ export async function GET() {
       return NextResponse.json(
         {
           success: false,
-          error: "Failed to fetch Binance Alpha data",
+          error: `Alpha API error: ${alphaResponse.status}`,
           data: [],
         },
-        { status: 500 },
+        { status: alphaResponse.status },
       );
     }
 
     const alphaData = await alphaResponse.json();
 
-    // Binance Alpha API returns { code: "000000", data: [...tokens] }
     if (alphaData.code !== "000000" || !Array.isArray(alphaData.data)) {
-      const cachedResponse = getCached<StabilityData[]>("stability_data");
       if (cachedResponse) {
         return NextResponse.json({
           success: true,
@@ -489,13 +521,15 @@ export async function GET() {
           fromCache: true,
         });
       }
-      return NextResponse.json({
-        success: true,
-        data: [],
-        count: 0,
-        lastUpdate: Date.now(),
-        fromCache: false,
-      });
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid Alpha API response",
+          data: [],
+        },
+        { status: 500 },
+      );
     }
 
     // Filter 4x multiplier tokens AND KOGE (1x baseline)
@@ -503,28 +537,29 @@ export async function GET() {
       (t) => t.mulPoint === 4 || t.symbol === "KOGE",
     );
 
-    // Process tokens in parallel with concurrency limit
-    const BATCH_SIZE = 10;
-    const stabilityData: StabilityData[] = [];
+    // Process ALL tokens in parallel for maximum speed
+    const stabilityData = await Promise.all(
+      tokensToProcess.map((token) => processToken(token)),
+    );
 
-    for (let i = 0; i < tokensToProcess.length; i += BATCH_SIZE) {
-      const batch = tokensToProcess.slice(i, i + BATCH_SIZE);
-      const batchResults = await Promise.all(
-        batch.map((token: AlphaTokenRaw) => processToken(token)),
-      );
-      stabilityData.push(...batchResults);
-    }
-
-    // Sort by stability priority, then by spread (ascending)
+    // Sort: KOGE first (baseline), then by priority, then by volume
     stabilityData.sort((a, b) => {
+      // KOGE always first
+      if (a.symbol === "KOGE" && b.symbol !== "KOGE") return -1;
+      if (b.symbol === "KOGE" && a.symbol !== "KOGE") return 1;
+
+      // Then by stability priority
       if (a.sortPriority !== b.sortPriority) {
         return a.sortPriority - b.sortPriority;
       }
-      // Within same stability, sort by spread (lower is better)
-      return a.spreadBps - b.spreadBps;
+      // Then by volume descending
+      return b.volume24h - a.volume24h;
     });
 
-    // Calculate summary statistics
+    // Cache the result
+    setCache("stability_data", stabilityData);
+
+    // Calculate summary (optimized single pass)
     let stableCount = 0;
     let moderateCount = 0;
     let unstableCount = 0;
@@ -533,6 +568,7 @@ export async function GET() {
     let totalVolume = 0;
     let spreadSum = 0;
     let spreadCount = 0;
+    let spotPairsCount = 0;
 
     for (const item of stabilityData) {
       switch (item.stability) {
@@ -552,53 +588,43 @@ export async function GET() {
           checkingCount++;
           break;
       }
-      totalVolume += item.volume24h || 0;
+      totalVolume += item.volume24h;
       if (item.spreadPercent > 0) {
         spreadSum += item.spreadPercent;
         spreadCount++;
       }
+      if (item.isSpotPair) spotPairsCount++;
     }
 
     const avgSpread = spreadCount > 0 ? spreadSum / spreadCount : 0;
 
-    // Cache the result
-    setCache("stability_data", stabilityData);
-
-    return NextResponse.json(
-      {
-        success: true,
-        data: stabilityData,
-        count: stabilityData.length,
-        lastUpdate: Date.now(),
-        filters: {
-          mulPoint: 4,
-          source: "DexScreener Order Book Spread",
-        },
-        summary: {
-          stableCount,
-          moderateCount,
-          unstableCount,
-          noTradeCount,
-          checkingCount,
-          totalVolume24h: totalVolume,
-          avgSpreadPercent: Number(avgSpread.toFixed(2)),
-          spreadMethod: "orderbook",
-        },
-        thresholds: {
-          stable: STABLE_THRESHOLD_BPS,
-          moderate: MODERATE_THRESHOLD_BPS,
-        },
+    return NextResponse.json({
+      success: true,
+      data: stabilityData,
+      count: stabilityData.length,
+      lastUpdate: Date.now(),
+      filters: {
+        mulPoint: 4,
+        source: "Alpha DEX + Spot Exceptions",
       },
-      {
-        headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
+      summary: {
+        stableCount,
+        moderateCount,
+        unstableCount,
+        noTradeCount,
+        checkingCount,
+        totalVolume24h: totalVolume,
+        avgSpreadPercent: Number(avgSpread.toFixed(2)),
+        spotPairsCount,
+        moralisEnabled: !!MORALIS_API_KEY,
       },
-    );
+      thresholds: {
+        stable: STABLE_THRESHOLD_BPS,
+        moderate: MODERATE_THRESHOLD_BPS,
+      },
+    });
   } catch (error) {
-    console.error("Stability API error:", error);
+    console.error("Stability data fetch error:", error);
 
     // Try to return cached data on error
     const cachedResponse = getCached<StabilityData[]>("stability_data");
@@ -609,7 +635,7 @@ export async function GET() {
         count: cachedResponse.length,
         lastUpdate: Date.now(),
         fromCache: true,
-        error: "Partial failure - using cached data",
+        error: "Using cached data due to fetch error",
       });
     }
 
