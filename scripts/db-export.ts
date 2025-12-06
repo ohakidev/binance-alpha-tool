@@ -6,15 +6,35 @@
  */
 
 import { PrismaClient } from "@prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaNeon } from "@prisma/adapter-neon";
 import * as fs from "fs";
 import * as path from "path";
 
-const adapter = new PrismaBetterSqlite3({
-  url: process.env.DATABASE_URL || "file:./prisma/dev.db",
-});
+function createPrismaClient(): PrismaClient {
+  const databaseUrl = process.env.DATABASE_URL;
 
-const prisma = new PrismaClient({ adapter });
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL environment variable is not set");
+  }
+
+  // Check if we're using PostgreSQL (Neon)
+  if (
+    databaseUrl.startsWith("postgresql://") ||
+    databaseUrl.startsWith("postgres://")
+  ) {
+    // Use Neon adapter for PostgreSQL
+    const adapter = new PrismaNeon({
+      connectionString: databaseUrl,
+    });
+
+    return new PrismaClient({ adapter });
+  }
+
+  // Fallback: Standard Prisma Client without adapter
+  return new PrismaClient();
+}
+
+const prisma = createPrismaClient();
 
 async function exportAirdrops() {
   try {
