@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import {
   useReactTable,
   getCoreRowModel,
@@ -66,6 +67,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
@@ -143,7 +145,194 @@ const typeColors: Record<string, string> = {
     "bg-gradient-to-r from-cyan-500/20 to-blue-500/10 text-cyan-400 border-cyan-500/40",
 };
 
+// Mobile Airdrop Card Component
+interface MobileAirdropCardProps {
+  airdrop: Airdrop;
+  onClick: () => void;
+  onSendAlert: () => void;
+  isSendingTelegram: boolean;
+}
+
+function MobileAirdropCard({
+  airdrop,
+  onClick,
+  onSendAlert,
+  isSendingTelegram,
+}: MobileAirdropCardProps) {
+  const targetDate = airdrop.claimStartDate
+    ? new Date(airdrop.claimStartDate)
+    : null;
+  const isTodayDate = targetDate ? isToday(targetDate) : false;
+  const isTomorrowDate = targetDate ? isTomorrow(targetDate) : false;
+  const isExpiringSoon =
+    airdrop.claimEndDate &&
+    isBefore(new Date(airdrop.claimEndDate), addDays(new Date(), 3));
+  const contractLink = airdrop.contractAddress
+    ? `https://bscscan.com/token/${airdrop.contractAddress}`
+    : null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="rounded-xl border border-primary/15 bg-gradient-to-br from-card/95 via-card to-primary/5 p-4 shadow-lg"
+      onClick={onClick}
+    >
+      {/* Project Header - Always Visible */}
+      <div className="flex items-center gap-3 mb-4 pb-3 border-b border-primary/10">
+        <div className="relative flex-shrink-0">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/30 to-purple-500/20 flex items-center justify-center text-xl font-bold border border-primary/30 shadow-md">
+            {airdrop.logo === "🎁" ? (
+              <Sparkles className="w-6 h-6 text-primary" />
+            ) : (
+              <span className="text-primary">{airdrop.symbol.charAt(0)}</span>
+            )}
+          </div>
+          {airdrop.type === "TGE" && (
+            <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center border-2 border-card shadow-md">
+              <Flame className="w-3 h-3 text-white" />
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <h3 className="font-bold text-foreground text-base truncate">
+              {airdrop.projectName}
+            </h3>
+            {contractLink && (
+              <a
+                href={contractLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-primary transition-colors flex-shrink-0 p-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-primary font-medium">
+              ${airdrop.symbol}
+            </span>
+            <Badge
+              variant="outline"
+              className={`${chainColors[airdrop.chain] || "bg-slate-500/20 text-slate-400 border-slate-500/40"} text-[10px] px-2 py-0.5`}
+            >
+              {airdrop.chain}
+            </Badge>
+            <Badge
+              variant="outline"
+              className={`${typeColors[airdrop.type] || typeColors["AIRDROP"]} text-[10px] px-2 py-0.5`}
+            >
+              {airdrop.type}
+            </Badge>
+          </div>
+        </div>
+      </div>
+
+      {/* Info Grid - 2 Columns */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        {/* Alpha Points */}
+        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Star className="w-4 h-4 text-amber-400" />
+            <span className="text-xs text-muted-foreground font-medium">
+              Alpha Points
+            </span>
+          </div>
+          <div className="font-bold text-amber-400 text-lg">
+            {airdrop.requiredPoints || 0}
+            <span className="text-xs font-normal ml-1">pts</span>
+          </div>
+          {(airdrop.deductPoints ?? 0) > 0 && (
+            <div className="text-xs text-red-400 mt-1 font-medium">
+              หัก: -{airdrop.deductPoints} pts
+            </div>
+          )}
+        </div>
+
+        {/* Time */}
+        <div className="p-3 rounded-xl bg-muted/40 border border-primary/10">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Clock className="w-4 h-4 text-primary" />
+            <span className="text-xs text-muted-foreground font-medium">
+              เวลา
+            </span>
+          </div>
+          {targetDate ? (
+            <>
+              <div className="flex items-center gap-1 flex-wrap mb-1">
+                {isTodayDate && (
+                  <Badge
+                    variant="outline"
+                    className="h-5 px-2 bg-emerald-500/20 text-emerald-400 border-emerald-500/40 text-[10px] font-semibold"
+                  >
+                    วันนี้
+                  </Badge>
+                )}
+                {isTomorrowDate && (
+                  <Badge
+                    variant="outline"
+                    className="h-5 px-2 bg-blue-500/20 text-blue-400 border-blue-500/40 text-[10px] font-semibold"
+                  >
+                    พรุ่งนี้
+                  </Badge>
+                )}
+              </div>
+              <div className="text-sm font-semibold text-foreground">
+                {format(targetDate, "dd MMM HH:mm", { locale: th })}
+              </div>
+              <div
+                className={`text-xs mt-0.5 ${isExpiringSoon ? "text-red-400 font-medium" : "text-muted-foreground"}`}
+              >
+                {formatDistanceToNow(targetDate, {
+                  locale: th,
+                  addSuffix: true,
+                })}
+              </div>
+            </>
+          ) : (
+            <span className="text-sm text-muted-foreground">-</span>
+          )}
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSendAlert();
+          }}
+          disabled={isSendingTelegram}
+          className="flex-1 h-10 text-sm gap-2 border-primary/30 hover:bg-primary/10 font-medium"
+        >
+          <Send className="w-4 h-4" />
+          แจ้งเตือน
+        </Button>
+        <Button
+          variant="default"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
+          className="h-10 px-4 text-sm gap-2 bg-primary/20 hover:bg-primary/30 text-primary font-medium"
+        >
+          <ArrowUpRight className="w-4 h-4" />
+          ดูเพิ่ม
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
+
 export function AirdropsTable() {
+  const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState<"today" | "upcoming" | "all">(
     "today",
   );
@@ -967,60 +1156,63 @@ export function AirdropsTable() {
 
               {/* Filters */}
               <div className="space-y-3">
-                <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       placeholder="ค้นหาโปรเจค หรือ Symbol..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9 bg-muted/30 border-primary/20 focus:border-primary/40"
+                      className="pl-9 h-11 sm:h-10 text-base sm:text-sm bg-muted/30 border-primary/20 focus:border-primary/40"
                     />
                   </div>
 
-                  {availableChains.length > 0 && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="gap-2 bg-muted/30 border-primary/20"
-                        >
-                          <Filter className="w-4 h-4" />
-                          Chain
-                          {selectedChains.length > 0 && (
-                            <Badge
-                              variant="secondary"
-                              className="ml-1 h-5 px-1.5 bg-primary/20 text-primary"
-                            >
-                              {selectedChains.length}
-                            </Badge>
-                          )}
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-40">
-                        {availableChains.map((chain) => (
-                          <DropdownMenuCheckboxItem
-                            key={chain}
-                            checked={selectedChains.includes(chain)}
-                            onCheckedChange={(checked) =>
-                              handleChainToggle(chain, checked)
-                            }
+                  <div className="flex gap-2">
+                    {availableChains.length > 0 && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="flex-1 sm:flex-none h-11 sm:h-10 gap-2 bg-muted/30 border-primary/20 text-sm"
                           >
-                            {chain}
-                          </DropdownMenuCheckboxItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
+                            <Filter className="w-4 h-4" />
+                            <span>Chain</span>
+                            {selectedChains.length > 0 && (
+                              <Badge
+                                variant="secondary"
+                                className="ml-1 h-5 px-1.5 bg-primary/20 text-primary"
+                              >
+                                {selectedChains.length}
+                              </Badge>
+                            )}
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44">
+                          {availableChains.map((chain) => (
+                            <DropdownMenuCheckboxItem
+                              key={chain}
+                              checked={selectedChains.includes(chain)}
+                              onCheckedChange={(checked) =>
+                                handleChainToggle(chain, checked)
+                              }
+                              className="py-2.5"
+                            >
+                              {chain}
+                            </DropdownMenuCheckboxItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
 
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={handleRefresh}
-                    className="bg-muted/30 border-primary/20 hover:bg-primary/10"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                  </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={handleRefresh}
+                      className="h-11 w-11 sm:h-10 sm:w-10 bg-muted/30 border-primary/20 hover:bg-primary/10"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Active Filters */}
@@ -1083,9 +1275,12 @@ export function AirdropsTable() {
 
               {/* Table Content */}
               {isLoading ? (
-                <div className="space-y-4 mt-4">
+                <div className="space-y-3 mt-4">
                   {[...Array(5)].map((_, i) => (
-                    <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                    <Skeleton
+                      key={i}
+                      className={`${isMobile ? "h-40" : "h-16"} w-full rounded-lg`}
+                    />
                   ))}
                 </div>
               ) : filteredData.length === 0 ? (
@@ -1111,110 +1306,198 @@ export function AirdropsTable() {
                   </p>
                 </motion.div>
               ) : (
-                <div className="mt-4 rounded-xl overflow-hidden border border-primary/10">
-                  <Table>
-                    <TableHeader>
-                      {table.getHeaderGroups().map((headerGroup) => (
-                        <TableRow
-                          key={headerGroup.id}
-                          className="bg-muted/30 hover:bg-muted/40"
-                        >
-                          {headerGroup.headers.map((header) => (
-                            <TableHead
-                              key={header.id}
-                              className="text-muted-foreground font-medium"
-                            >
-                              {header.isPlaceholder ? null : (
-                                <div
-                                  className={
-                                    header.column.getCanSort()
-                                      ? "cursor-pointer select-none flex items-center gap-1"
-                                      : ""
-                                  }
-                                  onClick={header.column.getToggleSortingHandler()}
-                                >
-                                  {flexRender(
-                                    header.column.columnDef.header as string,
-                                    header.getContext() as never,
-                                  )}
-                                  {{
-                                    asc: (
-                                      <ChevronUp className="w-4 h-4 text-primary" />
-                                    ),
-                                    desc: (
-                                      <ChevronDown className="w-4 h-4 text-primary" />
-                                    ),
-                                  }[header.column.getIsSorted() as string] ??
-                                    (header.column.getCanSort() ? (
-                                      <ChevronsUpDown className="w-4 h-4 opacity-50" />
-                                    ) : null)}
-                                </div>
-                              )}
-                            </TableHead>
-                          ))}
-                        </TableRow>
-                      ))}
-                    </TableHeader>
-                    <TableBody>
-                      <AnimatePresence>
-                        {table.getRowModel().rows.map((row, index) => (
-                          <motion.tr
-                            key={row.id}
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{
-                              delay: index * 0.02,
-                              duration: 0.2,
-                            }}
-                            className="border-b border-primary/5 hover:bg-primary/5 transition-colors cursor-pointer"
-                            onClick={() =>
-                              handleAirdropClick(row.original as Airdrop)
-                            }
-                          >
-                            {row.getVisibleCells().map((cell) => (
-                              <TableCell key={cell.id} className="py-3">
-                                {flexRender(
-                                  cell.column.columnDef.cell as never,
-                                  cell.getContext() as never,
-                                )}
-                              </TableCell>
-                            ))}
-                          </motion.tr>
-                        ))}
-                      </AnimatePresence>
-                    </TableBody>
-                  </Table>
+                <>
+                  {/* Mobile Card View */}
+                  {isMobile ? (
+                    <div className="mt-4 space-y-3">
+                      <ScrollArea className="h-[calc(100vh-420px)] min-h-[400px]">
+                        <div className="space-y-3 pr-2">
+                          <AnimatePresence>
+                            {table.getRowModel().rows.map((row) => {
+                              const airdrop = row.original as Airdrop;
+                              return (
+                                <MobileAirdropCard
+                                  key={row.id}
+                                  airdrop={airdrop}
+                                  onClick={() => handleAirdropClick(airdrop)}
+                                  onSendAlert={() => {
+                                    sendAirdropAlert({
+                                      name: airdrop.projectName,
+                                      symbol: airdrop.symbol,
+                                      chain: airdrop.chain,
+                                      status: airdrop.status,
+                                      claimStartDate: airdrop.claimStartDate
+                                        ? new Date(airdrop.claimStartDate)
+                                        : undefined,
+                                      claimEndDate: airdrop.claimEndDate
+                                        ? new Date(airdrop.claimEndDate)
+                                        : undefined,
+                                      estimatedValue:
+                                        airdrop.estimatedValue || undefined,
+                                      airdropAmount: airdrop.airdropAmount,
+                                      requirements: airdrop.requirements,
+                                      requiredPoints: airdrop.requiredPoints,
+                                      deductPoints: airdrop.deductPoints,
+                                      contractAddress: airdrop.contractAddress,
+                                    });
+                                  }}
+                                  isSendingTelegram={isSendingTelegram}
+                                />
+                              );
+                            })}
+                          </AnimatePresence>
+                        </div>
+                      </ScrollArea>
 
-                  {/* Pagination */}
-                  {table.getPageCount() > 1 && (
-                    <div className="flex items-center justify-between px-4 py-3 border-t border-primary/10 bg-muted/20">
-                      <div className="text-sm text-muted-foreground">
-                        หน้า {table.getState().pagination.pageIndex + 1} จาก{" "}
-                        {table.getPageCount()} ({filteredData.length} รายการ)
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => table.previousPage()}
-                          disabled={!table.getCanPreviousPage()}
-                          className="border-primary/20"
-                        >
-                          ก่อนหน้า
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => table.nextPage()}
-                          disabled={!table.getCanNextPage()}
-                          className="border-primary/20"
-                        >
-                          ถัดไป
-                        </Button>
-                      </div>
+                      {/* Mobile Pagination */}
+                      {table.getPageCount() > 1 && (
+                        <div className="flex flex-col gap-3 pt-3 border-t border-primary/10">
+                          <div className="text-xs text-center text-muted-foreground">
+                            หน้า {table.getState().pagination.pageIndex + 1} จาก{" "}
+                            {table.getPageCount()} ({filteredData.length}{" "}
+                            รายการ)
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => table.previousPage()}
+                              disabled={!table.getCanPreviousPage()}
+                              className="flex-1 h-10 border-primary/20"
+                            >
+                              ก่อนหน้า
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => table.nextPage()}
+                              disabled={!table.getCanNextPage()}
+                              className="flex-1 h-10 border-primary/20"
+                            >
+                              ถัดไป
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Desktop Table View */
+                    <div className="mt-4 rounded-xl overflow-hidden border border-primary/10">
+                      <ScrollArea className="w-full">
+                        <Table>
+                          <TableHeader>
+                            {table.getHeaderGroups().map((headerGroup) => (
+                              <TableRow
+                                key={headerGroup.id}
+                                className="bg-muted/30 hover:bg-muted/40"
+                              >
+                                {headerGroup.headers.map((header) => (
+                                  <TableHead
+                                    key={header.id}
+                                    className="text-muted-foreground font-medium whitespace-nowrap"
+                                  >
+                                    {header.isPlaceholder ? null : (
+                                      <div
+                                        className={
+                                          header.column.getCanSort()
+                                            ? "cursor-pointer select-none flex items-center gap-1"
+                                            : ""
+                                        }
+                                        onClick={header.column.getToggleSortingHandler()}
+                                      >
+                                        {flexRender(
+                                          header.column.columnDef
+                                            .header as string,
+                                          header.getContext() as never,
+                                        )}
+                                        {{
+                                          asc: (
+                                            <ChevronUp className="w-4 h-4 text-primary" />
+                                          ),
+                                          desc: (
+                                            <ChevronDown className="w-4 h-4 text-primary" />
+                                          ),
+                                        }[
+                                          header.column.getIsSorted() as string
+                                        ] ??
+                                          (header.column.getCanSort() ? (
+                                            <ChevronsUpDown className="w-4 h-4 opacity-50" />
+                                          ) : null)}
+                                      </div>
+                                    )}
+                                  </TableHead>
+                                ))}
+                              </TableRow>
+                            ))}
+                          </TableHeader>
+                          <TableBody>
+                            <AnimatePresence>
+                              {table.getRowModel().rows.map((row, index) => (
+                                <motion.tr
+                                  key={row.id}
+                                  initial={{ opacity: 0, x: -20 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  transition={{
+                                    delay: index * 0.02,
+                                    duration: 0.2,
+                                  }}
+                                  className="border-b border-primary/5 hover:bg-primary/5 transition-colors cursor-pointer"
+                                  onClick={() =>
+                                    handleAirdropClick(row.original as Airdrop)
+                                  }
+                                >
+                                  {row.getVisibleCells().map((cell) => (
+                                    <TableCell
+                                      key={cell.id}
+                                      className="py-3 whitespace-nowrap"
+                                    >
+                                      {flexRender(
+                                        cell.column.columnDef.cell as never,
+                                        cell.getContext() as never,
+                                      )}
+                                    </TableCell>
+                                  ))}
+                                </motion.tr>
+                              ))}
+                            </AnimatePresence>
+                          </TableBody>
+                        </Table>
+                        <ScrollBar orientation="horizontal" />
+                      </ScrollArea>
+
+                      {/* Desktop Pagination */}
+                      {table.getPageCount() > 1 && (
+                        <div className="flex items-center justify-between px-4 py-3 border-t border-primary/10 bg-muted/20">
+                          <div className="text-sm text-muted-foreground">
+                            หน้า {table.getState().pagination.pageIndex + 1} จาก{" "}
+                            {table.getPageCount()} ({filteredData.length}{" "}
+                            รายการ)
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => table.previousPage()}
+                              disabled={!table.getCanPreviousPage()}
+                              className="border-primary/20"
+                            >
+                              ก่อนหน้า
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => table.nextPage()}
+                              disabled={!table.getCanNextPage()}
+                              className="border-primary/20"
+                            >
+                              ถัดไป
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
+                </>
               )}
             </Tabs>
           </CardHeader>

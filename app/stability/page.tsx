@@ -15,6 +15,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useMemo, useCallback, memo } from "react";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import {
   useReactTable,
   getCoreRowModel,
@@ -45,6 +46,7 @@ import {
 } from "lucide-react";
 import { MagicCard } from "@/components/ui/magic-card";
 import { Spinner, LiveIndicator, CountdownRing } from "@/components/ui/spinner";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ============= Types =============
 
@@ -397,9 +399,140 @@ const TopVolumeItem = memo(function TopVolumeItem({
   );
 });
 
+// ============= Mobile Card Component =============
+interface MobileStabilityCardProps {
+  data: StabilityData;
+  isKoge: boolean;
+}
+
+const MobileStabilityCard = memo(function MobileStabilityCard({
+  data,
+  isKoge,
+}: MobileStabilityCardProps) {
+  const config = stabilityConfig[data.stability];
+  const Icon = config.icon;
+  const priceChange = data.priceChange24h || 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={`rounded-xl border p-4 shadow-lg ${
+        isKoge
+          ? "border-amber-500/40 bg-gradient-to-br from-amber-500/10 via-slate-900/95 to-orange-500/5"
+          : data.stability === "STABLE"
+            ? "border-emerald-500/40 bg-gradient-to-br from-emerald-500/10 via-slate-900/95 to-green-500/5"
+            : data.stability === "MODERATE"
+              ? "border-amber-500/40 bg-gradient-to-br from-amber-500/10 via-slate-900/95 to-yellow-500/5"
+              : "border-slate-700/50 bg-gradient-to-br from-slate-800/50 via-slate-900/95 to-slate-800/50"
+      }`}
+    >
+      {/* Project Header - Always Visible */}
+      <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-700/50">
+        <div
+          className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-base shadow-md ${
+            isKoge
+              ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
+              : "bg-slate-800 text-white border border-slate-700"
+          }`}
+        >
+          {isKoge ? <Crown className="w-6 h-6" /> : data.symbol.slice(0, 2)}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="font-bold text-white text-base truncate">
+              {data.symbol}
+            </h3>
+            {data.isSpotPair && (
+              <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-400 text-[10px] font-bold border border-cyan-500/30">
+                SPOT
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-400">{data.chain}</span>
+            <span className="text-slate-600">•</span>
+            <span className="text-sm text-slate-400">{data.project}</span>
+          </div>
+        </div>
+        <div
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg ${config.bgClass} border ${config.borderClass}`}
+        >
+          <Icon className={`w-4 h-4 ${config.textClass}`} />
+          <span className={`text-xs font-bold ${config.textClass}`}>
+            {config.label}
+          </span>
+        </div>
+      </div>
+
+      {/* Stats Grid - 2x2 */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* Spread */}
+        <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/50">
+          <div className="text-xs text-slate-500 mb-1.5 font-medium">
+            Spread
+          </div>
+          <div className={`font-bold text-lg ${config.textClass}`}>
+            {data.spreadPercent.toFixed(2)}%
+          </div>
+          <div className="text-xs text-slate-500 mt-0.5">
+            {data.spreadBps.toFixed(0)} bps
+          </div>
+        </div>
+
+        {/* Price */}
+        <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/50">
+          <div className="text-xs text-slate-500 mb-1.5 font-medium">Price</div>
+          <div className="font-bold text-lg text-white">
+            {formatPrice(data.price)}
+          </div>
+          <div
+            className={`text-xs mt-0.5 font-medium ${priceChange >= 0 ? "text-emerald-400" : "text-red-400"}`}
+          >
+            {priceChange >= 0 ? "+" : ""}
+            {priceChange.toFixed(2)}%
+          </div>
+        </div>
+
+        {/* Volume */}
+        <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/50">
+          <div className="text-xs text-slate-500 mb-1.5 font-medium">
+            Volume 24h
+          </div>
+          <div className="font-bold text-lg text-cyan-400">
+            {formatVolume(data.volume24h)}
+          </div>
+        </div>
+
+        {/* 4x Days */}
+        <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/50">
+          <div className="text-xs text-slate-500 mb-1.5 font-medium">
+            4x Days
+          </div>
+          <div
+            className={`font-bold text-lg ${
+              data.fourXDays >= 7
+                ? "text-emerald-400"
+                : data.fourXDays >= 3
+                  ? "text-amber-400"
+                  : "text-slate-400"
+            }`}
+          >
+            {data.fourXDays}
+            <span className="text-xs font-normal ml-1 text-slate-500">
+              days
+            </span>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+});
+
 // ============= Main Component =============
 
 export default function StabilityPage() {
+  const isMobile = useIsMobile();
   const [mounted, setMounted] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
@@ -815,140 +948,202 @@ export default function StabilityPage() {
                 </div>
               </div>
 
-              {/* Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-slate-800/50 bg-slate-900/30">
-                      {table.getHeaderGroups().map((headerGroup) =>
-                        headerGroup.headers.map((header) => (
-                          <th
-                            key={header.id}
-                            onClick={header.column.getToggleSortingHandler()}
-                            className="px-4 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-amber-400 transition-colors"
-                          >
-                            <div className="flex items-center gap-1">
-                              {flexRender(
-                                header.column.columnDef.header,
-                                header.getContext(),
-                              )}
-                              {{
-                                asc: " ↑",
-                                desc: " ↓",
-                              }[header.column.getIsSorted() as string] ?? null}
-                            </div>
-                          </th>
-                        )),
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {table.getRowModel().rows.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={6}
-                          className="px-4 py-12 text-center text-slate-500"
-                        >
-                          <div className="flex flex-col items-center gap-2">
-                            <Info className="w-8 h-8 text-slate-600" />
-                            <span>No tokens found</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      table.getRowModel().rows.map((row) => {
-                        const isKoge = row.original.symbol === "KOGE";
-                        const stability = row.original.stability;
+              {/* Table Content */}
+              {isMobile ? (
+                /* Mobile Card View */
+                <>
+                  {table.getRowModel().rows.length === 0 ? (
+                    <div className="px-4 py-12 text-center text-slate-500">
+                      <div className="flex flex-col items-center gap-2">
+                        <Info className="w-8 h-8 text-slate-600" />
+                        <span>No tokens found</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <ScrollArea className="h-[calc(100vh-380px)] min-h-[400px]">
+                      <div className="p-3 space-y-3">
+                        <AnimatePresence>
+                          {table.getRowModel().rows.map((row) => (
+                            <MobileStabilityCard
+                              key={row.id}
+                              data={row.original}
+                              isKoge={row.original.symbol === "KOGE"}
+                            />
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    </ScrollArea>
+                  )}
 
-                        return (
-                          <tr
-                            key={row.id}
-                            className={`border-b border-slate-800/30 transition-all ${
-                              isKoge
-                                ? "bg-amber-500/5 hover:bg-amber-500/10"
-                                : stability === "STABLE"
-                                  ? "bg-emerald-500/5 hover:bg-emerald-500/10"
-                                  : stability === "MODERATE"
-                                    ? "bg-amber-500/5 hover:bg-amber-500/10"
-                                    : "hover:bg-slate-800/30"
-                            }`}
-                          >
-                            {row.getVisibleCells().map((cell) => (
-                              <td key={cell.id} className="px-4 py-4">
-                                {flexRender(
-                                  cell.column.columnDef.cell,
-                                  cell.getContext(),
-                                )}
-                              </td>
-                            ))}
+                  {/* Mobile Pagination */}
+                  <div className="flex flex-col gap-3 p-4 border-t border-slate-800/50 bg-slate-900/20">
+                    <div className="text-xs text-center text-slate-400">
+                      หน้า {table.getState().pagination.pageIndex + 1} จาก{" "}
+                      {table.getPageCount()} (
+                      {table.getFilteredRowModel().rows.length} รายการ)
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => table.previousPage()}
+                        disabled={!table.getCanPreviousPage()}
+                        className="flex-1 h-10 rounded-lg bg-slate-800/50 text-slate-400 disabled:opacity-30 hover:bg-slate-800 transition-colors text-sm font-medium"
+                      >
+                        ก่อนหน้า
+                      </button>
+                      <button
+                        onClick={() => table.nextPage()}
+                        disabled={!table.getCanNextPage()}
+                        className="flex-1 h-10 rounded-lg bg-slate-800/50 text-slate-400 disabled:opacity-30 hover:bg-slate-800 transition-colors text-sm font-medium"
+                      >
+                        ถัดไป
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* Desktop Table View */
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-slate-800/50 bg-slate-900/30">
+                          {table.getHeaderGroups().map((headerGroup) =>
+                            headerGroup.headers.map((header) => (
+                              <th
+                                key={header.id}
+                                onClick={header.column.getToggleSortingHandler()}
+                                className="px-4 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-amber-400 transition-colors whitespace-nowrap"
+                              >
+                                <div className="flex items-center gap-1">
+                                  {flexRender(
+                                    header.column.columnDef.header,
+                                    header.getContext(),
+                                  )}
+                                  {{
+                                    asc: " ↑",
+                                    desc: " ↓",
+                                  }[header.column.getIsSorted() as string] ??
+                                    null}
+                                </div>
+                              </th>
+                            )),
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {table.getRowModel().rows.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={6}
+                              className="px-4 py-12 text-center text-slate-500"
+                            >
+                              <div className="flex flex-col items-center gap-2">
+                                <Info className="w-8 h-8 text-slate-600" />
+                                <span>No tokens found</span>
+                              </div>
+                            </td>
                           </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                        ) : (
+                          table.getRowModel().rows.map((row) => {
+                            const isKoge = row.original.symbol === "KOGE";
+                            const stability = row.original.stability;
 
-              {/* Pagination */}
-              <div className="flex items-center justify-between px-4 py-4 border-t border-slate-800/50 bg-slate-900/20">
-                <div className="text-sm text-slate-400">
-                  Showing{" "}
-                  <span className="font-semibold text-white">
-                    {table.getState().pagination.pageIndex *
-                      table.getState().pagination.pageSize +
-                      1}
-                  </span>
-                  {" - "}
-                  <span className="font-semibold text-white">
-                    {Math.min(
-                      (table.getState().pagination.pageIndex + 1) *
-                        table.getState().pagination.pageSize,
-                      table.getFilteredRowModel().rows.length,
-                    )}
-                  </span>
-                  {" of "}
-                  <span className="font-semibold text-white">
-                    {table.getFilteredRowModel().rows.length}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => table.setPageIndex(0)}
-                    disabled={!table.getCanPreviousPage()}
-                    className="p-2 rounded-lg bg-slate-800/50 text-slate-400 disabled:opacity-30 hover:bg-slate-800 transition-colors"
-                  >
-                    <ChevronsLeft className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => table.previousPage()}
-                    disabled={!table.getCanPreviousPage()}
-                    className="p-2 rounded-lg bg-slate-800/50 text-slate-400 disabled:opacity-30 hover:bg-slate-800 transition-colors"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <span className="px-4 text-sm text-slate-300">
-                    <span className="font-semibold">
-                      {table.getState().pagination.pageIndex + 1}
-                    </span>
-                    <span className="text-slate-500"> / </span>
-                    <span>{table.getPageCount()}</span>
-                  </span>
-                  <button
-                    onClick={() => table.nextPage()}
-                    disabled={!table.getCanNextPage()}
-                    className="p-2 rounded-lg bg-slate-800/50 text-slate-400 disabled:opacity-30 hover:bg-slate-800 transition-colors"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-                    disabled={!table.getCanNextPage()}
-                    className="p-2 rounded-lg bg-slate-800/50 text-slate-400 disabled:opacity-30 hover:bg-slate-800 transition-colors"
-                  >
-                    <ChevronsRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+                            return (
+                              <tr
+                                key={row.id}
+                                className={`border-b border-slate-800/30 transition-all ${
+                                  isKoge
+                                    ? "bg-amber-500/5 hover:bg-amber-500/10"
+                                    : stability === "STABLE"
+                                      ? "bg-emerald-500/5 hover:bg-emerald-500/10"
+                                      : stability === "MODERATE"
+                                        ? "bg-amber-500/5 hover:bg-amber-500/10"
+                                        : "hover:bg-slate-800/30"
+                                }`}
+                              >
+                                {row.getVisibleCells().map((cell) => (
+                                  <td
+                                    key={cell.id}
+                                    className="px-4 py-4 whitespace-nowrap"
+                                  >
+                                    {flexRender(
+                                      cell.column.columnDef.cell,
+                                      cell.getContext(),
+                                    )}
+                                  </td>
+                                ))}
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Desktop Pagination */}
+                  <div className="flex items-center justify-between px-4 py-4 border-t border-slate-800/50 bg-slate-900/20">
+                    <div className="text-sm text-slate-400">
+                      Showing{" "}
+                      <span className="font-semibold text-white">
+                        {table.getState().pagination.pageIndex *
+                          table.getState().pagination.pageSize +
+                          1}
+                      </span>
+                      {" - "}
+                      <span className="font-semibold text-white">
+                        {Math.min(
+                          (table.getState().pagination.pageIndex + 1) *
+                            table.getState().pagination.pageSize,
+                          table.getFilteredRowModel().rows.length,
+                        )}
+                      </span>
+                      {" of "}
+                      <span className="font-semibold text-white">
+                        {table.getFilteredRowModel().rows.length}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => table.setPageIndex(0)}
+                        disabled={!table.getCanPreviousPage()}
+                        className="p-2 rounded-lg bg-slate-800/50 text-slate-400 disabled:opacity-30 hover:bg-slate-800 transition-colors"
+                      >
+                        <ChevronsLeft className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => table.previousPage()}
+                        disabled={!table.getCanPreviousPage()}
+                        className="p-2 rounded-lg bg-slate-800/50 text-slate-400 disabled:opacity-30 hover:bg-slate-800 transition-colors"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <span className="px-4 text-sm text-slate-300">
+                        <span className="font-semibold">
+                          {table.getState().pagination.pageIndex + 1}
+                        </span>
+                        <span className="text-slate-500"> / </span>
+                        <span>{table.getPageCount()}</span>
+                      </span>
+                      <button
+                        onClick={() => table.nextPage()}
+                        disabled={!table.getCanNextPage()}
+                        className="p-2 rounded-lg bg-slate-800/50 text-slate-400 disabled:opacity-30 hover:bg-slate-800 transition-colors"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() =>
+                          table.setPageIndex(table.getPageCount() - 1)
+                        }
+                        disabled={!table.getCanNextPage()}
+                        className="p-2 rounded-lg bg-slate-800/50 text-slate-400 disabled:opacity-30 hover:bg-slate-800 transition-colors"
+                      >
+                        <ChevronsRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </MagicCard>
           </div>
 

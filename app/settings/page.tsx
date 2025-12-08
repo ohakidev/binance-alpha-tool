@@ -7,6 +7,7 @@
 
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
+import { useMounted } from "@/lib/hooks/use-mobile";
 import {
   Palette,
   Bell,
@@ -46,7 +47,7 @@ import { MagicCard } from "@/components/ui/magic-card";
 
 export default function SettingsPage() {
   const { t, language, setLanguage } = useLanguage();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
 
   // API Keys State
   const [, setApiKey] = useState("");
@@ -73,7 +74,7 @@ export default function SettingsPage() {
   const resetToDefaults = useSettingsStore((state) => state.resetToDefaults);
 
   useEffect(() => {
-    setMounted(true);
+    if (!mounted) return;
     // Load saved keys
     const savedApiKey = localStorage.getItem("binance_api_key") || "";
     const savedSecretKey = localStorage.getItem("binance_secret_key") || "";
@@ -89,7 +90,7 @@ export default function SettingsPage() {
     setTelegramChatId(savedTelegramChatId);
     setTempTelegramToken(savedTelegramToken);
     setTempTelegramChatId(savedTelegramChatId);
-  }, []);
+  }, [mounted]);
 
   if (!mounted) {
     return (
@@ -240,37 +241,39 @@ export default function SettingsPage() {
         {/* Settings Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="relative z-50">
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 gap-2 bg-white/5 p-2 rounded-xl mb-6">
-              {tabItems.map((tab) => (
-                <TabsTrigger
-                  key={tab.value}
-                  value={tab.value}
-                  className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/20 data-[state=active]:to-cyan-500/20 data-[state=active]:border-primary/30 rounded-lg transition-all"
-                >
-                  <tab.icon className="w-4 h-4" />
-                  <span className="hidden md:inline">{tab.label}</span>
-                </TabsTrigger>
-              ))}
-            </TabsList>
+            <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
+              <TabsList className="inline-flex md:grid md:w-full md:grid-cols-5 gap-2 bg-white/5 p-2 rounded-xl mb-6 min-w-max md:min-w-0">
+                {tabItems.map((tab) => (
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    className="flex items-center gap-2 px-4 py-2.5 whitespace-nowrap flex-shrink-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/20 data-[state=active]:to-cyan-500/20 data-[state=active]:border-primary/30 rounded-lg transition-all touch-target-sm"
+                  >
+                    <tab.icon className="w-4 h-4" />
+                    <span className="text-xs md:text-sm">{tab.label}</span>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
           </div>
 
           {/* General Settings */}
-          <TabsContent value="general" className="space-y-6">
+          <TabsContent value="general" className="space-y-4 md:space-y-6">
             <MagicCard
               className="rounded-xl border-white/10 overflow-hidden"
               gradientColor="rgba(251, 191, 36, 0.15)"
             >
-              <div className="p-6 border-b border-white/10 bg-white/5">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
+              <div className="p-4 md:p-6 border-b border-white/10 bg-white/5">
+                <h2 className="text-lg md:text-xl font-semibold flex items-center gap-2">
                   <Globe className="w-5 h-5 text-amber-500" />
                   {t("settings.language")}
                 </h2>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-xs md:text-sm text-muted-foreground mt-1">
                   {t("settings.languageDesc")}
                 </p>
               </div>
-              <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-4 md:p-6">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                   {[
                     { code: "en", label: "English", flag: "🇺🇸" },
                     { code: "th", label: "ไทย", flag: "🇹🇭" },
@@ -280,16 +283,16 @@ export default function SettingsPage() {
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => setLanguage(lang.code as "th" | "en")}
-                      className={`relative p-4 rounded-xl border-2 transition-all ${
+                      className={`relative p-3 md:p-4 rounded-xl border-2 transition-all ${
                         language === lang.code
                           ? "border-amber-500 bg-amber-500/10"
                           : "border-white/10 hover:border-white/20 hover:bg-white/5"
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">{lang.flag}</span>
+                      <div className="flex items-center gap-2 md:gap-3">
+                        <span className="text-xl md:text-2xl">{lang.flag}</span>
                         <span
-                          className={`font-medium ${
+                          className={`font-medium text-sm md:text-base ${
                             language === lang.code
                               ? "text-amber-500"
                               : "text-slate-300"
@@ -299,7 +302,7 @@ export default function SettingsPage() {
                         </span>
                       </div>
                       {language === lang.code && (
-                        <div className="absolute top-4 right-4 text-amber-500">
+                        <div className="absolute top-3 right-3 md:top-4 md:right-4 text-amber-500">
                           <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]" />
                         </div>
                       )}
@@ -311,21 +314,21 @@ export default function SettingsPage() {
           </TabsContent>
 
           {/* API Keys */}
-          <TabsContent value="api" className="space-y-6">
+          <TabsContent value="api" className="space-y-4 md:space-y-6">
             <MagicCard
               className="rounded-xl border-white/10 overflow-hidden"
               gradientColor="rgba(6, 182, 212, 0.15)"
             >
-              <div className="p-6 border-b border-white/10 bg-white/5">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
+              <div className="p-4 md:p-6 border-b border-white/10 bg-white/5">
+                <h2 className="text-lg md:text-xl font-semibold flex items-center gap-2">
                   <Key className="w-5 h-5 text-cyan-500" />
                   {t("settings.apiKeys")}
                 </h2>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-xs md:text-sm text-muted-foreground mt-1">
                   {t("settings.apiKeysDesc")}
                 </p>
               </div>
-              <div className="p-6 space-y-6">
+              <div className="p-4 md:p-6 space-y-4 md:space-y-6">
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-300">
@@ -336,13 +339,13 @@ export default function SettingsPage() {
                         type={showApiKey ? "text" : "password"}
                         value={tempApiKey}
                         onChange={(e) => setTempApiKey(e.target.value)}
-                        className="w-full pl-10 pr-12 py-2.5 bg-black/20 border border-white/10 rounded-xl focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
+                        className="w-full pl-10 pr-12 py-3 md:py-2.5 text-sm bg-black/20 border border-white/10 rounded-xl focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
                         placeholder="Enter your Binance API Key"
                       />
                       <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                       <button
                         onClick={() => setShowApiKey(!showApiKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-1"
                       >
                         {showApiKey ? (
                           <EyeOff className="w-4 h-4" />
@@ -362,13 +365,13 @@ export default function SettingsPage() {
                         type={showApiSecret ? "text" : "password"}
                         value={tempApiSecret}
                         onChange={(e) => setTempApiSecret(e.target.value)}
-                        className="w-full pl-10 pr-12 py-2.5 bg-black/20 border border-white/10 rounded-xl focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
+                        className="w-full pl-10 pr-12 py-3 md:py-2.5 text-sm bg-black/20 border border-white/10 rounded-xl focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
                         placeholder="Enter your Binance Secret Key"
                       />
                       <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                       <button
                         onClick={() => setShowApiSecret(!showApiSecret)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-1"
                       >
                         {showApiSecret ? (
                           <EyeOff className="w-4 h-4" />
@@ -379,13 +382,13 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="flex justify-end pt-4">
+                  <div className="flex justify-end pt-2 md:pt-4">
                     <motion.button
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={handleSaveApiKeys}
                       disabled={isSaving}
-                      className="px-6 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      className="w-full md:w-auto px-6 py-3 md:py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       {isSaving ? (
                         <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -401,33 +404,33 @@ export default function SettingsPage() {
           </TabsContent>
 
           {/* Notifications */}
-          <TabsContent value="notifications" className="space-y-6">
+          <TabsContent value="notifications" className="space-y-4 md:space-y-6">
             <MagicCard
               className="rounded-xl border-white/10 overflow-hidden"
               gradientColor="rgba(168, 85, 247, 0.15)"
             >
-              <div className="p-6 border-b border-white/10 bg-white/5">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
+              <div className="p-4 md:p-6 border-b border-white/10 bg-white/5">
+                <h2 className="text-lg md:text-xl font-semibold flex items-center gap-2">
                   <Bell className="w-5 h-5 text-purple-500" />
                   {t("settings.notifications")}
                 </h2>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-xs md:text-sm text-muted-foreground mt-1">
                   {t("settings.notificationsDesc")}
                 </p>
               </div>
-              <div className="p-6 space-y-6">
+              <div className="p-4 md:p-6 space-y-4 md:space-y-6">
                 {/* Telegram Settings */}
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <label className="text-base font-medium text-slate-200">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-0.5 flex-1 min-w-0">
+                      <label className="text-sm md:text-base font-medium text-slate-200">
                         Telegram Integration
                       </label>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-xs md:text-sm text-muted-foreground">
                         Receive alerts directly to your Telegram
                       </p>
                     </div>
-                    <div className="p-2 bg-blue-500/20 rounded-lg">
+                    <div className="p-2 bg-blue-500/20 rounded-lg flex-shrink-0">
                       <Send className="w-5 h-5 text-blue-400" />
                     </div>
                   </div>
@@ -440,7 +443,7 @@ export default function SettingsPage() {
                       type="password"
                       value={tempTelegramToken}
                       onChange={(e) => setTempTelegramToken(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
+                      className="w-full px-4 py-3 md:py-2.5 text-sm bg-black/20 border border-white/10 rounded-xl focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
                       placeholder="Enter Bot Token"
                     />
                   </div>
@@ -453,17 +456,17 @@ export default function SettingsPage() {
                       type="text"
                       value={tempTelegramChatId}
                       onChange={(e) => setTempTelegramChatId(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
+                      className="w-full px-4 py-3 md:py-2.5 text-sm bg-black/20 border border-white/10 rounded-xl focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
                       placeholder="Enter Chat ID"
                     />
                   </div>
 
-                  <div className="flex justify-end pt-4">
+                  <div className="flex justify-end pt-2 md:pt-4">
                     <motion.button
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={handleSaveTelegram}
-                      className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium rounded-xl shadow-lg shadow-purple-500/20 hover:shadow-purple-500/40 transition-all flex items-center gap-2"
+                      className="w-full md:w-auto px-6 py-3 md:py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium rounded-xl shadow-lg shadow-purple-500/20 hover:shadow-purple-500/40 transition-all flex items-center justify-center gap-2"
                     >
                       <Save className="w-4 h-4" />
                       {t("common.save")}
@@ -474,7 +477,7 @@ export default function SettingsPage() {
                 <div className="h-px bg-white/10" />
 
                 {/* Notification Toggles */}
-                <div className="space-y-4">
+                <div className="space-y-3 md:space-y-4">
                   {[
                     {
                       id: "price-alerts",
@@ -494,9 +497,9 @@ export default function SettingsPage() {
                   ].map((item) => (
                     <div
                       key={item.id}
-                      className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors"
+                      className="flex items-center justify-between gap-3 p-3 md:p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors"
                     >
-                      <div className="space-y-0.5">
+                      <div className="space-y-0.5 flex-1 min-w-0">
                         <label className="text-sm font-medium text-slate-200">
                           {item.label}
                         </label>
@@ -506,7 +509,7 @@ export default function SettingsPage() {
                       </div>
                       <Switch
                         defaultChecked
-                        className="data-[state=checked]:bg-purple-500"
+                        className="data-[state=checked]:bg-purple-500 flex-shrink-0"
                       />
                     </div>
                   ))}
@@ -516,22 +519,22 @@ export default function SettingsPage() {
           </TabsContent>
 
           {/* Display Settings */}
-          <TabsContent value="display" className="space-y-6">
+          <TabsContent value="display" className="space-y-4 md:space-y-6">
             <MagicCard
               className="rounded-xl border-white/10 overflow-hidden"
               gradientColor="rgba(244, 63, 94, 0.15)"
             >
-              <div className="p-6 border-b border-white/10 bg-white/5">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
+              <div className="p-4 md:p-6 border-b border-white/10 bg-white/5">
+                <h2 className="text-lg md:text-xl font-semibold flex items-center gap-2">
                   <Monitor className="w-5 h-5 text-rose-500" />
                   {t("settings.display")}
                 </h2>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-xs md:text-sm text-muted-foreground mt-1">
                   {t("settings.displayDesc")}
                 </p>
               </div>
-              <div className="p-6 space-y-6">
-                <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
+              <div className="p-4 md:p-6 space-y-3 md:space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 md:p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
                   <div className="space-y-0.5">
                     <label className="text-sm font-medium text-slate-200">
                       {t("settings.theme")}
@@ -540,7 +543,7 @@ export default function SettingsPage() {
                       {t("settings.themeDesc")}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 bg-black/20 p-1 rounded-lg border border-white/10">
+                  <div className="flex items-center gap-2 bg-black/20 p-1 rounded-lg border border-white/10 self-start sm:self-auto">
                     <button
                       onClick={() => updateAppSettings({ theme: "light" })}
                       className={`p-2 rounded-md transition-all ${
@@ -574,8 +577,8 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
-                  <div className="space-y-0.5">
+                <div className="flex items-center justify-between gap-3 p-3 md:p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
+                  <div className="space-y-0.5 flex-1 min-w-0">
                     <label className="text-sm font-medium text-slate-200">
                       Compact Mode
                     </label>
@@ -583,11 +586,11 @@ export default function SettingsPage() {
                       Reduce spacing and font size
                     </p>
                   </div>
-                  <Switch />
+                  <Switch className="flex-shrink-0" />
                 </div>
 
-                <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
-                  <div className="space-y-0.5">
+                <div className="flex items-center justify-between gap-3 p-3 md:p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
+                  <div className="space-y-0.5 flex-1 min-w-0">
                     <label className="text-sm font-medium text-slate-200">
                       Animations
                     </label>
@@ -597,7 +600,7 @@ export default function SettingsPage() {
                   </div>
                   <Switch
                     defaultChecked
-                    className="data-[state=checked]:bg-rose-500"
+                    className="data-[state=checked]:bg-rose-500 flex-shrink-0"
                   />
                 </div>
               </div>
@@ -605,46 +608,46 @@ export default function SettingsPage() {
           </TabsContent>
 
           {/* Data Management */}
-          <TabsContent value="data" className="space-y-6">
+          <TabsContent value="data" className="space-y-4 md:space-y-6">
             <MagicCard
               className="rounded-xl border-white/10 overflow-hidden"
               gradientColor="rgba(16, 185, 129, 0.15)"
             >
-              <div className="p-6 border-b border-white/10 bg-white/5">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
+              <div className="p-4 md:p-6 border-b border-white/10 bg-white/5">
+                <h2 className="text-lg md:text-xl font-semibold flex items-center gap-2">
                   <Database className="w-5 h-5 text-emerald-500" />
                   {t("settings.dataManagement")}
                 </h2>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-xs md:text-sm text-muted-foreground mt-1">
                   {t("settings.dataManagementDesc")}
                 </p>
               </div>
-              <div className="p-6 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                    <h3 className="font-medium mb-2 flex items-center gap-2">
+              <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+                  <div className="p-3 md:p-4 rounded-xl bg-white/5 border border-white/10">
+                    <h3 className="font-medium mb-2 flex items-center gap-2 text-sm md:text-base">
                       <Download className="w-4 h-4 text-blue-400" />
                       Export Data
                     </h3>
-                    <p className="text-sm text-muted-foreground mb-4">
+                    <p className="text-xs md:text-sm text-muted-foreground mb-3 md:mb-4">
                       Download all your data as a JSON file backup.
                     </p>
                     <motion.button
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={handleExportData}
-                      className="w-full py-2 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-colors"
+                      className="w-full py-2.5 md:py-2 text-sm bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-colors"
                     >
                       Export JSON
                     </motion.button>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                    <h3 className="font-medium mb-2 flex items-center gap-2">
+                  <div className="p-3 md:p-4 rounded-xl bg-white/5 border border-white/10">
+                    <h3 className="font-medium mb-2 flex items-center gap-2 text-sm md:text-base">
                       <Upload className="w-4 h-4 text-emerald-400" />
                       Import Data
                     </h3>
-                    <p className="text-sm text-muted-foreground mb-4">
+                    <p className="text-xs md:text-sm text-muted-foreground mb-3 md:mb-4">
                       Restore your data from a JSON backup file.
                     </p>
                     <div className="relative">
@@ -657,7 +660,7 @@ export default function SettingsPage() {
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        className="w-full py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg hover:bg-emerald-500/20 transition-colors"
+                        className="w-full py-2.5 md:py-2 text-sm bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg hover:bg-emerald-500/20 transition-colors"
                       >
                         Select File
                       </motion.button>
@@ -665,12 +668,12 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/10">
-                  <h3 className="font-medium mb-2 flex items-center gap-2 text-red-400">
+                <div className="p-3 md:p-4 rounded-xl bg-red-500/5 border border-red-500/10">
+                  <h3 className="font-medium mb-2 flex items-center gap-2 text-red-400 text-sm md:text-base">
                     <Trash2 className="w-4 h-4" />
                     Danger Zone
                   </h3>
-                  <p className="text-sm text-muted-foreground mb-4">
+                  <p className="text-xs md:text-sm text-muted-foreground mb-3 md:mb-4">
                     Permanently delete all your data. This action cannot be
                     undone.
                   </p>
@@ -679,7 +682,7 @@ export default function SettingsPage() {
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        className="px-4 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-colors"
+                        className="px-4 py-2.5 md:py-2 text-sm bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-colors"
                       >
                         Reset All Data
                       </motion.button>
