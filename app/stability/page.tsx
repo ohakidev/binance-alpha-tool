@@ -1,27 +1,22 @@
 "use client";
 
 /**
- * Stability Dashboard - Pro UI/UX Design
- * Real-time Alpha Token Spread Monitor
+ * Stability Dashboard - Premium Edition
  *
  * Features:
- * - Real-time countdown timer and live status indicators
- * - KOGE prioritized first, then sorted by stability (Green > Yellow > Red)
- * - Professional dark theme with glass morphism effects
- * - Responsive 2-column layout
- * - Optimized performance with useMemo and useCallback
+ * - TanStack Table with sortable columns
+ * - Optimized for lower server load
+ * - Modern glassmorphism UI
+ * - Responsive design
+ * - Real-time auto-refresh
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect, useMemo, useCallback, memo } from "react";
-import { useIsMobile } from "@/lib/hooks/use-mobile";
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
   flexRender,
   createColumnHelper,
   SortingState,
@@ -30,757 +25,480 @@ import {
   TrendingUp,
   Bell,
   BellOff,
-  Search,
   RefreshCw,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   ChevronDown,
+  ChevronUp,
   Info,
-  Zap,
   Crown,
   Shield,
   AlertTriangle,
   XCircle,
+  Volume2,
+  Zap,
+  Activity,
+  ArrowUpDown,
+  Sparkles,
 } from "lucide-react";
-import { MagicCard } from "@/components/ui/magic-card";
-import { Spinner, LiveIndicator, CountdownRing } from "@/components/ui/spinner";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { LiveIndicator } from "@/components/ui/spinner";
 
 // ============= Types =============
 
-type StabilityLevel =
-  | "STABLE"
-  | "MODERATE"
-  | "UNSTABLE"
-  | "NO_TRADE"
-  | "CHECKING";
+type StabilityLevel = "STABLE" | "MODERATE" | "UNSTABLE" | "NO_TRADE";
 
-interface StabilityData {
-  project: string;
+interface TokenData {
   symbol: string;
+  name: string;
+  chain: string;
   mulPoint: number;
+  price: number;
+  priceChange24h: number;
+  volume24h: number;
+  fourXDays: number;
+  tradeSymbol: string;
   stability: StabilityLevel;
   spreadBps: number;
-  fourXDays: number;
-  price: number;
-  priceHigh24h: number;
-  priceLow24h: number;
-  spreadPercent: number;
-  lastUpdate: number;
-  chain: string;
-  volume24h: number;
-  liquidity: number;
-  isSpotPair?: boolean;
-  priceChange24h?: number;
-  sortPriority?: number;
+  tradeCount: number;
+  lastTradeTime: number;
+  avgPrice: number;
+  stdDev: number;
 }
 
-interface StabilityApiResponse {
+interface ApiResponse {
   success: boolean;
-  data: StabilityData[];
+  data: TokenData[];
   count: number;
   lastUpdate: number;
-  error?: string;
+  fromCache?: boolean;
   summary?: {
-    stableCount: number;
-    moderateCount: number;
-    unstableCount: number;
-    checkingCount: number;
-    totalVolume24h: number;
-    avgSpreadPercent: number;
-    spotPairsCount: number;
+    stable: number;
+    moderate: number;
+    unstable: number;
+    noTrade: number;
   };
-  thresholds?: {
-    spot: { stable: number; moderate: number };
-    dex: { stable: number; moderate: number };
+  config?: {
+    refreshInterval: number;
+    stableThreshold: number;
+    moderateThreshold: number;
   };
 }
 
 // ============= Constants =============
 
-const POLLING_INTERVAL = 10000; // 10 seconds
+const REFRESH_INTERVAL = 5000;
 
-// Stability badge configuration - moved outside component to prevent recreation
 const stabilityConfig: Record<
   StabilityLevel,
   {
     label: string;
     icon: React.ElementType;
-    bgClass: string;
+    gradient: string;
     textClass: string;
-    dotClass: string;
-    borderClass: string;
+    ringClass: string;
+    order: number;
   }
 > = {
   STABLE: {
     label: "Stable",
     icon: Shield,
-    bgClass: "bg-emerald-500/10",
+    gradient: "from-emerald-500/20 to-emerald-600/10",
     textClass: "text-emerald-400",
-    dotClass: "bg-emerald-400",
-    borderClass: "border-emerald-500/30",
+    ringClass: "ring-emerald-500/30",
+    order: 1,
   },
   MODERATE: {
     label: "Moderate",
     icon: AlertTriangle,
-    bgClass: "bg-amber-500/10",
+    gradient: "from-amber-500/20 to-amber-600/10",
     textClass: "text-amber-400",
-    dotClass: "bg-amber-400",
-    borderClass: "border-amber-500/30",
+    ringClass: "ring-amber-500/30",
+    order: 2,
   },
   UNSTABLE: {
     label: "Unstable",
     icon: XCircle,
-    bgClass: "bg-rose-500/10",
+    gradient: "from-rose-500/20 to-rose-600/10",
     textClass: "text-rose-400",
-    dotClass: "bg-rose-400",
-    borderClass: "border-rose-500/30",
+    ringClass: "ring-rose-500/30",
+    order: 3,
   },
   NO_TRADE: {
-    label: "No trade",
-    icon: XCircle,
-    bgClass: "bg-rose-500/10",
-    textClass: "text-rose-400",
-    dotClass: "bg-rose-400",
-    borderClass: "border-rose-500/30",
-  },
-  CHECKING: {
-    label: "No Data",
+    label: "No Trade",
     icon: Info,
-    bgClass: "bg-slate-500/10",
+    gradient: "from-slate-500/20 to-slate-600/10",
     textClass: "text-slate-400",
-    dotClass: "bg-slate-400",
-    borderClass: "border-slate-500/30",
+    ringClass: "ring-slate-500/30",
+    order: 4,
   },
 };
 
-// ============= Utility Functions (moved outside component) =============
+// ============= Components =============
 
-const formatVolume = (v: number): string => {
-  if (v >= 1000000) return `$${(v / 1000000).toFixed(2)}M`;
-  if (v >= 1000) return `$${(v / 1000).toFixed(2)}K`;
-  return `$${v.toFixed(0)}`;
-};
-
-const formatPrice = (p: number): string => {
-  if (p >= 1000) return `$${p.toFixed(2)}`;
-  if (p >= 1) return `$${p.toFixed(4)}`;
-  if (p >= 0.0001) return `$${p.toFixed(6)}`;
-  return `$${p.toFixed(8)}`;
-};
-
-// ============= API Function =============
-
-async function fetchStabilityData(): Promise<StabilityApiResponse> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-  try {
-    const response = await fetch("/api/binance/alpha/stability-data", {
-      signal: controller.signal,
-      cache: "no-store",
-      headers: {
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        Pragma: "no-cache",
-      },
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const data: StabilityApiResponse = await response.json();
-
-    if (!data.success) {
-      throw new Error(data.error || "Failed to fetch stability data");
-    }
-
-    return data;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
-  }
-}
-
-// ============= Column Helper =============
-
-const columnHelper = createColumnHelper<StabilityData>();
-
-// ============= Memoized Sub-Components =============
-
-const ProjectCell = memo(function ProjectCell({
-  symbol,
-  chain,
-  isKoge,
-  isSpotPair,
-}: {
-  symbol: string;
-  chain: string;
-  isKoge: boolean;
-  isSpotPair?: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <div
-        className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shadow-lg ${
-          isKoge
-            ? "bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-amber-500/30"
-            : isSpotPair
-              ? "bg-gradient-to-br from-cyan-400 to-blue-500 text-white shadow-cyan-500/30"
-              : "bg-gradient-to-br from-slate-600 to-slate-700 text-slate-200"
-        }`}
-      >
-        {symbol.substring(0, 2)}
-      </div>
-      <div className="flex flex-col">
-        <div className="flex items-center gap-2">
-          <span className="font-bold text-white text-base">{symbol}</span>
-          {isKoge && <Crown className="w-4 h-4 text-amber-400" />}
-          {isSpotPair && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-              SPOT
-            </span>
-          )}
-        </div>
-        <span className="text-xs text-slate-500">{chain}</span>
-      </div>
-    </div>
-  );
-});
-
-const StabilityBadge = memo(function StabilityBadge({
+function StabilityBadge({
   stability,
+  compact = false,
 }: {
   stability: StabilityLevel;
+  compact?: boolean;
 }) {
   const config = stabilityConfig[stability];
   const Icon = config.icon;
 
   return (
     <div
-      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${config.bgClass} ${config.textClass} border ${config.borderClass}`}
+      className={`inline-flex items-center gap-1.5 ${compact ? "px-2 py-0.5" : "px-3 py-1.5"} rounded-full bg-gradient-to-r ${config.gradient} ring-1 ${config.ringClass} backdrop-blur-sm`}
     >
       <span
-        className={`w-2 h-2 rounded-full ${config.dotClass} ${
-          stability === "STABLE" ? "animate-pulse" : ""
-        }`}
+        className={`${compact ? "w-1" : "w-1.5"} ${compact ? "h-1" : "h-1.5"} rounded-full bg-current ${config.textClass} ${stability === "STABLE" ? "animate-pulse" : ""}`}
       />
-      <Icon className="w-3.5 h-3.5" />
-      {config.label}
-    </div>
-  );
-});
-
-const SpreadCell = memo(function SpreadCell({
-  spreadPercent,
-  spreadBps,
-  stability,
-}: {
-  spreadPercent: number;
-  spreadBps: number;
-  stability: StabilityLevel;
-}) {
-  const config = stabilityConfig[stability];
-
-  if (spreadBps === 0) {
-    return <span className="text-slate-500 text-sm">—</span>;
-  }
-
-  return (
-    <div className="flex flex-col">
-      <div className="flex items-center gap-2">
-        <span className={`w-2 h-2 rounded-full ${config.dotClass}`} />
-        <span className={`font-bold text-base ${config.textClass}`}>
-          {spreadPercent.toFixed(2)}%
-        </span>
-      </div>
-      <span className="text-xs text-slate-500 ml-4">
-        {spreadBps.toFixed(0)} bps
-      </span>
-    </div>
-  );
-});
-
-const PriceCell = memo(function PriceCell({
-  price,
-  change,
-}: {
-  price: number;
-  change: number;
-}) {
-  return (
-    <div className="flex flex-col">
-      <span className="font-semibold text-white text-base">
-        {formatPrice(price)}
-      </span>
-      {change !== 0 && (
-        <span
-          className={`text-xs font-medium ${
-            change >= 0 ? "text-emerald-400" : "text-rose-400"
-          }`}
-        >
-          {change >= 0 ? "+" : ""}
-          {change.toFixed(2)}%
-        </span>
-      )}
-    </div>
-  );
-});
-
-const FourXDaysCell = memo(function FourXDaysCell({ days }: { days: number }) {
-  return (
-    <div className="flex items-center gap-2">
+      <Icon
+        className={`${compact ? "w-2.5 h-2.5" : "w-3.5 h-3.5"} ${config.textClass}`}
+      />
       <span
-        className={`font-bold text-base ${
-          days <= 5
-            ? "text-red-400"
-            : days <= 10
-              ? "text-amber-400"
-              : "text-emerald-400"
-        }`}
+        className={`${compact ? "text-[10px]" : "text-xs"} font-semibold ${config.textClass}`}
       >
-        {days}
+        {config.label}
       </span>
-      <span className="text-xs text-slate-500">days</span>
     </div>
   );
-});
-
-const TopVolumeItem = memo(function TopVolumeItem({
-  item,
-  index,
-}: {
-  item: StabilityData;
-  index: number;
-}) {
-  return (
-    <div
-      className={`flex items-center justify-between p-3 rounded-xl bg-slate-900/50 border border-slate-800/50 hover:border-slate-700/50 transition-all`}
-    >
-      <div className="flex items-center gap-3">
-        <span
-          className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold ${
-            index === 0
-              ? "bg-amber-500/20 text-amber-400"
-              : index === 1
-                ? "bg-slate-400/20 text-slate-400"
-                : "bg-orange-700/20 text-orange-400"
-          }`}
-        >
-          {index + 1}
-        </span>
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-white">{item.symbol}</span>
-            {item.symbol === "KOGE" && (
-              <Crown className="w-3.5 h-3.5 text-amber-400" />
-            )}
-            {item.isSpotPair && (
-              <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-400">
-                SPOT
-              </span>
-            )}
-          </div>
-          <span className="text-xs text-slate-500">
-            {formatPrice(item.price)}
-          </span>
-        </div>
-      </div>
-      <div className="text-right">
-        <span className="text-cyan-400 font-bold">
-          {formatVolume(item.volume24h)}
-        </span>
-      </div>
-    </div>
-  );
-});
-
-// ============= Mobile Card Component =============
-interface MobileStabilityCardProps {
-  data: StabilityData;
-  isKoge: boolean;
 }
 
-const MobileStabilityCard = memo(function MobileStabilityCard({
-  data,
-  isKoge,
-}: MobileStabilityCardProps) {
-  const config = stabilityConfig[data.stability];
-  const Icon = config.icon;
-  const priceChange = data.priceChange24h || 0;
+function SortIcon({ sorted }: { sorted: false | "asc" | "desc" }) {
+  if (!sorted) {
+    return <ArrowUpDown className="w-3.5 h-3.5 text-slate-500 opacity-50" />;
+  }
+  return sorted === "asc" ? (
+    <ChevronUp className="w-3.5 h-3.5 text-amber-400" />
+  ) : (
+    <ChevronDown className="w-3.5 h-3.5 text-amber-400" />
+  );
+}
 
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  gradient,
+  textColor,
+  delay = 0,
+}: {
+  label: string;
+  value: number;
+  icon: React.ElementType;
+  gradient: string;
+  textColor: string;
+  delay?: number;
+}) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`rounded-xl border p-4 shadow-lg ${
-        isKoge
-          ? "border-amber-500/40 bg-gradient-to-br from-amber-500/10 via-slate-900/95 to-orange-500/5"
-          : data.stability === "STABLE"
-            ? "border-emerald-500/40 bg-gradient-to-br from-emerald-500/10 via-slate-900/95 to-green-500/5"
-            : data.stability === "MODERATE"
-              ? "border-amber-500/40 bg-gradient-to-br from-amber-500/10 via-slate-900/95 to-yellow-500/5"
-              : "border-slate-700/50 bg-gradient-to-br from-slate-800/50 via-slate-900/95 to-slate-800/50"
-      }`}
+      transition={{ duration: 0.4, delay }}
+      className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradient} p-4 ring-1 ring-white/5 backdrop-blur-xl`}
     >
-      {/* Project Header - Always Visible */}
-      <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-700/50">
-        <div
-          className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-base shadow-md ${
-            isKoge
-              ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
-              : "bg-slate-800 text-white border border-slate-700"
-          }`}
-        >
-          {isKoge ? <Crown className="w-6 h-6" /> : data.symbol.slice(0, 2)}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-bold text-white text-base truncate">
-              {data.symbol}
-            </h3>
-            {data.isSpotPair && (
-              <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-400 text-[10px] font-bold border border-cyan-500/30">
-                SPOT
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-400">{data.chain}</span>
-            <span className="text-slate-600">•</span>
-            <span className="text-sm text-slate-400">{data.project}</span>
-          </div>
+      <div className="absolute top-0 right-0 w-20 h-20 bg-white/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
+      <div className="relative flex items-center justify-between">
+        <div>
+          <div className={`text-2xl font-bold ${textColor}`}>{value}</div>
+          <div className="text-xs text-slate-400 mt-0.5">{label}</div>
         </div>
         <div
-          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg ${config.bgClass} border ${config.borderClass}`}
+          className={`w-10 h-10 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center ring-1 ring-white/10`}
         >
-          <Icon className={`w-4 h-4 ${config.textClass}`} />
-          <span className={`text-xs font-bold ${config.textClass}`}>
-            {config.label}
-          </span>
-        </div>
-      </div>
-
-      {/* Stats Grid - 2x2 */}
-      <div className="grid grid-cols-2 gap-3">
-        {/* Spread */}
-        <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/50">
-          <div className="text-xs text-slate-500 mb-1.5 font-medium">
-            Spread
-          </div>
-          <div className={`font-bold text-lg ${config.textClass}`}>
-            {data.spreadPercent.toFixed(2)}%
-          </div>
-          <div className="text-xs text-slate-500 mt-0.5">
-            {data.spreadBps.toFixed(0)} bps
-          </div>
-        </div>
-
-        {/* Price */}
-        <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/50">
-          <div className="text-xs text-slate-500 mb-1.5 font-medium">Price</div>
-          <div className="font-bold text-lg text-white">
-            {formatPrice(data.price)}
-          </div>
-          <div
-            className={`text-xs mt-0.5 font-medium ${priceChange >= 0 ? "text-emerald-400" : "text-red-400"}`}
-          >
-            {priceChange >= 0 ? "+" : ""}
-            {priceChange.toFixed(2)}%
-          </div>
-        </div>
-
-        {/* Volume */}
-        <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/50">
-          <div className="text-xs text-slate-500 mb-1.5 font-medium">
-            Volume 24h
-          </div>
-          <div className="font-bold text-lg text-cyan-400">
-            {formatVolume(data.volume24h)}
-          </div>
-        </div>
-
-        {/* 4x Days */}
-        <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/50">
-          <div className="text-xs text-slate-500 mb-1.5 font-medium">
-            4x Days
-          </div>
-          <div
-            className={`font-bold text-lg ${
-              data.fourXDays >= 7
-                ? "text-emerald-400"
-                : data.fourXDays >= 3
-                  ? "text-amber-400"
-                  : "text-slate-400"
-            }`}
-          >
-            {data.fourXDays}
-            <span className="text-xs font-normal ml-1 text-slate-500">
-              days
-            </span>
-          </div>
+          <Icon className={`w-5 h-5 ${textColor}`} />
         </div>
       </div>
     </motion.div>
   );
-});
+}
+
+// ============= Column Helper =============
+
+const columnHelper = createColumnHelper<TokenData>();
 
 // ============= Main Component =============
 
 export default function StabilityPage() {
-  const isMobile = useIsMobile();
-  const [mounted, setMounted] = useState(false);
-  const [sorting, setSorting] = useState<SortingState>([]);
-  const [globalFilter, setGlobalFilter] = useState("");
+  const [data, setData] = useState<TokenData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState(0);
+  const [countdown, setCountdown] = useState(REFRESH_INTERVAL / 1000);
   const [alertEnabled, setAlertEnabled] = useState(false);
   const [alertThreshold, setAlertThreshold] = useState(35);
   const [showNotes, setShowNotes] = useState(false);
-  const [countdown, setCountdown] = useState(POLLING_INTERVAL / 1000);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [stableStartTime, setStableStartTime] = useState<
+    Record<string, number>
+  >({});
+  const [sorting, setSorting] = useState<SortingState>([]);
 
-  // Fetch stability data with polling
-  const {
-    data: apiResponse,
-    isLoading,
-    isFetching,
-    dataUpdatedAt,
-    refetch,
-  } = useQuery({
-    queryKey: ["stabilityData"],
-    queryFn: fetchStabilityData,
-    refetchInterval: POLLING_INTERVAL,
-    staleTime: 0, // Always fetch fresh data
-    gcTime: 0, // Don't cache old data
-    retry: 2,
-    retryDelay: 1000,
-    refetchOnWindowFocus: true,
-    refetchOnMount: "always",
-  });
-
-  // Memoized data
-  const stabilityData = useMemo(
-    () => apiResponse?.data || [],
-    [apiResponse?.data],
-  );
-
-  // Countdown timer effect - optimized
-  useEffect(() => {
-    if (!dataUpdatedAt) return;
-
-    let animationFrameId: number;
-    let lastUpdate = performance.now();
-
-    const updateCountdown = (currentTime: number) => {
-      if (currentTime - lastUpdate >= 100) {
-        const elapsed = Date.now() - dataUpdatedAt;
-        const remaining = Math.max(0, (POLLING_INTERVAL - elapsed) / 1000);
-        setCountdown(remaining);
-        setIsRefreshing(remaining < 0.5 || isFetching);
-        lastUpdate = currentTime;
-      }
-      animationFrameId = requestAnimationFrame(updateCountdown);
-    };
-
-    animationFrameId = requestAnimationFrame(updateCountdown);
-
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [dataUpdatedAt, isFetching]);
-
-  // Top 3 most participated (highest volume) - memoized
-  const topParticipated = useMemo(() => {
-    if (stabilityData.length === 0) return [];
-    return [...stabilityData]
-      .filter((item) => item.volume24h > 0)
-      .sort((a, b) => b.volume24h - a.volume24h)
-      .slice(0, 3);
-  }, [stabilityData]);
-
-  // Table columns - memoized with stable references
+  // Define columns for TanStack Table
   const columns = useMemo(
     () => [
       columnHelper.accessor("symbol", {
         header: "Project",
         cell: (info) => {
-          const row = info.row.original;
+          const token = info.row.original;
+          const isKoge = token.symbol === "KOGE";
+
           return (
-            <ProjectCell
-              symbol={row.symbol}
-              chain={row.chain}
-              isKoge={row.symbol === "KOGE"}
-              isSpotPair={row.isSpotPair}
-            />
+            <div className="flex items-center gap-3">
+              <div
+                className={`relative w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold transition-transform hover:scale-105 ${
+                  isKoge
+                    ? "bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 text-white shadow-lg shadow-amber-500/20"
+                    : "bg-gradient-to-br from-slate-700 to-slate-800 text-slate-300 ring-1 ring-white/10"
+                }`}
+              >
+                {token.symbol.slice(0, 2)}
+                {isKoge && (
+                  <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-400 flex items-center justify-center">
+                    <Crown className="w-2.5 h-2.5 text-amber-900" />
+                  </div>
+                )}
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-white">{token.symbol}</span>
+                  {token.mulPoint === 4 && (
+                    <span className="px-1.5 py-0.5 rounded-md bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-[10px] font-bold text-purple-300 ring-1 ring-purple-500/20">
+                      4x
+                    </span>
+                  )}
+                </div>
+                <span className="text-[11px] text-slate-500">
+                  {token.chain}
+                </span>
+              </div>
+            </div>
           );
+        },
+        sortingFn: (rowA, rowB) => {
+          if (rowA.original.symbol === "KOGE") return -1;
+          if (rowB.original.symbol === "KOGE") return 1;
+          return rowA.original.symbol.localeCompare(rowB.original.symbol);
         },
       }),
       columnHelper.accessor("stability", {
-        header: "Status",
+        header: "Stability",
         cell: (info) => <StabilityBadge stability={info.getValue()} />,
+        sortingFn: (rowA, rowB) => {
+          const orderA = stabilityConfig[rowA.original.stability].order;
+          const orderB = stabilityConfig[rowB.original.stability].order;
+          return orderA - orderB;
+        },
       }),
-      columnHelper.accessor("spreadPercent", {
-        header: "Spread",
-        cell: (info) => (
-          <SpreadCell
-            spreadPercent={info.getValue()}
-            spreadBps={info.row.original.spreadBps}
-            stability={info.row.original.stability}
-          />
-        ),
-      }),
-      columnHelper.accessor("price", {
-        header: "Price",
-        cell: (info) => (
-          <PriceCell
-            price={info.getValue()}
-            change={info.row.original.priceChange24h || 0}
-          />
-        ),
-      }),
-      columnHelper.accessor("volume24h", {
-        header: "Volume 24h",
-        cell: (info) => (
-          <span className="font-semibold text-cyan-400 text-base">
-            {formatVolume(info.getValue())}
-          </span>
-        ),
+      columnHelper.accessor("spreadBps", {
+        header: "Spread BPS",
+        cell: (info) => {
+          const token = info.row.original;
+          const config = stabilityConfig[token.stability];
+
+          if (token.spreadBps <= 0 && token.tradeCount <= 0) {
+            return <span className="text-slate-500">—</span>;
+          }
+
+          return (
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1.5">
+                <span className={`font-bold text-base ${config.textClass}`}>
+                  {token.spreadBps.toFixed(2)}
+                </span>
+                <span className="text-xs text-slate-500">bps</span>
+              </div>
+              <div className="flex items-center gap-1 mt-0.5">
+                <Activity className="w-3 h-3 text-slate-500" />
+                <span className="text-[10px] text-slate-500">
+                  {token.tradeCount} trades
+                </span>
+              </div>
+            </div>
+          );
+        },
+        sortingFn: "basic",
       }),
       columnHelper.accessor("fourXDays", {
         header: "4x Days",
-        cell: (info) => <FourXDaysCell days={info.getValue()} />,
+        cell: (info) => {
+          const days = info.getValue();
+          const urgency =
+            days <= 5
+              ? "from-rose-500 to-pink-500"
+              : days <= 10
+                ? "from-amber-500 to-orange-500"
+                : "from-emerald-500 to-teal-500";
+          const textColor =
+            days <= 5
+              ? "text-rose-400"
+              : days <= 10
+                ? "text-amber-400"
+                : "text-emerald-400";
+
+          return (
+            <div className="flex items-center gap-2">
+              <div
+                className={`w-8 h-8 rounded-lg bg-gradient-to-br ${urgency} flex items-center justify-center shadow-lg`}
+              >
+                <span className="text-xs font-bold text-white">{days}</span>
+              </div>
+              <span className={`text-xs font-medium ${textColor}`}>days</span>
+            </div>
+          );
+        },
+        sortingFn: "basic",
       }),
     ],
     [],
   );
 
-  // Custom global filter function that searches across symbol, project, and chain
-  const globalFilterFn = useCallback(
-    (
-      row: { original: StabilityData },
-      columnId: string,
-      filterValue: string,
-    ) => {
-      const search = filterValue.toLowerCase();
-      const { symbol, project, chain } = row.original;
-      return (
-        symbol.toLowerCase().includes(search) ||
-        project.toLowerCase().includes(search) ||
-        chain.toLowerCase().includes(search)
-      );
-    },
-    [],
-  );
-
-  // Table instance - memoized configuration
+  // Initialize TanStack Table
   const table = useReactTable({
-    data: stabilityData,
+    data,
     columns,
-    state: { sorting, globalFilter },
+    state: { sorting },
     onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
-    getRowId: useCallback(
-      (row: StabilityData, index: number) =>
-        `${row.symbol}-${row.chain}-${index}`,
-      [],
-    ),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    globalFilterFn: globalFilterFn,
-    initialState: {
-      pagination: {
-        pageSize: 10,
-      },
-    },
+    enableSortingRemoval: true,
   });
 
-  // Stability alert - memoized callback
-  const checkStabilityAlert = useCallback(() => {
-    if (!alertEnabled || stabilityData.length === 0) return;
+  // Fetch data from server
+  const fetchData = useCallback(async () => {
+    try {
+      setIsRefreshing(true);
 
-    const stableProjects = stabilityData.filter(
-      (item) => item.stability === "STABLE",
-    );
+      const res = await fetch("/api/binance/alpha/stability-data", {
+        cache: "no-store",
+      });
 
-    if (stableProjects.length > 0) {
-      if ("Notification" in window && Notification.permission === "granted") {
-        new Notification("🟢 Stability Alert", {
-          body: `${stableProjects[0].symbol} is stable! Spread: ${stableProjects[0].spreadPercent.toFixed(2)}%`,
+      if (!res.ok) throw new Error("Failed to fetch");
+
+      const json: ApiResponse = await res.json();
+
+      if (json.success && json.data) {
+        setData(json.data);
+        setLastUpdate(Date.now());
+        setIsLoading(false);
+
+        const now = Date.now();
+        const newStableStartTime: Record<string, number> = {};
+
+        json.data.forEach((token) => {
+          if (token.stability === "STABLE") {
+            newStableStartTime[token.symbol] =
+              stableStartTime[token.symbol] || now;
+          }
         });
-      }
-    }
-  }, [alertEnabled, stabilityData]);
 
-  // Request notification permission - memoized callback
+        setStableStartTime(newStableStartTime);
+      }
+    } catch (error) {
+      console.error("Fetch error:", error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [stableStartTime]);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-refresh
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchData();
+    }, REFRESH_INTERVAL);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Countdown timer
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const elapsed = Date.now() - lastUpdate;
+      const remaining = Math.max(0, (REFRESH_INTERVAL - elapsed) / 1000);
+      setCountdown(remaining);
+    }, 100);
+
+    return () => clearInterval(timer);
+  }, [lastUpdate]);
+
+  // Stability alerts
+  useEffect(() => {
+    if (!alertEnabled) return;
+
+    const now = Date.now();
+
+    Object.entries(stableStartTime).forEach(([symbol, startTime]) => {
+      const duration = (now - startTime) / 1000;
+
+      if (duration >= alertThreshold) {
+        const lastAlertKey = `lastAlert_${symbol}`;
+        const lastAlert = parseInt(sessionStorage.getItem(lastAlertKey) || "0");
+
+        if (now - lastAlert > alertThreshold * 1000) {
+          if (
+            "Notification" in window &&
+            Notification.permission === "granted"
+          ) {
+            const token = data.find((t) => t.symbol === symbol);
+            new Notification(`🟢 ${symbol} Stable Alert`, {
+              body: `${symbol} has been stable for ${Math.floor(duration)}s! Spread: ${token?.spreadBps.toFixed(2)} bps`,
+              icon: "/favicon.ico",
+            });
+          }
+
+          try {
+            const audio = new Audio("/notification.mp3");
+            audio.volume = 0.5;
+            audio.play().catch(() => {});
+          } catch {
+            // Ignore audio errors
+          }
+
+          sessionStorage.setItem(lastAlertKey, now.toString());
+        }
+      }
+    });
+  }, [data, alertEnabled, alertThreshold, stableStartTime]);
+
+  // Request notification permission
   const enableAlerts = useCallback(async () => {
-    if ("Notification" in window) {
+    if (!alertEnabled && "Notification" in window) {
       const permission = await Notification.requestPermission();
       if (permission === "granted") {
         setAlertEnabled(true);
       }
-    }
-  }, []);
-
-  // Toggle alerts - memoized callback
-  const handleToggleAlerts = useCallback(() => {
-    if (alertEnabled) {
-      setAlertEnabled(false);
     } else {
-      enableAlerts();
+      setAlertEnabled(!alertEnabled);
     }
-  }, [alertEnabled, enableAlerts]);
+  }, [alertEnabled]);
 
-  // Mount effect
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  // Summary stats
+  const summary = useMemo(() => {
+    return {
+      stable: data.filter((d) => d.stability === "STABLE").length,
+      moderate: data.filter((d) => d.stability === "MODERATE").length,
+      unstable: data.filter((d) => d.stability === "UNSTABLE").length,
+      total: data.length,
+    };
+  }, [data]);
 
-  // Alert check effect
-  useEffect(() => {
-    if (alertEnabled) {
-      const interval = setInterval(checkStabilityAlert, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [alertEnabled, checkStabilityAlert]);
-
-  // Manual refresh handler - memoized callback
-  const handleManualRefresh = useCallback(() => {
-    setIsRefreshing(true);
-    refetch();
-  }, [refetch]);
-
-  // Search handler - memoized callback
-  const handleSearchChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setGlobalFilter(e.target.value);
-    },
-    [],
-  );
-
-  // Toggle notes - memoized callback
-  const handleToggleNotes = useCallback(() => {
-    setShowNotes((prev) => !prev);
-  }, []);
-
-  if (!mounted || isLoading) {
+  // Loading state
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#0a0b0d] p-4">
-        <div className="relative max-w-7xl mx-auto">
-          <div className="flex items-center justify-center h-[60vh]">
-            <div className="flex flex-col items-center gap-4">
-              <div className="relative">
-                <div className="w-16 h-16 rounded-full border-4 border-amber-500/20 border-t-amber-500 animate-spin" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6 text-amber-500" />
-                </div>
-              </div>
-              <span className="text-slate-400 text-sm animate-pulse">
-                Loading market data...
-              </span>
-            </div>
+      <div className="min-h-screen bg-[#08090b] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-6">
+          <div className="relative">
+            <div className="w-16 h-16 rounded-full border-4 border-amber-500/20 border-t-amber-500 animate-spin" />
+            <Sparkles className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 text-amber-400" />
+          </div>
+          <div className="text-center">
+            <p className="text-slate-300 font-medium">Loading stability data</p>
+            <p className="text-slate-500 text-sm mt-1">
+              Analyzing market conditions...
+            </p>
           </div>
         </div>
       </div>
@@ -788,36 +506,49 @@ export default function StabilityPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0b0d] relative p-4 md:p-6">
-      {/* Background Effects */}
+    <div className="min-h-screen bg-[#08090b] p-4 md:p-8">
+      {/* Animated Background */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl" />
+        <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-amber-500/5 rounded-full blur-[120px] animate-pulse" />
+        <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-cyan-500/5 rounded-full blur-[120px] animate-pulse" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-purple-500/3 rounded-full blur-[150px]" />
       </div>
 
-      {/* Content */}
-      <div className="relative z-10 max-w-7xl mx-auto">
+      <div className="relative z-10 max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8"
+        >
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/30">
-              <TrendingUp className="w-6 h-6 text-white" />
+            <div className="relative">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 flex items-center justify-center shadow-xl shadow-amber-500/25">
+                <TrendingUp className="w-7 h-7 text-white" />
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center ring-4 ring-[#08090b]">
+                <Zap className="w-3 h-3 text-white" />
+              </div>
             </div>
             <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-amber-400 via-orange-400 to-amber-300 bg-clip-text text-transparent">
+              <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
                 Stability Dashboard
               </h1>
               <div className="flex items-center gap-3 mt-1">
-                <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 text-xs font-bold">
-                  4x ALPHA
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 ring-1 ring-emerald-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-[11px] font-semibold text-emerald-400">
+                    LIVE
+                  </span>
                 </span>
                 <span className="text-sm text-slate-500">
-                  {stabilityData.length} tokens tracked
+                  {data.length} tokens tracked
                 </span>
                 <LiveIndicator
                   isLive={!isRefreshing}
                   size="sm"
-                  variant={isRefreshing ? "warning" : "success"}
+                  variant="success"
                 />
               </div>
             </div>
@@ -825,481 +556,341 @@ export default function StabilityPage() {
 
           {/* Controls */}
           <div className="flex items-center gap-3">
-            {/* Real-time Counter */}
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800/50 border border-slate-700/50 backdrop-blur-sm">
-              {isRefreshing ? (
-                <Spinner size="sm" variant="premium" />
-              ) : (
-                <CountdownRing
-                  duration={POLLING_INTERVAL / 1000}
-                  remaining={countdown}
-                  size="sm"
-                  variant="premium"
-                  showValue={false}
-                />
-              )}
-              <div className="flex flex-col">
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider">
-                  Next Update
-                </span>
-                <span className="text-sm font-bold text-amber-400 tabular-nums">
-                  {isRefreshing ? "Updating..." : `${Math.ceil(countdown)}s`}
-                </span>
+            {/* Countdown */}
+            <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-slate-800/40 ring-1 ring-white/5 backdrop-blur-sm">
+              <div className="relative w-6 h-6">
+                <svg className="w-6 h-6 -rotate-90">
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="text-slate-700"
+                  />
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeDasharray={`${(countdown / (REFRESH_INTERVAL / 1000)) * 62.83} 62.83`}
+                    strokeLinecap="round"
+                    className="text-amber-400 transition-all duration-100"
+                  />
+                </svg>
               </div>
+              <span className="text-sm text-slate-400 tabular-nums font-medium min-w-[36px]">
+                {countdown.toFixed(1)}s
+              </span>
             </div>
 
             {/* Alert Button */}
             <button
-              onClick={handleToggleAlerts}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all ${
+              onClick={enableAlerts}
+              className={`group flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all duration-300 ${
                 alertEnabled
-                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-lg shadow-emerald-500/10"
-                  : "bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-800 hover:border-slate-600"
+                  ? "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/40 shadow-lg shadow-emerald-500/10"
+                  : "bg-slate-800/40 text-slate-400 ring-1 ring-white/5 hover:bg-slate-800/60 hover:text-slate-300"
               }`}
             >
               {alertEnabled ? (
-                <Bell className="w-4 h-4" />
+                <>
+                  <Bell className="w-4 h-4" />
+                  <Volume2 className="w-3.5 h-3.5" />
+                </>
               ) : (
-                <BellOff className="w-4 h-4" />
+                <BellOff className="w-4 h-4 group-hover:scale-110 transition-transform" />
               )}
-              <span className="hidden sm:inline">Alerts</span>
             </button>
 
             {/* Refresh Button */}
             <button
-              onClick={handleManualRefresh}
+              onClick={fetchData}
               disabled={isRefreshing}
-              className="p-2.5 rounded-xl bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-800 hover:border-slate-600 transition-all disabled:opacity-50"
+              className="group p-2.5 rounded-xl bg-slate-800/40 text-slate-400 ring-1 ring-white/5 hover:bg-slate-800/60 hover:text-slate-300 transition-all duration-300 disabled:opacity-50"
             >
               <RefreshCw
-                className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
+                className={`w-4 h-4 ${isRefreshing ? "animate-spin" : "group-hover:rotate-45 transition-transform"}`}
               />
             </button>
           </div>
-        </div>
+        </motion.div>
 
-        {/* Alert Settings */}
+        {/* Alert Threshold Settings */}
         <AnimatePresence>
           {alertEnabled && (
             <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mb-4 overflow-hidden"
+              initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+              animate={{ opacity: 1, height: "auto", marginBottom: 24 }}
+              exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+              className="overflow-hidden"
             >
-              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 backdrop-blur-sm">
+              <div className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 ring-1 ring-emerald-500/30 rounded-2xl p-4 backdrop-blur-sm">
                 <div className="flex items-center gap-4 flex-wrap">
                   <span className="text-sm text-emerald-400 font-medium">
-                    Alert after stable for:
+                    🔔 Alert after stable for:
                   </span>
-                  {[6, 12, 18, 35, 60].map((sec) => (
-                    <button
-                      key={sec}
-                      onClick={() => setAlertThreshold(sec)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                        alertThreshold === sec
-                          ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/30"
-                          : "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
-                      }`}
-                    >
-                      {sec}s
-                    </button>
-                  ))}
+                  <div className="flex gap-2">
+                    {[6, 12, 18, 21, 35, 60].map((sec) => (
+                      <button
+                        key={sec}
+                        onClick={() => setAlertThreshold(sec)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                          alertThreshold === sec
+                            ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/30"
+                            : "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                        }`}
+                      >
+                        {sec}s
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* 2 Column Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Main Table */}
-          <div className="lg:col-span-2">
-            <MagicCard
-              className="overflow-hidden rounded-2xl border-slate-800/50"
-              gradientColor="rgba(251, 191, 36, 0.03)"
-            >
-              {/* Search Bar */}
-              <div className="p-4 border-b border-slate-800/50">
-                <div className="flex items-center gap-4">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                    <input
-                      type="text"
-                      placeholder="Search tokens..."
-                      value={globalFilter}
-                      onChange={handleSearchChange}
-                      className="w-full pl-11 pr-4 py-3 text-sm bg-slate-900/50 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/10 transition-all"
-                    />
-                  </div>
-                  {/* Live Status Badge */}
-                  <div className="hidden sm:flex items-center gap-2 px-4 py-3 rounded-xl bg-slate-900/50 border border-slate-800">
-                    <LiveIndicator
-                      isLive={!isRefreshing}
-                      size="sm"
-                      variant={isRefreshing ? "warning" : "success"}
-                    />
-                    <span className="text-xs text-slate-400">
-                      {dataUpdatedAt
-                        ? new Date(dataUpdatedAt).toLocaleTimeString()
-                        : "..."}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Table Content */}
-              {isMobile ? (
-                /* Mobile Card View */
-                <>
-                  {table.getRowModel().rows.length === 0 ? (
-                    <div className="px-4 py-12 text-center text-slate-500">
-                      <div className="flex flex-col items-center gap-2">
-                        <Info className="w-8 h-8 text-slate-600" />
-                        <span>No tokens found</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <ScrollArea className="h-[calc(100vh-380px)] min-h-[400px]">
-                      <div className="p-3 space-y-3">
-                        <AnimatePresence>
-                          {table.getRowModel().rows.map((row) => (
-                            <MobileStabilityCard
-                              key={row.id}
-                              data={row.original}
-                              isKoge={row.original.symbol === "KOGE"}
-                            />
-                          ))}
-                        </AnimatePresence>
-                      </div>
-                    </ScrollArea>
-                  )}
-
-                  {/* Mobile Pagination */}
-                  <div className="flex flex-col gap-3 p-4 border-t border-slate-800/50 bg-slate-900/20">
-                    <div className="text-xs text-center text-slate-400">
-                      หน้า {table.getState().pagination.pageIndex + 1} จาก{" "}
-                      {table.getPageCount()} (
-                      {table.getFilteredRowModel().rows.length} รายการ)
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => table.previousPage()}
-                        disabled={!table.getCanPreviousPage()}
-                        className="flex-1 h-10 rounded-lg bg-slate-800/50 text-slate-400 disabled:opacity-30 hover:bg-slate-800 transition-colors text-sm font-medium"
-                      >
-                        ก่อนหน้า
-                      </button>
-                      <button
-                        onClick={() => table.nextPage()}
-                        disabled={!table.getCanNextPage()}
-                        className="flex-1 h-10 rounded-lg bg-slate-800/50 text-slate-400 disabled:opacity-30 hover:bg-slate-800 transition-colors text-sm font-medium"
-                      >
-                        ถัดไป
-                      </button>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                /* Desktop Table View */
-                <>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-slate-800/50 bg-slate-900/30">
-                          {table.getHeaderGroups().map((headerGroup) =>
-                            headerGroup.headers.map((header) => (
-                              <th
-                                key={header.id}
-                                onClick={header.column.getToggleSortingHandler()}
-                                className="px-4 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-amber-400 transition-colors whitespace-nowrap"
-                              >
-                                <div className="flex items-center gap-1">
-                                  {flexRender(
-                                    header.column.columnDef.header,
-                                    header.getContext(),
-                                  )}
-                                  {{
-                                    asc: " ↑",
-                                    desc: " ↓",
-                                  }[header.column.getIsSorted() as string] ??
-                                    null}
-                                </div>
-                              </th>
-                            )),
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {table.getRowModel().rows.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={6}
-                              className="px-4 py-12 text-center text-slate-500"
-                            >
-                              <div className="flex flex-col items-center gap-2">
-                                <Info className="w-8 h-8 text-slate-600" />
-                                <span>No tokens found</span>
-                              </div>
-                            </td>
-                          </tr>
-                        ) : (
-                          table.getRowModel().rows.map((row) => {
-                            const isKoge = row.original.symbol === "KOGE";
-                            const stability = row.original.stability;
-
-                            return (
-                              <tr
-                                key={row.id}
-                                className={`border-b border-slate-800/30 transition-all ${
-                                  isKoge
-                                    ? "bg-amber-500/5 hover:bg-amber-500/10"
-                                    : stability === "STABLE"
-                                      ? "bg-emerald-500/5 hover:bg-emerald-500/10"
-                                      : stability === "MODERATE"
-                                        ? "bg-amber-500/5 hover:bg-amber-500/10"
-                                        : "hover:bg-slate-800/30"
-                                }`}
-                              >
-                                {row.getVisibleCells().map((cell) => (
-                                  <td
-                                    key={cell.id}
-                                    className="px-4 py-4 whitespace-nowrap"
-                                  >
-                                    {flexRender(
-                                      cell.column.columnDef.cell,
-                                      cell.getContext(),
-                                    )}
-                                  </td>
-                                ))}
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Desktop Pagination */}
-                  <div className="flex items-center justify-between px-4 py-4 border-t border-slate-800/50 bg-slate-900/20">
-                    <div className="text-sm text-slate-400">
-                      Showing{" "}
-                      <span className="font-semibold text-white">
-                        {table.getState().pagination.pageIndex *
-                          table.getState().pagination.pageSize +
-                          1}
-                      </span>
-                      {" - "}
-                      <span className="font-semibold text-white">
-                        {Math.min(
-                          (table.getState().pagination.pageIndex + 1) *
-                            table.getState().pagination.pageSize,
-                          table.getFilteredRowModel().rows.length,
-                        )}
-                      </span>
-                      {" of "}
-                      <span className="font-semibold text-white">
-                        {table.getFilteredRowModel().rows.length}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => table.setPageIndex(0)}
-                        disabled={!table.getCanPreviousPage()}
-                        className="p-2 rounded-lg bg-slate-800/50 text-slate-400 disabled:opacity-30 hover:bg-slate-800 transition-colors"
-                      >
-                        <ChevronsLeft className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => table.previousPage()}
-                        disabled={!table.getCanPreviousPage()}
-                        className="p-2 rounded-lg bg-slate-800/50 text-slate-400 disabled:opacity-30 hover:bg-slate-800 transition-colors"
-                      >
-                        <ChevronLeft className="w-4 h-4" />
-                      </button>
-                      <span className="px-4 text-sm text-slate-300">
-                        <span className="font-semibold">
-                          {table.getState().pagination.pageIndex + 1}
-                        </span>
-                        <span className="text-slate-500"> / </span>
-                        <span>{table.getPageCount()}</span>
-                      </span>
-                      <button
-                        onClick={() => table.nextPage()}
-                        disabled={!table.getCanNextPage()}
-                        className="p-2 rounded-lg bg-slate-800/50 text-slate-400 disabled:opacity-30 hover:bg-slate-800 transition-colors"
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() =>
-                          table.setPageIndex(table.getPageCount() - 1)
-                        }
-                        disabled={!table.getCanNextPage()}
-                        className="p-2 rounded-lg bg-slate-800/50 text-slate-400 disabled:opacity-30 hover:bg-slate-800 transition-colors"
-                      >
-                        <ChevronsRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </MagicCard>
-          </div>
-
-          {/* Right Column - Side Panel */}
-          <div className="space-y-6">
-            {/* Live Status Card */}
-            <MagicCard
-              className="overflow-hidden rounded-2xl border-slate-800/50 p-5"
-              gradientColor="rgba(251, 191, 36, 0.03)"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Zap className="w-5 h-5 text-amber-400" />
-                  <h3 className="text-base font-bold text-white">
-                    Live Status
-                  </h3>
-                </div>
-                <LiveIndicator
-                  isLive={!isRefreshing}
-                  size="md"
-                  variant={isRefreshing ? "warning" : "success"}
-                  showLabel
-                />
-              </div>
-
-              {/* Progress Bar */}
-              <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-800/50">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs text-slate-400 uppercase tracking-wider">
-                    Refresh Progress
-                  </span>
-                  <span className="text-sm font-bold text-amber-400 tabular-nums">
-                    {isRefreshing ? "..." : `${Math.ceil(countdown)}s`}
-                  </span>
-                </div>
-                <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-400 rounded-full transition-all duration-100"
-                    style={{
-                      width: `${(countdown / (POLLING_INTERVAL / 1000)) * 100}%`,
-                    }}
-                  />
-                </div>
-                <div className="flex items-center justify-between mt-3 text-xs text-slate-500">
-                  <span>Auto-refresh every {POLLING_INTERVAL / 1000}s</span>
-                  <span>
-                    {dataUpdatedAt
-                      ? new Date(dataUpdatedAt).toLocaleTimeString()
-                      : "..."}
-                  </span>
-                </div>
-              </div>
-            </MagicCard>
-
-            {/* Top 3 Most Participated */}
-            <MagicCard
-              className="overflow-hidden rounded-2xl border-slate-800/50 p-5"
-              gradientColor="rgba(251, 191, 36, 0.03)"
-            >
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-bold text-white">Top Volume</h3>
-              </div>
-              <div className="space-y-3">
-                {topParticipated.map((item, index) => (
-                  <TopVolumeItem
-                    key={`top-${item.symbol}-${index}`}
-                    item={item}
-                    index={index}
-                  />
-                ))}
-                {topParticipated.length === 0 && (
-                  <div className="text-center text-slate-500 py-6">
-                    <Info className="w-6 h-6 mx-auto mb-2 text-slate-600" />
-                    No volume data
-                  </div>
-                )}
-              </div>
-            </MagicCard>
-
-            {/* Notes Section */}
-            <div className="rounded-2xl border border-slate-800/50 overflow-hidden bg-slate-900/20">
-              <button
-                onClick={handleToggleNotes}
-                className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-800/30 transition-all"
-              >
-                <div className="flex items-center gap-2">
-                  <Info className="w-4 h-4 text-slate-400" />
-                  <span className="text-sm font-semibold text-slate-400">
-                    Information
-                  </span>
-                </div>
-                <motion.div
-                  animate={{ rotate: showNotes ? 180 : 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <ChevronDown className="w-4 h-4 text-slate-400" />
-                </motion.div>
-              </button>
-
-              <AnimatePresence>
-                {showNotes && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="px-5 pb-5 space-y-3 border-t border-slate-800/50 pt-4">
-                      <div className="flex items-start gap-3 p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
-                        <Shield className="w-4 h-4 text-emerald-400 mt-0.5" />
-                        <div>
-                          <span className="text-xs font-semibold text-emerald-400">
-                            SPOT Pairs (KOGE)
-                          </span>
-                          <p className="text-xs text-slate-500 mt-1">
-                            Real-time orderbook spread. Stable &lt;0.3%
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/10">
-                        <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5" />
-                        <div>
-                          <span className="text-xs font-semibold text-amber-400">
-                            DEX Tokens
-                          </span>
-                          <p className="text-xs text-slate-500 mt-1">
-                            24h price range spread. Stable &lt;5%
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3 p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/10">
-                        <TrendingUp className="w-4 h-4 text-cyan-400 mt-0.5" />
-                        <div>
-                          <span className="text-xs font-semibold text-cyan-400">
-                            Spread Definition
-                          </span>
-                          <p className="text-xs text-slate-500 mt-1">
-                            Lower spread = Better stability. 1% = 100 USDT cost
-                            per 10,000 USDT.
-                          </p>
-                        </div>
-                      </div>
-                      <div className="p-3 rounded-lg bg-rose-500/5 border border-rose-500/10">
-                        <p className="text-xs text-rose-400/80">
-                          <strong>⚠️ Disclaimer:</strong> Markets are
-                          unpredictable. DYOR. No liability for losses.
-                        </p>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
+        {/* Summary Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
+          <StatCard
+            label="Stable"
+            value={summary.stable}
+            icon={Shield}
+            gradient="from-emerald-500/10 to-emerald-600/5"
+            textColor="text-emerald-400"
+            delay={0}
+          />
+          <StatCard
+            label="Moderate"
+            value={summary.moderate}
+            icon={AlertTriangle}
+            gradient="from-amber-500/10 to-amber-600/5"
+            textColor="text-amber-400"
+            delay={0.1}
+          />
+          <StatCard
+            label="Unstable"
+            value={summary.unstable}
+            icon={XCircle}
+            gradient="from-rose-500/10 to-rose-600/5"
+            textColor="text-rose-400"
+            delay={0.2}
+          />
+          <StatCard
+            label="Total"
+            value={summary.total}
+            icon={Activity}
+            gradient="from-slate-500/10 to-slate-600/5"
+            textColor="text-white"
+            delay={0.3}
+          />
         </div>
+
+        {/* Table */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="rounded-2xl bg-slate-900/40 ring-1 ring-white/5 backdrop-blur-xl overflow-hidden shadow-2xl"
+        >
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <tr
+                    key={headerGroup.id}
+                    className="bg-gradient-to-r from-slate-800/60 to-slate-800/40"
+                  >
+                    {headerGroup.headers.map((header) => (
+                      <th
+                        key={header.id}
+                        className="px-4 md:px-6 py-4 text-left"
+                      >
+                        {header.isPlaceholder ? null : (
+                          <div
+                            className={`flex items-center gap-2 ${
+                              header.column.getCanSort()
+                                ? "cursor-pointer select-none hover:text-amber-400 transition-colors group"
+                                : ""
+                            }`}
+                            onClick={header.column.getToggleSortingHandler()}
+                          >
+                            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 group-hover:text-amber-400 transition-colors">
+                              {flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                            </span>
+                            {header.column.getCanSort() && (
+                              <SortIcon
+                                sorted={
+                                  header.column.getIsSorted() as
+                                    | false
+                                    | "asc"
+                                    | "desc"
+                                }
+                              />
+                            )}
+                          </div>
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                ))}
+              </thead>
+              <tbody>
+                <AnimatePresence mode="popLayout">
+                  {table.getRowModel().rows.map((row, index) => {
+                    const isKoge = row.original.symbol === "KOGE";
+                    const isStable = row.original.stability === "STABLE";
+
+                    return (
+                      <motion.tr
+                        key={row.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
+                        transition={{ duration: 0.2, delay: index * 0.03 }}
+                        className={`border-b border-white/5 transition-colors duration-200 hover:bg-white/5 ${
+                          isKoge
+                            ? "bg-gradient-to-r from-amber-500/5 to-transparent"
+                            : isStable
+                              ? "bg-gradient-to-r from-emerald-500/5 to-transparent"
+                              : ""
+                        }`}
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <td
+                            key={cell.id}
+                            className="px-4 md:px-6 py-4 text-sm"
+                          >
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext(),
+                            )}
+                          </td>
+                        ))}
+                      </motion.tr>
+                    );
+                  })}
+                </AnimatePresence>
+                {data.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="px-6 py-12 text-center text-slate-500"
+                    >
+                      <div className="flex flex-col items-center gap-3">
+                        <Info className="w-8 h-8 text-slate-600" />
+                        <p className="text-sm">No data available</p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Footer */}
+          <div className="px-4 md:px-6 py-3 bg-slate-800/30 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Auto-refresh every 5s</span>
+            </div>
+            <span>
+              Last update:{" "}
+              {lastUpdate
+                ? new Date(lastUpdate).toLocaleTimeString("en-US", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })
+                : "—"}
+            </span>
+          </div>
+        </motion.div>
+
+        {/* Notes Section */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.4 }}
+          className="mt-6 rounded-2xl bg-slate-900/40 ring-1 ring-white/5 backdrop-blur-xl overflow-hidden"
+        >
+          <button
+            onClick={() => setShowNotes(!showNotes)}
+            className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/5 transition-colors"
+          >
+            <div className="flex items-center gap-3 text-slate-400">
+              <Info className="w-4 h-4" />
+              <span className="text-sm font-medium">Information & Tips</span>
+            </div>
+            <ChevronDown
+              className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${
+                showNotes ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+
+          <AnimatePresence>
+            {showNotes && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="overflow-hidden"
+              >
+                <div className="px-5 pb-5 space-y-3 text-sm text-slate-400 border-t border-white/5 pt-4">
+                  <div className="flex gap-3 items-start">
+                    <span className="text-emerald-400 text-lg">⚙️</span>
+                    <p>
+                      <strong className="text-emerald-400">Criteria:</strong>{" "}
+                      Price range, volume swings, abnormal spikes, short-term
+                      trend analysis.
+                    </p>
+                  </div>
+                  <div className="flex gap-3 items-start">
+                    <span className="text-amber-400 text-lg">💡</span>
+                    <p>
+                      <strong className="text-amber-400">Spread BPS:</strong>{" "}
+                      Standard Deviation of trade prices. Lower = more
+                      consistent = STABLE. {"<"}5 bps = Stable, {"<"}50 bps =
+                      Moderate.
+                    </p>
+                  </div>
+                  <div className="flex gap-3 items-start">
+                    <span className="text-cyan-400 text-lg">📊</span>
+                    <p>
+                      <strong className="text-cyan-400">Sorting:</strong> Click
+                      column headers to sort. KOGE (1x) as baseline → Green
+                      (Stable) → Yellow (Moderate) → Red (Unstable)
+                    </p>
+                  </div>
+                  <div className="flex gap-3 items-start">
+                    <span className="text-purple-400 text-lg">🔔</span>
+                    <p>
+                      <strong className="text-purple-400">Alerts:</strong> When
+                      enabled, you&apos;ll be notified after continuous
+                      stability. Keep the page in foreground.
+                    </p>
+                  </div>
+                  <div className="flex gap-3 items-start pt-2 border-t border-white/5">
+                    <span className="text-rose-400 text-lg">⚠️</span>
+                    <p className="text-rose-400/80">
+                      <strong>Disclaimer:</strong> Markets are unpredictable.
+                      DYOR; no liability for losses.
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
       </div>
     </div>
   );

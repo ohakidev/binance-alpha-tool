@@ -54,3 +54,21 @@ export {
   createShortLivedCache,
   createLongLivedCache,
 } from "./cache/CacheService";
+
+// WebSocket Service - Real-time stability monitoring
+export {
+  StabilityWebSocket,
+  getStabilityWebSocket,
+  resetStabilityWebSocket,
+} from "./websocket";
+
+export type {
+  StabilityLevel,
+  TradeData,
+  PriceBuffer,
+  TokenStabilityData,
+  StabilityConfig,
+  WebSocketMessage,
+  StabilityUpdateCallback,
+  ConnectionStatusCallback,
+} from "./websocket";
