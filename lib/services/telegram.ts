@@ -79,7 +79,7 @@ const getWebsiteUrl = (): string => {
   const envUrl = process.env.NEXT_PUBLIC_APP_URL;
   // If no env URL or it's localhost, use the production fallback
   if (!envUrl || envUrl.includes("localhost") || envUrl.includes("127.0.0.1")) {
-    return "https://binance-alpha-tool.vercel.app";
+    return "https://binance-alpha-tool-chi.vercel.app";
   }
   return envUrl;
 };
@@ -741,19 +741,13 @@ class TelegramService {
         lines.push(`\`${data.contractAddress}\``);
       }
 
-      lines.push(``, `🚀 *CLAIM NOW!*`);
+      lines.push(``);
       lines.push("");
       lines.push(`━━━━━━━━━━━━━━━━━━━━`);
       lines.push(`🌐 ดูเว็บไซต์: ${WEBSITE_URL}`);
 
       const keyboard = {
         inline_keyboard: [
-          [
-            {
-              text: "🎯 CLAIM NOW",
-              url: "https://www.binance.com/en/alpha",
-            },
-          ],
           [
             {
               text: "📊 DEXScreener",

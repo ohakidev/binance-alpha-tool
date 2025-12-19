@@ -548,9 +548,7 @@ export async function GET(request: Request) {
           claimStartDate: airdrop.claimStartDate ?? undefined,
           // Removed claimEndDate - user requested no end time
           estimatedValue: airdrop.estimatedValue ?? undefined,
-          airdropAmount: airdrop.points
-            ? `Alpha Score: ${airdrop.points}`
-            : undefined,
+          airdropAmount: undefined, // Actual airdrop amount not available from API
           requiredPoints: airdrop.points ?? undefined,
           deductPoints: airdrop.deductPoints ?? undefined,
           contractAddress: airdrop.contractAddress ?? undefined,
@@ -637,7 +635,7 @@ export async function GET(request: Request) {
           status: "LIVE",
           notified: false,
           scheduledTime: {
-            gte: new Date(now.getTime() - 10 * 60 * 1000),
+            gte: new Date(now.getTime() - 15 * 60 * 1000), // 15 minutes window for better coverage
             lte: now,
           },
           isActive: true,
