@@ -24,7 +24,7 @@ jobs:
           APP_URL: ${{ secrets.APP_URL }}
         run: |
           # Default to production URL if APP_URL not set
-          URL="${APP_URL:-https://binance-alpha-tool.vercel.app}"
+          URL="${APP_URL:-https://binance-alpha-tool-chi.vercel.app}"
 
           echo "🚀 Triggering airdrop update..."
           echo "URL: ${URL}/api/cron/update-airdrops"
