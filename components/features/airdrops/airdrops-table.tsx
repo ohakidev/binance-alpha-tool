@@ -26,7 +26,6 @@ import {
   TrendingUp,
   X,
   Send,
-  Bell,
   Zap,
   Gift,
   RefreshCw,
@@ -91,7 +90,6 @@ import {
 } from "@/components/ui/shine-border";
 import { NumberTicker } from "@/components/ui/number-ticker";
 import { GradientText } from "@/components/ui/animated-text";
-import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { useTelegram } from "@/lib/hooks/use-telegram";
 
 // Types
@@ -343,12 +341,10 @@ export function AirdropsTable() {
   const [selectedChains, setSelectedChains] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [, setLastRefresh] = useState<Date>(new Date());
-  const [isSyncing, setIsSyncing] = useState(false);
 
   const {
     isLoading: isSendingTelegram,
     sendAirdropAlert,
-    testConnection,
   } = useTelegram();
 
   // Fetch all claimable airdrops
@@ -413,7 +409,7 @@ export function AirdropsTable() {
     const todayStart = startOfDay(now);
     const todayEnd = endOfDay(now);
 
-    return claimableData.filter((airdrop) => {
+    const filtered = claimableData.filter((airdrop) => {
       if (!airdrop.claimStartDate) return false;
       const claimDate = new Date(airdrop.claimStartDate);
       // Show airdrops that started today or are still claimable today
@@ -421,6 +417,13 @@ export function AirdropsTable() {
         (claimDate >= todayStart && claimDate <= todayEnd) ||
         (airdrop.status.toLowerCase() === "claimable" && isToday(claimDate))
       );
+    });
+
+    // Sort by claimStartDate descending (latest first)
+    return filtered.sort((a, b) => {
+      const dateA = a.claimStartDate ? new Date(a.claimStartDate).getTime() : 0;
+      const dateB = b.claimStartDate ? new Date(b.claimStartDate).getTime() : 0;
+      return dateB - dateA;
     });
   }, [claimableData]);
 
@@ -453,13 +456,18 @@ export function AirdropsTable() {
     return Array.from(uniqueMap.values()).sort((a, b) => {
       const dateA = a.claimStartDate ? new Date(a.claimStartDate).getTime() : 0;
       const dateB = b.claimStartDate ? new Date(b.claimStartDate).getTime() : 0;
-      return dateA - dateB;
+      return dateB - dateA; // Descending order - latest first
     });
   }, [upcomingData, claimableData]);
 
-  // All airdrops data
+  // All airdrops data - sorted by claimStartDate descending (latest first)
   const allData = useMemo(() => {
-    return allAirdropsData || [];
+    if (!allAirdropsData) return [];
+    return [...allAirdropsData].sort((a, b) => {
+      const dateA = a.claimStartDate ? new Date(a.claimStartDate).getTime() : 0;
+      const dateB = b.claimStartDate ? new Date(b.claimStartDate).getTime() : 0;
+      return dateB - dateA;
+    });
   }, [allAirdropsData]);
 
   // Filter and search data
@@ -564,22 +572,6 @@ export function AirdropsTable() {
     setLastRefresh(new Date());
     await Promise.all([refetchClaimable(), refetchAll(), refetchUpcoming()]);
   }, [refetchClaimable, refetchAll, refetchUpcoming]);
-
-  // Sync from Binance Alpha
-  const handleSync = useCallback(async () => {
-    setIsSyncing(true);
-    try {
-      const res = await fetch("/api/alpha/sync?type=full", { method: "POST" });
-      const data = await res.json();
-      if (data.success) {
-        await handleRefresh();
-      }
-    } catch (error) {
-      console.error("Sync failed:", error);
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [handleRefresh]);
 
   const handleAirdropClick = useCallback((airdrop: Airdrop) => {
     setSelectedAirdrop(airdrop);
@@ -896,30 +888,7 @@ export function AirdropsTable() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <ShimmerButton
-                  onClick={handleSync}
-                  disabled={isSyncing}
-                  className="gap-2 text-sm"
-                  shimmerColor="#d4a948"
-                >
-                  <RefreshCw
-                    className={`w-4 h-4 ${isSyncing ? "animate-spin" : ""}`}
-                  />
-                  <span className="hidden sm:inline">
-                    {isSyncing ? "กำลัง Sync..." : "Sync ข้อมูล"}
-                  </span>
-                </ShimmerButton>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={testConnection}
-                  className="gap-2 border-primary/30 hover:bg-primary/10"
-                >
-                  <Bell className="w-4 h-4" />
-                  <span className="hidden sm:inline">ทดสอบ Telegram</span>
-                </Button>
-              </div>
+
             </div>
           </div>
           <CornerGlow
