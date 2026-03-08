@@ -16,32 +16,50 @@ jobs:
   update-airdrops:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      APP_URL: ${{ secrets.APP_URL }}
 
     steps:
-      - name: Trigger Airdrop Update
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          APP_URL: ${{ secrets.APP_URL }}
+      - name: Validate cron configuration
+        shell: bash
         run: |
+          set -euo pipefail
+
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "❌ CRON_SECRET is not configured in repository secrets."
+            exit 1
+          fi
+
           # Default to production URL if APP_URL not set
           URL="${APP_URL:-https://binance-alpha-tool-chi.vercel.app}"
+          URL="${URL%/}"
+
+          echo "CRON_URL=${URL}/api/cron/update-airdrops" >> "$GITHUB_ENV"
+
+      - name: Trigger Airdrop Update
+        shell: bash
+        run: |
+          set -euo pipefail
 
           echo "🚀 Triggering airdrop update..."
-          echo "URL: ${URL}/api/cron/update-airdrops"
+          echo "URL: ${CRON_URL}"
 
-          # Make the request with timeout and follow redirects (-L flag)
-          RESPONSE=$(curl -s -L -w "\n%{http_code}" \
+          # Send both header and query auth. Query auth survives cross-host redirects,
+          # which avoids losing Authorization on canonical domain redirects.
+          if ! HTTP_CODE=$(curl -sS --location -o response.json -w "%{http_code}" \
             --max-time 120 \
+            --get \
+            --data-urlencode "secret=${CRON_SECRET}" \
             -H "Authorization: Bearer ${CRON_SECRET}" \
-            "${URL}/api/cron/update-airdrops")
-
-          # Extract HTTP status code (last line)
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-          # Extract response body (all but last line)
-          BODY=$(echo "$RESPONSE" | sed '$d')
+            "${CRON_URL}"); then
+            echo ""
+            echo "❌ Failed to reach cron endpoint."
+            exit 1
+          fi
 
           echo "📊 Response (HTTP ${HTTP_CODE}):"
-          echo "$BODY" | head -c 1000
+          head -c 1000 response.json || true
 
           # Check if request was successful
           if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
