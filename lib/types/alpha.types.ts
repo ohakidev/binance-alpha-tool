@@ -17,7 +17,7 @@ export type ScheduleStatus =
 
 export enum AlphaDataSourceType {
   BINANCE_ALPHA = "binance-alpha",
-  ALPHA123 = "alpha123",
+  HISTORY_SOURCE = "alpha123",
   CACHE = "cache",
 }
 
@@ -82,19 +82,30 @@ export interface BinanceAlphaTokenRaw {
 }
 
 /**
- * Raw project data from Alpha123 API
+ * Raw project data from the external history source API
  */
-export interface Alpha123ProjectRaw {
+export interface HistoryProjectRaw {
   token: string;
   name: string;
-  amount: string;
+  amount: string | number;
   date?: string;
   time?: string;
   chain_id?: string;
   contract_address?: string;
-  points?: number;
+  points?: string | number;
   type?: string;
   price?: number;
+  total_amount?: string | number;
+  market_cap?: number | string;
+  fdv?: number | string;
+  status?: string;
+  phase?: number | string;
+  language?: string;
+  system_timestamp?: number;
+  spot_listed?: boolean;
+  futures_listed?: boolean;
+  pretge?: boolean;
+  bctge?: boolean;
   listing?: {
     spot?: boolean;
     futures?: boolean;
@@ -406,7 +417,7 @@ export type AlphaEventHandler = (event: AlphaEvent) => void;
 // ============= Airdrop Schedule Types =============
 
 /**
- * Airdrop schedule data like alpha123.uk displays
+ * Airdrop schedule data in the history-style display format
  */
 export interface AirdropScheduleData {
   id?: string;
@@ -433,7 +444,7 @@ export interface AirdropScheduleData {
 }
 
 /**
- * Today's airdrop display format (like alpha123.uk)
+ * Today's airdrop display format
  */
 export interface TodayAirdrop {
   token: string;

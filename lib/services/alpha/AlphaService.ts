@@ -31,8 +31,13 @@ import {
   createAlphaCache,
 } from "../cache/CacheService";
 import { BinanceAlphaSource } from "./BinanceAlphaSource";
-import { Alpha123Source } from "./Alpha123Source";
+import { HistorySource } from "./HistorySource";
 import { prisma } from "@/lib/db/prisma";
+import {
+  type HistoryEnrichment,
+  fetchHistoryEnrichmentLookup,
+  findBestHistoryEnrichmentMatch,
+} from "./history-enrichment";
 
 /**
  * Alpha Service Configuration
@@ -73,7 +78,7 @@ export class AlphaService implements IAlphaService {
     // Initialize data sources (sorted by priority)
     this.dataSources = dataSources || [
       new BinanceAlphaSource(),
-      new Alpha123Source(),
+      new HistorySource(),
     ];
     this.dataSources.sort((a, b) => a.priority - b.priority);
 
@@ -314,10 +319,26 @@ export class AlphaService implements IAlphaService {
     try {
       const response = await this.getTokens(true);
       source = response.source;
+      let historyLookup = new Map<string, HistoryEnrichment[]>();
+
+      try {
+        historyLookup = await fetchHistoryEnrichmentLookup();
+      } catch (error) {
+        console.warn(
+          "History enrichment unavailable for AlphaService sync:",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
 
       for (const token of response.data) {
         try {
-          const prismaData = this.toPrismaFormat(token);
+          const enrichment = findBestHistoryEnrichmentMatch(historyLookup, {
+            symbol: token.symbol,
+            chainId: token.chainId,
+            contractAddress: token.contractAddress,
+            listingTime: token.listingTime,
+          });
+          const prismaData = this.toPrismaFormat(token, enrichment);
 
           // Check if token exists
           const existing = await prisma.airdrop.findFirst({
@@ -407,10 +428,29 @@ export class AlphaService implements IAlphaService {
       "estimatedValue",
       "requiredPoints",
       "deductPoints",
+      "airdropAmount",
+      "description",
     ];
 
     for (const field of fieldsToCompare) {
       if (existing[field] !== newData[field]) {
+        return true;
+      }
+    }
+
+    const dateFields: (keyof AlphaPrismaData)[] = ["claimStartDate", "claimEndDate"];
+    for (const field of dateFields) {
+      const existingValue = existing[field];
+      const nextValue = newData[field];
+      const existingTime =
+        existingValue instanceof Date
+          ? existingValue.getTime()
+          : existingValue
+            ? new Date(String(existingValue)).getTime()
+            : null;
+      const nextTime = nextValue instanceof Date ? nextValue.getTime() : null;
+
+      if (existingTime !== nextTime) {
         return true;
       }
     }
@@ -562,35 +602,63 @@ export class AlphaService implements IAlphaService {
   /**
    * Convert token to Prisma format
    */
-  toPrismaFormat(token: AlphaToken): AlphaPrismaData {
+  toPrismaFormat(
+    token: AlphaToken,
+    enrichment?: HistoryEnrichment | null,
+  ): AlphaPrismaData {
     const claimStartDate = token.listingTime;
     const claimEndDate = claimStartDate
       ? new Date(claimStartDate.getTime() + 30 * 24 * 60 * 60 * 1000)
       : null;
+    const pointText = enrichment?.pointsText?.trim() || null;
+    const requiredPoints =
+      enrichment?.pointsValue ?? (token.score > 0 ? token.score : null);
+    const amountText =
+      enrichment?.amountText?.trim() ||
+      (token.score > 0 ? `Alpha Score: ${token.score}` : null);
+    const slotText = enrichment?.slotText?.trim() || null;
+    const estimatedPrice =
+      enrichment?.estimatedPrice ?? (token.price > 0 ? token.price : null);
+    const estimatedValue = enrichment?.estimatedValue ?? token.estimatedValue;
+    const description = [
+      `${token.name} (${token.symbol}) on ${token.chain}. Alpha ID: ${token.alphaId}. Point Multiplier: ${token.mulPoint}x`,
+      pointText ? `Points: ${pointText}` : null,
+      amountText ? `Amount: ${amountText}` : null,
+      slotText ? `Slots: ${slotText}` : null,
+      estimatedPrice ? `DEX Price: $${estimatedPrice}` : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
 
     return {
       token: token.symbol,
       name: token.name,
       chain: token.chain,
       contractAddress: token.contractAddress || null,
-      airdropAmount: token.score > 0 ? `Alpha Score: ${token.score}` : null,
+      airdropAmount: amountText,
       claimStartDate,
       claimEndDate,
-      requiredPoints: token.score || null,
-      deductPoints: token.score ? Math.floor(token.score * 0.1) : null,
+      requiredPoints,
+      deductPoints: null,
       type: token.type,
       status: token.status,
-      estimatedValue: token.estimatedValue,
-      description: `${token.name} (${token.symbol}) on ${token.chain}. Alpha ID: ${token.alphaId}. Point Multiplier: ${token.mulPoint}x`,
+      estimatedValue,
+      description,
       websiteUrl: null,
       twitterUrl: null,
-      eligibility: JSON.stringify([
-        "Binance Alpha User",
-        `Min Score: ${token.score}`,
-      ]),
+      eligibility: JSON.stringify(
+        [
+          "Binance Alpha User",
+          pointText ? `Points: ${pointText}` : null,
+          !pointText && token.score > 0 ? `Min Score: ${token.score}` : null,
+        ].filter(Boolean),
+      ),
       requirements: JSON.stringify(
         [
-          "Binance Alpha Points Required",
+          enrichment ? "External history data" : "Binance Alpha API",
+          pointText ? `Points: ${pointText}` : "",
+          amountText ? `Amount: ${amountText}` : "",
+          slotText ? `Slots: ${slotText}` : "",
           `Point Multiplier: ${token.mulPoint}x`,
           token.onlineTge ? "TGE Active" : "",
           token.onlineAirdrop ? "Airdrop Active" : "",

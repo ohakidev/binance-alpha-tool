@@ -5,7 +5,7 @@
  * 1. Sync data from Binance Alpha API directly to Airdrop table
  * 2. Update airdrop schedules and statuses
  * 3. Send Telegram notifications for new/upcoming airdrops (20 min before)
- * 4. No manual intervention required - fully automated like alpha123.uk
+ * 4. No manual intervention required - fully automated from external history data
  *
  * Vercel Cron Schedule: Every 5 minutes for real-time updates
  * GET /api/cron/update-airdrops
@@ -13,6 +13,11 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
+import {
+  fetchHistoryEnrichmentLookup,
+  findBestHistoryEnrichmentMatch,
+  type HistoryEnrichment,
+} from "@/lib/services/alpha/history-enrichment";
 import {
   telegramService,
   type AirdropReminderData,
@@ -220,6 +225,32 @@ function isToday(date: Date): boolean {
   );
 }
 
+function formatEstimatedAmount(amountText: string | null): string | null {
+  return amountText ? `${amountText}(estimated)` : null;
+}
+
+function buildScheduleDescription(
+  token: BinanceAlphaToken,
+  slotText: string | null,
+): string {
+  const parts = [`${token.name} (${token.symbol})`, `${token.mulPoint}x multiplier`];
+
+  if (slotText) {
+    parts.push(slotText);
+  }
+
+  return parts.join(" - ");
+}
+
+function extractSlotText(description?: string | null): string | null {
+  if (!description) {
+    return null;
+  }
+
+  const match = description.match(/\b\d+k slots\b/i);
+  return match?.[0] || null;
+}
+
 export async function GET(request: Request) {
   const startTime = Date.now();
   const results = {
@@ -258,6 +289,16 @@ export async function GET(request: Request) {
       // Don't fail completely - continue with what we have
     }
 
+    let historyLookup = new Map<string, HistoryEnrichment[]>();
+    try {
+      historyLookup = await fetchHistoryEnrichmentLookup();
+      console.log(`Fetched history enrichment for ${historyLookup.size} tokens`);
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      results.errors.push(`History enrichment unavailable: ${errMsg}`);
+      console.warn("History enrichment unavailable:", errMsg);
+    }
+
     // ========================================
     // STEP 2: Sync directly to main Airdrop table
     // ========================================
@@ -271,8 +312,11 @@ export async function GET(request: Request) {
       status: AirdropStatus;
       type: AirdropType;
       claimStartDate: Date | null;
+      pointText: string | null;
       points: number | null;
-      deductPoints: number | null;
+      amountText: string | null;
+      slotText: string | null;
+      estimatedPrice: number | null;
       estimatedValue: number | null;
       contractAddress: string | null;
       marketCap: number | null;
@@ -289,8 +333,17 @@ export async function GET(request: Request) {
       }
 
       try {
+        const enrichment = findBestHistoryEnrichmentMatch(historyLookup, {
+          symbol: token.symbol,
+          chainId: token.chainId,
+          contractAddress: token.contractAddress,
+          listingTime: token.listingTime > 0 ? token.listingTime : null,
+        });
+        const chain = normalizeChainName(token.chainId, token.chainName);
         const listingTime =
-          token.listingTime > 0 ? new Date(token.listingTime) : null;
+          token.listingTime > 0
+            ? new Date(token.listingTime)
+            : enrichment?.scheduledAt ?? null;
         // Don't set a fixed claimEndDate - let onlineAirdrop flag determine if still active
         // Set a far future date if airdrop is active, otherwise use listing + 30 days as estimate
         const claimEndDate =
@@ -299,30 +352,51 @@ export async function GET(request: Request) {
             : listingTime
               ? new Date(listingTime.getTime() + 30 * 24 * 60 * 60 * 1000)
               : null;
-
-        const price = parseFloat(token.price) || 0;
-        const estimatedValue = price > 0 ? Math.round(price * 100) / 100 : null;
+        const pointText = enrichment?.pointsText ?? null;
+        const requiredPoints = enrichment?.pointsValue ?? null;
+        const amountText = enrichment?.amountText ?? null;
+        const slotText = enrichment?.slotText ?? null;
+        const estimatedPrice = enrichment?.estimatedPrice ?? null;
+        const estimatedValue = enrichment?.estimatedValue ?? null;
+        const marketCap =
+          enrichment?.marketCap ?? (parseFloat(token.marketCap || "0") || null);
+        const description = [
+          `${token.name} (${token.symbol}) on ${chain}. Alpha ID: ${token.alphaId}. Point Multiplier: ${token.mulPoint}x`,
+          pointText ? `Points: ${pointText}` : null,
+          amountText ? `Amount: ${amountText}` : null,
+          slotText ? `Slots: ${slotText}` : null,
+          estimatedPrice ? `DEX Price: $${estimatedPrice}` : null,
+        ]
+          .filter(Boolean)
+          .join(" ");
 
         const airdropData = {
           name: token.name,
-          chain: normalizeChainName(token.chainId, token.chainName),
+          chain,
           contractAddress: token.contractAddress || null,
-          airdropAmount: token.score > 0 ? `Alpha Score: ${token.score}` : null,
+          airdropAmount: amountText,
           claimStartDate: listingTime,
           claimEndDate,
-          requiredPoints: token.score || null,
-          deductPoints: token.score ? Math.floor(token.score * 0.1) : null,
+          requiredPoints,
+          deductPoints: null,
           type,
           status,
           estimatedValue,
-          description: `${token.name} (${token.symbol}) on ${normalizeChainName(token.chainId, token.chainName)}. Alpha ID: ${token.alphaId}. Point Multiplier: ${token.mulPoint}x`,
+          description,
           eligibility: JSON.stringify([
             "Binance Alpha User",
-            `Min Score: ${token.score}`,
+            pointText
+              ? `Points: ${pointText}`
+              : token.score > 0
+                ? `Alpha Score: ${token.score}`
+                : null,
           ]),
           requirements: JSON.stringify(
             [
-              "Binance Alpha Points Required",
+              enrichment ? "External history data" : "Binance Alpha API",
+              pointText ? `Points: ${pointText}` : "",
+              amountText ? `Amount: ${amountText}` : "",
+              slotText ? `Slots: ${slotText}` : "",
               `Point Multiplier: ${token.mulPoint}x`,
               token.onlineTge ? "TGE Active" : "",
               token.onlineAirdrop ? "Airdrop Active" : "",
@@ -345,7 +419,10 @@ export async function GET(request: Request) {
           const hasChanges =
             existing.status !== status ||
             existing.estimatedValue !== estimatedValue ||
-            existing.name !== token.name;
+            existing.name !== token.name ||
+            existing.requiredPoints !== requiredPoints ||
+            existing.airdropAmount !== amountText ||
+            existing.description !== description;
 
           if (hasChanges) {
             await prisma.airdrop.update({
@@ -372,15 +449,18 @@ export async function GET(request: Request) {
             newAirdrops.push({
               token: token.symbol,
               name: token.name,
-              chain: normalizeChainName(token.chainId, token.chainName),
+              chain,
               status,
               type,
               claimStartDate: listingTime,
-              points: token.score || null,
-              deductPoints: token.score ? Math.floor(token.score * 0.1) : null,
+              pointText,
+              points: requiredPoints,
+              amountText,
+              slotText,
+              estimatedPrice,
               estimatedValue,
               contractAddress: token.contractAddress || null,
-              marketCap: parseFloat(token.marketCap) || null,
+              marketCap,
             });
           }
         }
@@ -408,13 +488,21 @@ export async function GET(request: Request) {
       }
 
       try {
+        const enrichment = findBestHistoryEnrichmentMatch(historyLookup, {
+          symbol: token.symbol,
+          chainId: token.chainId,
+          contractAddress: token.contractAddress,
+          listingTime: token.listingTime > 0 ? token.listingTime : null,
+        });
+        const chain = normalizeChainName(token.chainId, token.chainName);
         const scheduledTime =
           token.listingTime > 0
             ? new Date(token.listingTime)
-            : new Date(now.getTime() + 3600000);
+            : enrichment?.scheduledAt ?? new Date(now.getTime() + 3600000);
         const endTime = token.listingTime
           ? new Date(token.listingTime + 7 * 24 * 60 * 60 * 1000)
           : null;
+        const slotText = enrichment?.slotText ?? null;
 
         // Determine schedule status
         let scheduleStatus = "UPCOMING";
@@ -431,21 +519,19 @@ export async function GET(request: Request) {
           name: token.name,
           scheduledTime,
           endTime,
-          points: token.score || null,
-          deductPoints: token.score ? Math.floor(token.score * 0.1) : null,
-          amount: token.score ? `Alpha Score: ${token.score}` : null,
-          chain: normalizeChainName(token.chainId, token.chainName),
+          points: enrichment?.pointsValue ?? null,
+          deductPoints: null,
+          amount: enrichment?.amountText ?? null,
+          chain,
           contractAddress: token.contractAddress || null,
           status: scheduleStatus,
           type: token.onlineTge ? "TGE" : "AIRDROP",
-          estimatedPrice: parseFloat(token.price) || null,
-          estimatedValue:
-            parseFloat(token.price) > 0
-              ? Math.round(parseFloat(token.price) * 100) / 100
-              : null,
-          source: "binance-alpha",
+          estimatedPrice: enrichment?.estimatedPrice ?? null,
+          estimatedValue: enrichment?.estimatedValue ?? null,
+          source: enrichment ? "external-history" : "binance-alpha",
+          sourceUrl: enrichment?.sourceUrl ?? null,
           logoUrl: token.iconUrl || null,
-          description: `${token.name} (${token.symbol}) - ${token.mulPoint}x multiplier`,
+          description: buildScheduleDescription(token, slotText),
           isActive: !token.offline,
           isVerified: true,
         };
@@ -547,10 +633,12 @@ export async function GET(request: Request) {
           status: airdrop.status.toLowerCase(),
           claimStartDate: airdrop.claimStartDate ?? undefined,
           // Removed claimEndDate - user requested no end time
+          estimatedPrice: airdrop.estimatedPrice ?? undefined,
           estimatedValue: airdrop.estimatedValue ?? undefined,
-          airdropAmount: undefined, // Actual airdrop amount not available from API
+          airdropAmount: formatEstimatedAmount(airdrop.amountText) ?? undefined,
+          pointsText: airdrop.pointText ?? undefined,
           requiredPoints: airdrop.points ?? undefined,
-          deductPoints: airdrop.deductPoints ?? undefined,
+          slotText: airdrop.slotText ?? undefined,
           contractAddress: airdrop.contractAddress ?? undefined,
           marketCap: airdrop.marketCap ?? undefined,
         });
@@ -564,7 +652,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // 5b. Notify for airdrops starting in 20 minutes (reminder like alpha123.uk)
+    // 5b. Notify for airdrops starting in 20 minutes (history-style reminder)
     try {
       const upcomingNotifications = await (
         prisma as any
@@ -595,8 +683,10 @@ export async function GET(request: Request) {
               chain: schedule.chain,
               points: schedule.points,
               amount: schedule.amount,
+              slotText: extractSlotText(schedule.description),
               contractAddress: schedule.contractAddress,
               type: schedule.type,
+              estimatedPrice: schedule.estimatedPrice ?? null,
               estimatedValue: schedule.estimatedValue ?? null,
               marketCap: schedule.estimatedPrice
                 ? schedule.estimatedPrice * 1000000
@@ -652,8 +742,10 @@ export async function GET(request: Request) {
             chain: schedule.chain,
             points: schedule.points,
             amount: schedule.amount,
+            slotText: extractSlotText(schedule.description),
             contractAddress: schedule.contractAddress,
             type: schedule.type,
+            estimatedPrice: schedule.estimatedPrice ?? null,
             estimatedValue: schedule.estimatedValue ?? null,
             marketCap: schedule.estimatedPrice
               ? schedule.estimatedPrice * 1000000

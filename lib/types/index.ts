@@ -19,7 +19,7 @@ export type {
 
   // Raw API Types
   BinanceAlphaTokenRaw,
-  Alpha123ProjectRaw,
+  HistoryProjectRaw,
   BinanceAlphaApiResponse,
   BinanceAnnouncementRaw,
 

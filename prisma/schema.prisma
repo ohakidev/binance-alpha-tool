@@ -229,7 +229,7 @@ enum AirdropType {
   AIRDROP   // Standard Airdrop
 }
 
-// Airdrop Schedule model - Track airdrop timing like alpha123.uk
+// Airdrop Schedule model - Track airdrop timing in the history-style format
 model AirdropSchedule {
   id              String    @id @default(uuid())
   token           String    // Token symbol
@@ -349,7 +349,7 @@ model BinanceAlphaToken {
 // Sync log for tracking API syncs
 model SyncLog {
   id          String    @id @default(uuid())
-  source      String    // binance-alpha, alpha123, etc.
+  source      String    // binance-alpha, external-history, etc.
   action      String    // fetch, sync, update
 
   // Results

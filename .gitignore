@@ -86,8 +86,23 @@ yarn-error.log*
 .ai/
 .vscode-copilot/
 .github/copilot/
+.continue/
+.windsurf/
+.augment/
+.aider*
+
+# AI agent instructions and generated plans
+/AGENTS.md
+/CLAUDE.md
+/GEMINI.md
+/CURSOR.md
+/.github/copilot-instructions.md
+/.github/instructions/
+/docs/plans/
 
 # Temporary files
 *.tmp
 *.temp
+*.cookies
 nul
+/tmp/agent-scratch/

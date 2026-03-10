@@ -1,6 +1,6 @@
 /**
  * Airdrop Schedule Service
- * Manages airdrop schedules like alpha123.uk displays
+ * Manages airdrop schedules using external history-style formatting
  *
  * Features:
  * - Track today's airdrops
@@ -21,6 +21,11 @@ import {
   ScheduleStatus,
 } from "@/lib/types/alpha.types";
 import { alphaService } from "./AlphaService";
+import {
+  type HistoryEnrichment,
+  fetchHistoryEnrichmentLookup,
+  findBestHistoryEnrichmentMatch,
+} from "./history-enrichment";
 
 /**
  * Format time to display format (e.g., "05:00 PM")
@@ -95,7 +100,7 @@ export class AirdropScheduleService {
   private lastSyncTime: Date | null = null;
 
   /**
-   * Get today's airdrops formatted like alpha123.uk
+   * Get today's airdrops with history-style formatting
    */
   async getTodayAirdrops(): Promise<TodayAirdrop[]> {
     const today = new Date();
@@ -142,7 +147,7 @@ export class AirdropScheduleService {
   }
 
   /**
-   * Get upcoming airdrops formatted like alpha123.uk
+   * Get upcoming airdrops with history-style formatting
    */
   async getUpcomingAirdrops(limit: number = 20): Promise<UpcomingAirdrop[]> {
     const tomorrow = new Date();
@@ -260,7 +265,7 @@ export class AirdropScheduleService {
   }
 
   /**
-   * Get combined response for UI (like alpha123.uk)
+   * Get combined response for UI with history-style formatting
    */
   async getScheduleResponse(): Promise<ScheduleServiceResponse> {
     const [today, upcoming] = await Promise.all([
@@ -347,6 +352,16 @@ export class AirdropScheduleService {
       // Get tokens from Alpha Service
       const response = await alphaService.getTokens(true);
       const tokens = response.data;
+      let historyLookup = new Map<string, HistoryEnrichment[]>();
+
+      try {
+        historyLookup = await fetchHistoryEnrichmentLookup();
+      } catch (error) {
+        console.warn(
+          "History enrichment unavailable for schedule sync:",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
 
       console.log(`📅 Processing ${tokens.length} tokens for schedule sync...`);
 
@@ -357,6 +372,12 @@ export class AirdropScheduleService {
         }
 
         try {
+          const enrichment = findBestHistoryEnrichmentMatch(historyLookup, {
+            symbol: token.symbol,
+            chainId: token.chainId,
+            contractAddress: token.contractAddress,
+            listingTime: token.listingTime,
+          });
           // Determine scheduled time
           // If listingTime exists, use it; otherwise use current time + 1 hour
           const scheduledTime =
@@ -373,6 +394,14 @@ export class AirdropScheduleService {
             },
           });
 
+          const pointText = enrichment?.pointsText?.trim() || null;
+          const amountText =
+            enrichment?.amountText?.trim() ||
+            (token.score > 0 ? `Alpha Score: ${token.score}` : null);
+          const slotText = enrichment?.slotText?.trim() || null;
+          const estimatedPrice =
+            enrichment?.estimatedPrice ?? (token.price > 0 ? token.price : null);
+
           const scheduleData: AirdropScheduleData = {
             token: token.symbol,
             name: token.name,
@@ -380,19 +409,30 @@ export class AirdropScheduleService {
             endTime: token.listingTime
               ? new Date(token.listingTime.getTime() + 7 * 24 * 60 * 60 * 1000) // 7 days after
               : null,
-            points: token.score || null,
-            deductPoints: token.score ? Math.floor(token.score * 0.1) : null,
-            amount: token.score ? `Alpha Score: ${token.score}` : null,
+            points:
+              enrichment?.pointsValue ?? (token.score > 0 ? token.score : null),
+            deductPoints: null,
+            amount: amountText,
             chain: token.chain,
             contractAddress: token.contractAddress || null,
             status: "UPCOMING",
             type: token.onlineTge ? "TGE" : "AIRDROP",
-            estimatedPrice: token.price > 0 ? token.price : null,
-            estimatedValue: token.estimatedValue,
-            source: "binance-alpha",
-            sourceUrl: null,
+            estimatedPrice,
+            estimatedValue: enrichment?.estimatedValue ?? token.estimatedValue,
+            source: enrichment
+              ? "external-history+binance-alpha"
+              : "binance-alpha",
+            sourceUrl: enrichment?.sourceUrl ?? null,
             logoUrl: token.iconUrl || null,
-            description: `${token.name} (${token.symbol}) - ${token.mulPoint}x multiplier`,
+            description: [
+              `${token.name} (${token.symbol}) - ${token.mulPoint}x multiplier`,
+              pointText ? `Points: ${pointText}` : null,
+              amountText ? `Amount: ${amountText}` : null,
+              slotText ? `Slots: ${slotText}` : null,
+              estimatedPrice ? `DEX Price: $${estimatedPrice}` : null,
+            ]
+              .filter(Boolean)
+              .join(" "),
             isActive: !token.isOffline,
             isVerified: true,
             notified: false,

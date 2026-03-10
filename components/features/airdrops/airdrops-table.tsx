@@ -46,8 +46,6 @@ import {
   isTomorrow,
   addDays,
   isBefore,
-  startOfDay,
-  endOfDay,
 } from "date-fns";
 import { th } from "date-fns/locale";
 
@@ -104,8 +102,12 @@ interface Airdrop {
   claimStartDate: string | null;
   claimEndDate: string | null;
   requirements: string[];
+  estimatedPrice?: number | null;
   estimatedValue: number | null;
+  pointsText?: string | null;
+  scheduleStatus?: string | null;
   score: number;
+  slotText?: string | null;
   description?: string;
   website?: string;
   twitter?: string;
@@ -142,6 +144,103 @@ const typeColors: Record<string, string> = {
   AIRDROP:
     "bg-gradient-to-r from-cyan-500/20 to-blue-500/10 text-cyan-400 border-cyan-500/40",
 };
+
+const TELEGRAM_JOIN_URL = "https://t.me/binance_alphachi";
+const TELEGRAM_CTA_PRIMARY = "คลิกเลย รับแจ้งเตือน Binance Alpha";
+const TELEGRAM_CTA_SECONDARY =
+  "เข้าร่วม @binance_alphachi เพื่อไม่พลาดข้อมูลใหม่";
+
+function parseNumericAmount(amount?: string | null): number | null {
+  if (!amount) {
+    return null;
+  }
+
+  const normalized = amount.trim();
+  if (!normalized || /^Alpha Score:/i.test(normalized) || normalized === "TBA") {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(normalized.replace(/,/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getDisplayAmount(airdrop: Airdrop): string {
+  const amountValue = parseNumericAmount(airdrop.airdropAmount);
+  if (amountValue !== null) {
+    return Number.isInteger(amountValue)
+      ? amountValue.toString()
+      : amountValue.toFixed(2).replace(/\.?0+$/, "");
+  }
+
+  return airdrop.airdropAmount || "-";
+}
+
+function getDisplayValue(airdrop: Airdrop): string | null {
+  if (!airdrop.estimatedValue || airdrop.estimatedValue <= 0) {
+    return null;
+  }
+
+  return `$${airdrop.estimatedValue.toFixed(1)}`;
+}
+
+function getDisplayTimeInfo(
+  airdrop: Airdrop,
+  activeTab: "today" | "upcoming" | "all",
+): { main: string; secondary: string | null } {
+  if (!airdrop.claimStartDate) {
+    return { main: "TBA", secondary: null };
+  }
+
+  const targetDate = new Date(airdrop.claimStartDate);
+  const secondary = formatDistanceToNow(targetDate, {
+    locale: th,
+    addSuffix: true,
+  });
+
+  if (activeTab === "today") {
+    return {
+      main: format(targetDate, "HH:mm", { locale: th }),
+      secondary,
+    };
+  }
+
+  if (activeTab === "upcoming") {
+    if (isTomorrow(targetDate)) {
+      return {
+        main: `Tomorrow ${format(targetDate, "HH:mm", { locale: th })}`,
+        secondary,
+      };
+    }
+
+    return {
+      main: format(targetDate, "M/d HH:mm", { locale: th }),
+      secondary,
+    };
+  }
+
+  return {
+    main: format(targetDate, "dd MMM HH:mm", { locale: th }),
+    secondary,
+  };
+}
+
+function sortByClaimStartDesc(left: Airdrop, right: Airdrop): number {
+  const leftTime = left.claimStartDate ? new Date(left.claimStartDate).getTime() : 0;
+  const rightTime = right.claimStartDate
+    ? new Date(right.claimStartDate).getTime()
+    : 0;
+
+  return rightTime - leftTime;
+}
+
+function sortByClaimStartAsc(left: Airdrop, right: Airdrop): number {
+  const leftTime = left.claimStartDate ? new Date(left.claimStartDate).getTime() : 0;
+  const rightTime = right.claimStartDate
+    ? new Date(right.claimStartDate).getTime()
+    : 0;
+
+  return leftTime - rightTime;
+}
 
 // Mobile Airdrop Card Component
 interface MobileAirdropCardProps {
@@ -347,25 +446,6 @@ export function AirdropsTable() {
     sendAirdropAlert,
   } = useTelegram();
 
-  // Fetch all claimable airdrops
-  const {
-    data: claimableData,
-    isLoading: claimableLoading,
-    refetch: refetchClaimable,
-  } = useQuery({
-    queryKey: ["airdrops", "claimable"],
-    queryFn: async () => {
-      const res = await fetch(
-        "/api/binance/alpha/airdrops?status=claimable&limit=300",
-      );
-      const json = await res.json();
-      return json.data as Airdrop[];
-    },
-    refetchInterval: 30000,
-    refetchOnWindowFocus: false,
-    staleTime: 25000,
-  });
-
   // Fetch all airdrops for "All" tab
   const {
     data: allAirdropsData,
@@ -383,92 +463,67 @@ export function AirdropsTable() {
     staleTime: 55000,
   });
 
-  // Fetch upcoming airdrops
-  const {
-    data: upcomingData,
-    isLoading: upcomingLoading,
-    refetch: refetchUpcoming,
-  } = useQuery({
-    queryKey: ["airdrops", "upcoming"],
-    queryFn: async () => {
-      const res = await fetch(
-        "/api/binance/alpha/airdrops?status=upcoming&limit=200",
-      );
-      const json = await res.json();
-      return json.data as Airdrop[];
-    },
-    refetchInterval: 60000,
-    refetchOnWindowFocus: false,
-    staleTime: 55000,
-  });
-
-  // Today's airdrops - filter from claimable data where claimStartDate is today
-  const todayData = useMemo(() => {
-    if (!claimableData) return [];
-    const now = new Date();
-    const todayStart = startOfDay(now);
-    const todayEnd = endOfDay(now);
-
-    const filtered = claimableData.filter((airdrop) => {
-      if (!airdrop.claimStartDate) return false;
-      const claimDate = new Date(airdrop.claimStartDate);
-      // Show airdrops that started today or are still claimable today
-      return (
-        (claimDate >= todayStart && claimDate <= todayEnd) ||
-        (airdrop.status.toLowerCase() === "claimable" && isToday(claimDate))
-      );
-    });
-
-    // Sort by claimStartDate descending (latest first)
-    return filtered.sort((a, b) => {
-      const dateA = a.claimStartDate ? new Date(a.claimStartDate).getTime() : 0;
-      const dateB = b.claimStartDate ? new Date(b.claimStartDate).getTime() : 0;
-      return dateB - dateA;
-    });
-  }, [claimableData]);
-
-  // Upcoming airdrops - filter from upcoming data or airdrops starting after today
-  const futureData = useMemo(() => {
-    // Combine upcoming API data with claimable data that starts after today
-    const upcoming = upcomingData || [];
-    const claimable = claimableData || [];
-
-    const now = new Date();
-    const tomorrow = startOfDay(addDays(now, 1));
-
-    // Filter claimable data for future dates
-    const futureClaimable = claimable.filter((airdrop) => {
-      if (!airdrop.claimStartDate) return false;
-      const claimDate = new Date(airdrop.claimStartDate);
-      return claimDate >= tomorrow;
-    });
-
-    // Combine and deduplicate by id
-    const combined = [...upcoming, ...futureClaimable];
-    const uniqueMap = new Map<string, Airdrop>();
-    combined.forEach((item) => {
-      if (!uniqueMap.has(item.id)) {
-        uniqueMap.set(item.id, item);
-      }
-    });
-
-    // Sort by claimStartDate
-    return Array.from(uniqueMap.values()).sort((a, b) => {
-      const dateA = a.claimStartDate ? new Date(a.claimStartDate).getTime() : 0;
-      const dateB = b.claimStartDate ? new Date(b.claimStartDate).getTime() : 0;
-      return dateB - dateA; // Descending order - latest first
-    });
-  }, [upcomingData, claimableData]);
-
   // All airdrops data - sorted by claimStartDate descending (latest first)
   const allData = useMemo(() => {
     if (!allAirdropsData) return [];
-    return [...allAirdropsData].sort((a, b) => {
-      const dateA = a.claimStartDate ? new Date(a.claimStartDate).getTime() : 0;
-      const dateB = b.claimStartDate ? new Date(b.claimStartDate).getTime() : 0;
-      return dateB - dateA;
-    });
+    return [...allAirdropsData].sort(sortByClaimStartDesc);
   }, [allAirdropsData]);
+
+  const hasScheduleBuckets = useMemo(
+    () => allData.some((airdrop) => airdrop.scheduleStatus !== null),
+    [allData],
+  );
+
+  const todayData = useMemo(() => {
+    if (hasScheduleBuckets) {
+      return allData
+        .filter((airdrop) => {
+          if (!airdrop.scheduleStatus || !airdrop.claimStartDate) {
+            return false;
+          }
+
+          const targetDate = new Date(airdrop.claimStartDate);
+          return (
+            isToday(targetDate) &&
+            airdrop.scheduleStatus !== "ended" &&
+            airdrop.scheduleStatus !== "cancelled"
+          );
+        })
+        .sort(sortByClaimStartDesc);
+    }
+
+    return allData
+      .filter(
+        (airdrop) =>
+          airdrop.status === "live" || airdrop.status === "claimable",
+      )
+      .sort(sortByClaimStartDesc);
+  }, [allData, hasScheduleBuckets]);
+
+  const futureData = useMemo(() => {
+    if (hasScheduleBuckets) {
+      const now = new Date();
+      return allData
+        .filter((airdrop) => {
+          if (!airdrop.scheduleStatus || !airdrop.claimStartDate) {
+            return false;
+          }
+
+          const targetDate = new Date(airdrop.claimStartDate);
+          return (
+            targetDate.getTime() > now.getTime() &&
+            !isToday(targetDate) &&
+            airdrop.scheduleStatus !== "ended" &&
+            airdrop.scheduleStatus !== "cancelled"
+          );
+        })
+        .sort(sortByClaimStartAsc);
+    }
+
+    return allData
+      .filter((airdrop) => airdrop.status === "upcoming")
+      .sort(sortByClaimStartAsc);
+  }, [allData, hasScheduleBuckets]);
 
   // Filter and search data
   const filteredData = useMemo(() => {
@@ -502,12 +557,7 @@ export function AirdropsTable() {
     return data;
   }, [activeTab, todayData, futureData, allData, selectedChains, searchQuery]);
 
-  const isLoading =
-    activeTab === "today"
-      ? claimableLoading
-      : activeTab === "upcoming"
-        ? upcomingLoading || claimableLoading
-        : allLoading;
+  const isLoading = allLoading;
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -570,8 +620,8 @@ export function AirdropsTable() {
   // Refresh all data
   const handleRefresh = useCallback(async () => {
     setLastRefresh(new Date());
-    await Promise.all([refetchClaimable(), refetchAll(), refetchUpcoming()]);
-  }, [refetchClaimable, refetchAll, refetchUpcoming]);
+    await refetchAll();
+  }, [refetchAll]);
 
   const handleAirdropClick = useCallback((airdrop: Airdrop) => {
     setSelectedAirdrop(airdrop);
@@ -615,8 +665,8 @@ export function AirdropsTable() {
               </div>
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-foreground">
-                    {airdrop.projectName}
+                  <span className="font-bold text-lg text-foreground">
+                    {airdrop.symbol}
                   </span>
                   {contractLink && (
                     <a
@@ -630,8 +680,8 @@ export function AirdropsTable() {
                     </a>
                   )}
                 </div>
-                <span className="text-xs text-muted-foreground">
-                  ${airdrop.symbol}
+                <span className="text-sm text-muted-foreground">
+                  {airdrop.projectName}
                 </span>
               </div>
             </div>
@@ -639,17 +689,89 @@ export function AirdropsTable() {
         },
       },
       {
-        accessorKey: "chain",
-        header: "Chain",
+        id: "typeDisplay",
+        accessorFn: (row) => row.type,
+        header: "Type",
         cell: ({ row }) => {
           const airdrop = row.original;
+
           return (
             <Badge
               variant="outline"
-              className={`${chainColors[airdrop.chain] || "bg-slate-500/20 text-slate-400 border-slate-500/40"} font-medium`}
+              className={`${typeColors[airdrop.type] || typeColors["AIRDROP"]} font-medium`}
             >
-              {airdrop.chain}
+              {airdrop.type}
             </Badge>
+          );
+        },
+      },
+      {
+        id: "pointsDisplay",
+        accessorFn: (row) => row.requiredPoints,
+        header: "Points",
+        cell: ({ row }) => {
+          const airdrop = row.original;
+          const displayPoints =
+            airdrop.pointsText?.trim() ||
+            (airdrop.requiredPoints > 0 ? String(airdrop.requiredPoints) : "-");
+          const secondaryText = airdrop.slotText?.trim() || null;
+
+          return (
+            <div className="flex flex-col gap-1">
+              <span className="font-semibold text-foreground text-lg">
+                {displayPoints}
+              </span>
+              {secondaryText && (
+                <span className="text-sm text-muted-foreground">
+                  {secondaryText}
+                </span>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: "amountDisplay",
+        accessorFn: (row) => parseNumericAmount(row.airdropAmount) ?? 0,
+        header: "Amount",
+        cell: ({ row }) => {
+          const airdrop = row.original;
+          const displayAmount = getDisplayAmount(airdrop);
+          const displayValue = getDisplayValue(airdrop);
+
+          return (
+            <div className="flex flex-col gap-1">
+              <span className="font-semibold text-foreground text-lg">
+                {displayAmount}
+              </span>
+              {displayValue && (
+                <span className="text-sm font-semibold text-amber-400">
+                  {displayValue}
+                </span>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: "timeDisplay",
+        accessorFn: (row) => row.claimStartDate,
+        header: "Time",
+        cell: ({ row }) => {
+          const airdrop = row.original;
+          const timeInfo = getDisplayTimeInfo(airdrop, activeTab);
+
+          return (
+            <div className="flex flex-col gap-1">
+              <span className="font-medium text-foreground">
+                {timeInfo.main}
+              </span>
+              {timeInfo.secondary && (
+                <span className="text-xs text-muted-foreground">
+                  {timeInfo.secondary}
+                </span>
+              )}
+            </div>
           );
         },
       },
@@ -769,11 +891,14 @@ export function AirdropsTable() {
             claimEndDate: airdrop.claimEndDate
               ? new Date(airdrop.claimEndDate)
               : undefined,
+            estimatedPrice: airdrop.estimatedPrice || undefined,
             estimatedValue: airdrop.estimatedValue || undefined,
             airdropAmount: airdrop.airdropAmount,
             requirements: airdrop.requirements,
             requiredPoints: airdrop.requiredPoints,
+            pointsText: airdrop.pointsText || undefined,
             deductPoints: airdrop.deductPoints,
+            slotText: airdrop.slotText || undefined,
             contractAddress: airdrop.contractAddress,
           };
 
@@ -804,7 +929,7 @@ export function AirdropsTable() {
         },
       },
     ],
-    [sendAirdropAlert, isSendingTelegram, handleAirdropClick],
+    [activeTab, sendAirdropAlert, isSendingTelegram, handleAirdropClick],
   );
 
   // React Table instance
@@ -818,7 +943,15 @@ export function AirdropsTable() {
     onSortingChange: setAirdropSorting,
     onColumnFiltersChange: setAirdropColumnFilters,
     state: { sorting: airdropSorting, columnFilters: airdropColumnFilters },
-    initialState: { pagination: { pageSize: 20 } },
+    initialState: {
+      pagination: { pageSize: 20 },
+      columnVisibility: {
+        type: false,
+        requiredPoints: false,
+        claimStartDate: false,
+        actions: false,
+      },
+    },
   });
 
   // Available chains for filter
@@ -888,7 +1021,34 @@ export function AirdropsTable() {
                   </p>
                 </div>
               </div>
-
+              <div className="w-full sm:w-auto sm:max-w-[440px]">
+                <Button
+                  asChild
+                  variant="premium"
+                  className="h-auto w-full rounded-2xl px-4 py-4 sm:px-5 sm:py-4 shadow-[0_10px_35px_rgba(212,169,72,0.25)]"
+                >
+                  <a
+                    href={TELEGRAM_JOIN_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`${TELEGRAM_CTA_PRIMARY} ${TELEGRAM_CTA_SECONDARY}`}
+                  >
+                    <span className="flex w-full items-start gap-3 text-left">
+                      <span className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#030305]/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]">
+                        <Send className="w-5 h-5" />
+                      </span>
+                      <span className="flex min-w-0 flex-col">
+                        <span className="text-sm font-semibold leading-tight sm:text-base">
+                          {TELEGRAM_CTA_PRIMARY}
+                        </span>
+                        <span className="mt-1 text-xs leading-snug text-[#030305]/80 sm:text-sm">
+                          {TELEGRAM_CTA_SECONDARY}
+                        </span>
+                      </span>
+                    </span>
+                  </a>
+                </Button>
+              </div>
             </div>
           </div>
           <CornerGlow
@@ -1301,12 +1461,17 @@ export function AirdropsTable() {
                                       claimEndDate: airdrop.claimEndDate
                                         ? new Date(airdrop.claimEndDate)
                                         : undefined,
+                                      estimatedPrice:
+                                        airdrop.estimatedPrice || undefined,
                                       estimatedValue:
                                         airdrop.estimatedValue || undefined,
                                       airdropAmount: airdrop.airdropAmount,
                                       requirements: airdrop.requirements,
                                       requiredPoints: airdrop.requiredPoints,
+                                      pointsText:
+                                        airdrop.pointsText || undefined,
                                       deductPoints: airdrop.deductPoints,
+                                      slotText: airdrop.slotText || undefined,
                                       contractAddress: airdrop.contractAddress,
                                     });
                                   }}
@@ -1375,8 +1540,10 @@ export function AirdropsTable() {
                                         onClick={header.column.getToggleSortingHandler()}
                                       >
                                         {flexRender(
-                                          header.column.columnDef
-                                            .header as string,
+                                          (header.column.id === "projectName"
+                                            ? "Project"
+                                            : header.column.columnDef
+                                                .header) as string,
                                           header.getContext() as never,
                                         )}
                                         {{
@@ -1541,6 +1708,27 @@ export function AirdropsTable() {
                   </div>
                 </div>
 
+                <div className="p-4 rounded-xl bg-muted/30 border border-primary/10">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">
+                        Amount
+                      </div>
+                      <div className="text-xl font-bold text-foreground">
+                        {getDisplayAmount(selectedAirdrop)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">
+                        Estimated Value
+                      </div>
+                      <div className="text-xl font-bold text-amber-400">
+                        {getDisplayValue(selectedAirdrop) || "-"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Time Info */}
                 {selectedAirdrop.claimStartDate && (
                   <div className="p-4 rounded-xl bg-muted/30 border border-primary/10">
@@ -1605,12 +1793,16 @@ export function AirdropsTable() {
                         claimEndDate: selectedAirdrop.claimEndDate
                           ? new Date(selectedAirdrop.claimEndDate)
                           : undefined,
+                        estimatedPrice:
+                          selectedAirdrop.estimatedPrice || undefined,
                         estimatedValue:
                           selectedAirdrop.estimatedValue || undefined,
                         airdropAmount: selectedAirdrop.airdropAmount,
                         requirements: selectedAirdrop.requirements,
                         requiredPoints: selectedAirdrop.requiredPoints,
+                        pointsText: selectedAirdrop.pointsText || undefined,
                         deductPoints: selectedAirdrop.deductPoints,
+                        slotText: selectedAirdrop.slotText || undefined,
                         contractAddress: selectedAirdrop.contractAddress,
                       });
                     }}

@@ -1,9 +1,9 @@
 /**
  * Airdrop Schedule API Route
- * GET /api/alpha/schedule - Get today's and upcoming airdrops like alpha123.uk
+ * GET /api/alpha/schedule - Get today's and upcoming airdrops in history format
  * POST /api/alpha/schedule - Add a manual schedule entry
  *
- * This API provides schedule data formatted like alpha123.uk displays
+ * This API provides schedule data in the history-style display format
  */
 
 import { NextResponse } from "next/server";

@@ -6,11 +6,15 @@ name: Update Airdrops Cron
 
 on:
   schedule:
-    # Run every 5 minutes
     - cron: "*/5 * * * *"
-
-  # Allow manual trigger from GitHub Actions tab
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-airdrops-cron
+  cancel-in-progress: false
 
 jobs:
   update-airdrops:
@@ -27,11 +31,10 @@ jobs:
           set -euo pipefail
 
           if [ -z "${CRON_SECRET:-}" ]; then
-            echo "❌ CRON_SECRET is not configured in repository secrets."
+            echo "CRON_SECRET is not configured in repository secrets."
             exit 1
           fi
 
-          # Default to production URL if APP_URL not set
           URL="${APP_URL:-https://binance-alpha-tool-chi.vercel.app}"
           URL="${URL%/}"
 
@@ -42,39 +45,85 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "🚀 Triggering airdrop update..."
+          RESPONSE_FILE="$(mktemp)"
+          trap 'rm -f "${RESPONSE_FILE}"' EXIT
+
+          echo "Triggering airdrop update..."
           echo "URL: ${CRON_URL}"
 
-          # Send both header and query auth. Query auth survives cross-host redirects,
-          # which avoids losing Authorization on canonical domain redirects.
-          if ! HTTP_CODE=$(curl -sS --location -o response.json -w "%{http_code}" \
+          if ! HTTP_CODE=$(curl -sS --location -o "${RESPONSE_FILE}" -w "%{http_code}" \
             --max-time 120 \
+            --retry 2 \
+            --retry-delay 5 \
             --get \
             --data-urlencode "secret=${CRON_SECRET}" \
             -H "Authorization: Bearer ${CRON_SECRET}" \
             "${CRON_URL}"); then
-            echo ""
-            echo "❌ Failed to reach cron endpoint."
+            echo
+            echo "Failed to reach cron endpoint."
             exit 1
           fi
 
-          echo "📊 Response (HTTP ${HTTP_CODE}):"
-          head -c 1000 response.json || true
+          echo "Response (HTTP ${HTTP_CODE}):"
+          head -c 1500 "${RESPONSE_FILE}" || true
+          echo
 
-          # Check if request was successful
-          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-            echo ""
-            echo "✅ Airdrop update completed successfully!"
-          else
-            echo ""
-            echo "❌ Airdrop update failed with HTTP ${HTTP_CODE}"
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "Airdrop update failed with HTTP ${HTTP_CODE}"
             exit 1
           fi
+
+          RESPONSE_FILE="${RESPONSE_FILE}" node <<'NODE'
+          const fs = require("fs");
+
+          const responseFile = process.env.RESPONSE_FILE;
+          const raw = fs.readFileSync(responseFile, "utf8").trim();
+
+          let payload;
+          try {
+            payload = JSON.parse(raw);
+          } catch (error) {
+            console.error("Cron endpoint did not return valid JSON.");
+            console.error(raw.slice(0, 1500));
+            process.exit(1);
+          }
+
+          if (!payload || payload.success !== true) {
+            console.error("Cron endpoint returned success=false.");
+            console.error(JSON.stringify(payload, null, 2));
+            process.exit(1);
+          }
+
+          const details = payload.data || {};
+          console.log("Airdrop update completed successfully.");
+          console.log(
+            JSON.stringify(
+              {
+                synced: details.synced ?? null,
+                created: details.created ?? null,
+                updated: details.updated ?? null,
+                notified: details.notified ?? null,
+                errors: details.errors ?? null,
+                duration: details.duration ?? null,
+              },
+              null,
+              2,
+            ),
+          );
+          NODE
+
+          {
+            echo "## Update Airdrops Cron"
+            echo
+            echo "- URL: \`${CRON_URL}\`"
+            echo "- HTTP: \`${HTTP_CODE}\`"
+            echo "- Result: success"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report Status
         if: failure()
         run: |
-          echo "⚠️ Cron job failed. Check the logs above for details."
+          echo "Cron job failed. Check the logs above for details."
           echo "Common issues:"
           echo "  - CRON_SECRET not set in repository secrets"
           echo "  - APP_URL incorrect or app not deployed"
