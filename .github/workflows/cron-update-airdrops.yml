@@ -6,11 +6,15 @@ name: Update Airdrops Cron
 
 on:
   schedule:
-    # Run every 5 minutes
     - cron: "*/5 * * * *"
-
-  # Allow manual trigger from GitHub Actions tab
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-airdrops-cron
+  cancel-in-progress: false
 
 jobs:
   update-airdrops:
@@ -71,10 +75,57 @@ jobs:
             exit 1
           fi
 
+          RESPONSE_FILE="${RESPONSE_FILE}" node <<'NODE'
+          const fs = require("fs");
+
+          const responseFile = process.env.RESPONSE_FILE;
+          const raw = fs.readFileSync(responseFile, "utf8").trim();
+
+          let payload;
+          try {
+            payload = JSON.parse(raw);
+          } catch (error) {
+            console.error("Cron endpoint did not return valid JSON.");
+            console.error(raw.slice(0, 1500));
+            process.exit(1);
+          }
+
+          if (!payload || payload.success !== true) {
+            console.error("Cron endpoint returned success=false.");
+            console.error(JSON.stringify(payload, null, 2));
+            process.exit(1);
+          }
+
+          const details = payload.data || {};
+          console.log("Airdrop update completed successfully.");
+          console.log(
+            JSON.stringify(
+              {
+                synced: details.synced ?? null,
+                created: details.created ?? null,
+                updated: details.updated ?? null,
+                notified: details.notified ?? null,
+                errors: details.errors ?? null,
+                duration: details.duration ?? null,
+              },
+              null,
+              2,
+            ),
+          );
+          NODE
+
+          {
+            echo "## Update Airdrops Cron"
+            echo
+            echo "- URL: \`${CRON_URL}\`"
+            echo "- HTTP: \`${HTTP_CODE}\`"
+            echo "- Result: success"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Report Status
         if: failure()
         run: |
-          echo "⚠️ Cron job failed. Check the logs above for details."
+          echo "Cron job failed. Check the logs above for details."
           echo "Common issues:"
           echo "  - CRON_SECRET not set in repository secrets"
           echo "  - APP_URL incorrect or app not deployed"

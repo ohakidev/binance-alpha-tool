@@ -5,6 +5,7 @@ import { Navigation } from "@/components/layout/navigation";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/lib/providers/query-provider";
 import { ThemeProvider } from "@/lib/providers/theme-provider";
+import { API_URLS } from "@/lib/constants/alpha.constants";
 
 // Optimized font loading with display swap and preload
 const prompt = Prompt({
@@ -60,6 +61,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const externalHistoryOrigin = API_URLS.HISTORY_SOURCE;
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -76,7 +79,7 @@ export default function RootLayout({
         />
         <link
           rel="preconnect"
-          href="https://alpha123.uk"
+          href={externalHistoryOrigin}
           crossOrigin="anonymous"
         />
         <link

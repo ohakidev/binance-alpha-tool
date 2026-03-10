@@ -9,8 +9,8 @@ export {
   alphaService,
   BinanceAlphaSource,
   binanceAlphaSource,
-  Alpha123Source,
-  alpha123Source,
+  HistorySource,
+  historySource,
   AlphaDataSourceType,
 } from "./alpha";
 

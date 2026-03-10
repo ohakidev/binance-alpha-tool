@@ -10,11 +10,14 @@ interface AirdropAlertData {
   status: string;
   claimStartDate?: Date;
   claimEndDate?: Date;
+  estimatedPrice?: number;
   estimatedValue?: number;
   airdropAmount?: string;
   requirements?: string[];
   requiredPoints?: number;
+  pointsText?: string;
   deductPoints?: number;
+  slotText?: string;
   contractAddress?: string;
 }
 
@@ -42,6 +45,7 @@ export function useTelegram() {
     data,
   }: TelegramNotification): Promise<boolean> => {
     setIsLoading(true);
+
     try {
       const response = await fetch("/api/telegram/notify", {
         method: "POST",
@@ -54,17 +58,17 @@ export function useTelegram() {
       const result: TelegramNotifyResponse = await response.json();
 
       if (result.success) {
-        toast.success("แจ้งเตือนถูกส่งไปยัง Telegram แล้ว!", {
-          description: "ตรวจสอบข้อความใน Telegram channel ของคุณ",
+        toast.success("ส่งแจ้งเตือนไปยัง Telegram แล้ว", {
+          description: "ตรวจสอบข้อความล่าสุดใน Telegram channel ของคุณได้เลย",
           duration: 5000,
         });
         return true;
-      } else {
-        toast.error("ไม่สามารถส่งแจ้งเตือนได้", {
-          description: result.error || "เกิดข้อผิดพลาดในการส่งข้อความ",
-        });
-        return false;
       }
+
+      toast.error("ส่งแจ้งเตือนไม่สำเร็จ", {
+        description: result.error || "เกิดข้อผิดพลาดระหว่างส่งข้อความไป Telegram",
+      });
+      return false;
     } catch {
       console.error("Telegram notification error");
       toast.error("เกิดข้อผิดพลาด", {
@@ -91,18 +95,18 @@ export function useTelegram() {
       const result: TelegramStatusResponse = await response.json();
 
       if (result.configured) {
-        toast.success("Telegram เชื่อมต่อแล้ว!", {
+        toast.success("เชื่อมต่อ Telegram แล้ว", {
           description: `Channel: ${result.chatId} | Language: ${result.language}`,
         });
         return true;
-      } else {
-        toast.warning("Telegram ยังไม่ได้ตั้งค่า", {
-          description: "กรุณาตั้งค่า TELEGRAM_BOT_TOKEN และ TELEGRAM_CHAT_ID",
-        });
-        return false;
       }
+
+      toast.warning("Telegram ยังไม่ได้ตั้งค่า", {
+        description: "กรุณาตั้งค่า TELEGRAM_BOT_TOKEN และ TELEGRAM_CHAT_ID",
+      });
+      return false;
     } catch {
-      toast.error("ไม่สามารถตรวจสอบการเชื่อมต่อได้");
+      toast.error("ไม่สามารถตรวจสอบการเชื่อมต่อ Telegram ได้");
       return false;
     }
   };

@@ -14,7 +14,7 @@ export {
 
 // Data Sources
 export { BinanceAlphaSource, binanceAlphaSource } from "./BinanceAlphaSource";
-export { Alpha123Source, alpha123Source } from "./Alpha123Source";
+export { HistorySource, historySource } from "./HistorySource";
 
 // Re-export types for convenience
 export type {

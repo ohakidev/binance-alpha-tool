@@ -81,7 +81,7 @@ export async function GET(request: Request) {
     // Get Alpha service stats
     const alphaStats = await alphaService.getStats();
 
-    // Format response like alpha123.uk
+    // Format response in the history-style layout
     const formattedTokens = tokens.map((token) => ({
       // Basic info
       token: token.symbol,
@@ -135,7 +135,7 @@ export async function GET(request: Request) {
       iconUrl: token.iconUrl,
     }));
 
-    // Separate into today and upcoming (like alpha123.uk)
+    // Separate into today and upcoming sections
     const now = new Date();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -167,7 +167,7 @@ export async function GET(request: Request) {
         tokens: formattedTokens,
         total,
 
-        // Categorized like alpha123.uk
+        // Categorized for history-style sections
         today: {
           count: todayAirdrops.length,
           airdrops: todayAirdrops,

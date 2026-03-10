@@ -204,7 +204,11 @@ export const API_URLS = {
   BINANCE_ALPHA:
     process.env.BINANCE_ALPHA_API_URL ||
     "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list",
-  ALPHA123: process.env.ALPHA123_API_URL || "https://alpha123.uk",
+  HISTORY_SOURCE:
+    process.env.EXTERNAL_HISTORY_BASE_URL ||
+    process.env.AIRDROP_HISTORY_BASE_URL ||
+    process.env.ALPHA123_API_URL ||
+    "https://alpha123.uk",
 } as const;
 
 // ============= Default Timeouts =============
