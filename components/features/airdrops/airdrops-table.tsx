@@ -751,7 +751,7 @@ export function AirdropsTable() {
     () => [
       {
         accessorKey: "projectName",
-        header: "โปรเจค",
+        header: copy.project,
         cell: ({ row }) => {
           const airdrop = row.original;
           const contractLink = airdrop.contractAddress
@@ -802,7 +802,7 @@ export function AirdropsTable() {
       {
         id: "typeDisplay",
         accessorFn: (row) => row.type,
-        header: "Type",
+        header: copy.type,
         cell: ({ row }) => {
           const airdrop = row.original;
 
@@ -819,7 +819,7 @@ export function AirdropsTable() {
       {
         id: "pointsDisplay",
         accessorFn: (row) => row.requiredPoints,
-        header: "Points",
+        header: copy.points,
         cell: ({ row }) => {
           const airdrop = row.original;
           const displayPoints =
@@ -888,7 +888,7 @@ export function AirdropsTable() {
       },
       {
         accessorKey: "type",
-        header: "ประเภท",
+        header: copy.type,
         cell: ({ row }) => {
           const airdrop = row.original;
           return (
@@ -921,7 +921,9 @@ export function AirdropsTable() {
               </div>
               {deduct > 0 && (
                 <div className="flex items-center gap-1">
-                  <span className="text-xs text-red-400/80">หัก:</span>
+                  <span className="text-xs text-red-400/80">
+                    {copy.deductedShort}:
+                  </span>
                   <span className="text-xs font-medium text-red-400">
                     -{deduct} {copy.pointsSuffix}
                   </span>
@@ -1335,13 +1337,13 @@ export function AirdropsTable() {
               <div>
                 <div className="text-xs sm:text-sm text-muted-foreground mb-1 flex items-center gap-2">
                   <Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
-                  <span>ทั้งหมด</span>
+                  <span>{copy.totalProjects}</span>
                 </div>
                 <div className="text-2xl sm:text-3xl font-bold text-purple-400">
                   <NumberTicker value={stats.allCount} locale={numberLocale} />
                 </div>
                 <div className="text-[10px] sm:text-xs text-muted-foreground mt-1">
-                  โปรเจคทั้งหมด
+                  {copy.allProjects}
                 </div>
               </div>
               <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
@@ -1500,7 +1502,7 @@ export function AirdropsTable() {
                       className="flex items-center gap-2 flex-wrap"
                     >
                       <span className="text-sm text-muted-foreground">
-                        กรอง:
+                        {copy.filtersLabel}:
                       </span>
                       {selectedChains.map((chain) => (
                         <Badge
@@ -1541,7 +1543,7 @@ export function AirdropsTable() {
                         onClick={clearFilters}
                         className="h-6 text-xs text-muted-foreground hover:text-primary"
                       >
-                        ล้างทั้งหมด
+                        {copy.clearAll}
                       </Button>
                     </motion.div>
                   )}
@@ -1582,8 +1584,8 @@ export function AirdropsTable() {
                   </h3>
                   <p className="text-sm text-muted-foreground max-w-md">
                     {hasFilters
-                      ? "ลองปรับตัวกรองใหม่เพื่อดูผลลัพธ์ที่มากขึ้น"
-                      : "รอติดตามการอัปเดตจาก Binance Alpha"}
+                      ? copy.filteredResultsHint
+                      : copy.waitingForUpdates}
                   </p>
                 </motion.div>
               ) : responsiveLayoutMode === "pending" ? (
@@ -1653,9 +1655,9 @@ export function AirdropsTable() {
                       {table.getPageCount() > 1 && (
                         <div className="flex flex-col gap-3 pt-3 border-t border-primary/10">
                           <div className="text-xs text-center text-muted-foreground">
-                            หน้า {table.getState().pagination.pageIndex + 1} จาก{" "}
-                            {table.getPageCount()} ({filteredData.length}{" "}
-                            รายการ)
+                            {copy.page} {table.getState().pagination.pageIndex + 1}{" "}
+                            {copy.of} {table.getPageCount()} ({filteredData.length}{" "}
+                            {copy.items})
                           </div>
                           <div className="flex items-center gap-2">
                             <Button
@@ -1665,7 +1667,7 @@ export function AirdropsTable() {
                               disabled={!table.getCanPreviousPage()}
                               className="flex-1 h-10 border-primary/20"
                             >
-                              ก่อนหน้า
+                              {copy.previous}
                             </Button>
                             <Button
                               variant="outline"
@@ -1674,7 +1676,7 @@ export function AirdropsTable() {
                               disabled={!table.getCanNextPage()}
                               className="flex-1 h-10 border-primary/20"
                             >
-                              ถัดไป
+                              {copy.next}
                             </Button>
                           </div>
                         </div>
@@ -1707,7 +1709,7 @@ export function AirdropsTable() {
                                       >
                                         {flexRender(
                                           (header.column.id === "projectName"
-                                            ? "Project"
+                                            ? copy.project
                                             : header.column.columnDef
                                                 .header) as string,
                                           header.getContext() as never,
@@ -1771,9 +1773,9 @@ export function AirdropsTable() {
                       {table.getPageCount() > 1 && (
                         <div className="flex items-center justify-between px-4 py-3 border-t border-primary/10 bg-muted/20">
                           <div className="text-sm text-muted-foreground">
-                            หน้า {table.getState().pagination.pageIndex + 1} จาก{" "}
-                            {table.getPageCount()} ({filteredData.length}{" "}
-                            รายการ)
+                            {copy.page} {table.getState().pagination.pageIndex + 1}{" "}
+                            {copy.of} {table.getPageCount()} ({filteredData.length}{" "}
+                            {copy.items})
                           </div>
                           <div className="flex items-center gap-2">
                             <Button
@@ -1783,7 +1785,7 @@ export function AirdropsTable() {
                               disabled={!table.getCanPreviousPage()}
                               className="border-primary/20"
                             >
-                              ก่อนหน้า
+                              {copy.previous}
                             </Button>
                             <Button
                               variant="outline"
@@ -1792,7 +1794,7 @@ export function AirdropsTable() {
                               disabled={!table.getCanNextPage()}
                               className="border-primary/20"
                             >
-                              ถัดไป
+                              {copy.next}
                             </Button>
                           </div>
                         </div>
@@ -1855,7 +1857,7 @@ export function AirdropsTable() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <div className="text-xs text-muted-foreground mb-1">
-                        Points ที่ต้องการ
+                        {copy.requiredPoints}
                       </div>
                       <div className="text-xl font-bold text-amber-400">
                         {selectedAirdrop.requiredPoints || 0}{" "}
@@ -1864,7 +1866,7 @@ export function AirdropsTable() {
                     </div>
                     <div>
                       <div className="text-xs text-muted-foreground mb-1">
-                        Points ที่จะถูกหัก
+                        {copy.deductedPoints}
                       </div>
                       <div className="text-xl font-bold text-red-400">
                         -{selectedAirdrop.deductPoints || 0}{" "}
@@ -1886,7 +1888,7 @@ export function AirdropsTable() {
                     </div>
                     <div>
                       <div className="text-xs text-muted-foreground mb-1">
-                        Estimated Value
+                        {copy.estimatedValue}
                       </div>
                       <div className="text-xl font-bold text-amber-400">
                         {getDisplayValue(selectedAirdrop) || "-"}
@@ -1927,7 +1929,7 @@ export function AirdropsTable() {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-xs text-muted-foreground mb-1">
-                          Contract Address
+                          {copy.contractAddress}
                         </div>
                         <div className="text-sm font-mono">
                           {selectedAirdrop.contractAddress.slice(0, 10)}...

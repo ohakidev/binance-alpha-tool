@@ -133,9 +133,7 @@ export function LanguageSwitcher() {
 
               <div className="mt-4 pt-3 border-t border-white/5">
                 <p className="px-2 py-1 text-xs text-slate-500 text-center">
-                  {language === "th"
-                    ? "✨ เปลี่ยนภาษาได้ทุกเมื่อ"
-                    : "✨ Change language anytime"}
+                  {`✨ ${t("common.changeLanguageAnytime")}`}
                 </p>
               </div>
             </motion.div>

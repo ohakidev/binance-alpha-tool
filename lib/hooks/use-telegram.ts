@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { useLanguage } from "@/lib/stores/language-store";
 
 type NotificationType = "airdrop" | "snapshot" | "claimable" | "stability";
 
@@ -39,6 +40,7 @@ interface TelegramStatusResponse {
 
 export function useTelegram() {
   const [isLoading, setIsLoading] = useState(false);
+  const { t } = useLanguage();
 
   const sendNotification = async ({
     type,
@@ -58,21 +60,21 @@ export function useTelegram() {
       const result: TelegramNotifyResponse = await response.json();
 
       if (result.success) {
-        toast.success("ส่งแจ้งเตือนไปยัง Telegram แล้ว", {
-          description: "ตรวจสอบข้อความล่าสุดใน Telegram channel ของคุณได้เลย",
+        toast.success(t("common.telegramSent"), {
+          description: t("common.telegramSentDescription"),
           duration: 5000,
         });
         return true;
       }
 
-      toast.error("ส่งแจ้งเตือนไม่สำเร็จ", {
-        description: result.error || "เกิดข้อผิดพลาดระหว่างส่งข้อความไป Telegram",
+      toast.error(t("common.telegramSendFailed"), {
+        description: result.error || t("common.telegramSendFailedDescription"),
       });
       return false;
     } catch {
       console.error("Telegram notification error");
-      toast.error("เกิดข้อผิดพลาด", {
-        description: "ไม่สามารถเชื่อมต่อกับ Telegram ได้",
+      toast.error(t("common.error"), {
+        description: t("common.telegramConnectionUnavailable"),
       });
       return false;
     } finally {
@@ -95,18 +97,18 @@ export function useTelegram() {
       const result: TelegramStatusResponse = await response.json();
 
       if (result.configured) {
-        toast.success("เชื่อมต่อ Telegram แล้ว", {
-          description: `Channel: ${result.chatId} | Language: ${result.language}`,
+        toast.success(t("common.telegramConnected"), {
+          description: `${t("common.channel")}: ${result.chatId} | ${t("settings.language")}: ${result.language}`,
         });
         return true;
       }
 
-      toast.warning("Telegram ยังไม่ได้ตั้งค่า", {
-        description: "กรุณาตั้งค่า TELEGRAM_BOT_TOKEN และ TELEGRAM_CHAT_ID",
+      toast.warning(t("common.telegramNotConfigured"), {
+        description: t("common.telegramNotConfiguredDescription"),
       });
       return false;
     } catch {
-      toast.error("ไม่สามารถตรวจสอบการเชื่อมต่อ Telegram ได้");
+      toast.error(t("common.telegramConnectionCheckFailed"));
       return false;
     }
   };

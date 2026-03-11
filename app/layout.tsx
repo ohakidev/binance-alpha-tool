@@ -5,6 +5,7 @@ import { Navigation } from "@/components/layout/navigation";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/lib/providers/query-provider";
 import { ThemeProvider } from "@/lib/providers/theme-provider";
+import { LanguageProvider } from "@/lib/providers/language-provider";
 import { API_URLS } from "@/lib/constants/alpha.constants";
 
 // Optimized font loading with display swap and preload
@@ -64,7 +65,7 @@ export default function RootLayout({
   const externalHistoryOrigin = API_URLS.HISTORY_SOURCE;
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="th" suppressHydrationWarning>
       <head>
         {/* Preconnect to critical external domains for faster loading */}
         <link
@@ -117,30 +118,32 @@ export default function RootLayout({
         className={`${prompt.variable} font-sans antialiased bg-[#030305] text-[#fafaf9]`}
         suppressHydrationWarning
       >
-        <ThemeProvider>
-          <QueryProvider>
-            {/* Skip to main content for accessibility */}
-            <a
-              href="#main-content"
-              className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-[#d4a948] focus:text-[#030305] focus:rounded-lg focus:font-medium"
-            >
-              Skip to main content
-            </a>
+        <LanguageProvider>
+          <ThemeProvider>
+            <QueryProvider>
+              {/* Skip to main content for accessibility */}
+              <a
+                href="#main-content"
+                className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-[#d4a948] focus:text-[#030305] focus:rounded-lg focus:font-medium"
+              >
+                Skip to main content
+              </a>
 
-            <Navigation />
+              <Navigation />
 
-            {/* Main content with padding for navigation */}
-            <main
-              id="main-content"
-              className="pt-16 pb-20 md:pb-8 min-h-screen"
-            >
-              {children}
-            </main>
+              {/* Main content with padding for navigation */}
+              <main
+                id="main-content"
+                className="pt-16 pb-20 md:pb-8 min-h-screen"
+              >
+                {children}
+              </main>
 
-            {/* Toast notifications - lazy loaded */}
-            <Toaster richColors closeButton position="top-right" />
-          </QueryProvider>
-        </ThemeProvider>
+              {/* Toast notifications - lazy loaded */}
+              <Toaster richColors closeButton position="top-right" />
+            </QueryProvider>
+          </ThemeProvider>
+        </LanguageProvider>
 
         {/* Noscript fallback */}
         <noscript>

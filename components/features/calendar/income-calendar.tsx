@@ -29,6 +29,7 @@ import { getMonth } from "date-fns/getMonth";
 import { useIncomeStore } from "@/lib/stores/income-store";
 import { useUserStore } from "@/lib/stores/user-store";
 import { useLanguage } from "@/lib/stores/language-store";
+import { getIntlLocale } from "@/lib/i18n/locale";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -51,6 +52,7 @@ export function IncomeCalendar({
   const [month, setMonth] = useState(new Date());
   const activeUserId = useUserStore((state) => state.activeUserId);
   const { t, language } = useLanguage();
+  const intlLocale = getIntlLocale(language);
 
   // Get entries for current month
   const getEntriesByUserAndMonth = useIncomeStore(
@@ -104,10 +106,15 @@ export function IncomeCalendar({
     return [...emptyDays, ...days];
   }, [month]);
 
-  const weekDays =
-    language === "th"
-      ? ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"]
-      : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const weekDays = useMemo(() => {
+    const formatter = new Intl.DateTimeFormat(intlLocale, { weekday: "short" });
+    const start = new Date(2024, 0, 7);
+    return Array.from({ length: 7 }, (_, index) =>
+      formatter.format(
+        new Date(start.getFullYear(), start.getMonth(), start.getDate() + index),
+      ),
+    );
+  }, [intlLocale]);
 
   const handlePrevMonth = () => setMonth(subMonths(month, 1));
   const handleNextMonth = () => setMonth(addMonths(month, 1));
@@ -132,36 +139,12 @@ export function IncomeCalendar({
   const yearOptions = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i);
 
   // Month names
-  const monthNames =
-    language === "th"
-      ? [
-        "มกราคม",
-        "กุมภาพันธ์",
-        "มีนาคม",
-        "เมษายน",
-        "พฤษภาคม",
-        "มิถุนายน",
-        "กรกฎาคม",
-        "สิงหาคม",
-        "กันยายน",
-        "ตุลาคม",
-        "พฤศจิกายน",
-        "ธันวาคม",
-      ]
-      : [
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
-      ];
+  const monthNames = useMemo(() => {
+    const formatter = new Intl.DateTimeFormat(intlLocale, { month: "long" });
+    return Array.from({ length: 12 }, (_, index) =>
+      formatter.format(new Date(2024, index, 1)),
+    );
+  }, [intlLocale]);
 
   return (
     <MagicCard
@@ -239,7 +222,7 @@ export function IncomeCalendar({
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              {language === "th" ? "วันนี้" : "Today"}
+              {t("calendar.today")}
             </motion.button>
 
             <motion.button
@@ -264,7 +247,7 @@ export function IncomeCalendar({
               <div className="flex items-center gap-2 mb-1">
                 <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
                 <p className="text-[10px] text-emerald-300 uppercase">
-                  {language === "th" ? "รวม" : "Total"}
+                  {t("calendar.totalLabel")}
                 </p>
               </div>
               <p className="text-lg font-bold text-emerald-400">
@@ -276,7 +259,7 @@ export function IncomeCalendar({
               <div className="flex items-center gap-2 mb-1">
                 <CalendarIcon className="w-3.5 h-3.5 text-cyan-400" />
                 <p className="text-[10px] text-cyan-300 uppercase">
-                  {language === "th" ? "วัน" : "Days"}
+                  {t("calendar.daysLabel")}
                 </p>
               </div>
               <p className="text-lg font-bold text-cyan-400">
@@ -288,7 +271,7 @@ export function IncomeCalendar({
               <div className="flex items-center gap-2 mb-1">
                 <TrendingUp className="w-3.5 h-3.5 text-purple-400" />
                 <p className="text-[10px] text-purple-300 uppercase">
-                  {language === "th" ? "เฉลี่ย" : "Avg"}
+                  {t("calendar.averageLabel")}
                 </p>
               </div>
               <p className="text-lg font-bold text-purple-400">
@@ -397,19 +380,19 @@ export function IncomeCalendar({
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded-md ring-2 ring-amber-500" />
             <span className="text-muted-foreground">
-              {language === "th" ? "วันนี้" : "Today"}
+              {t("calendar.today")}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded-md bg-gradient-to-br from-emerald-500/20 to-green-500/20 border-2 border-emerald-500/40" />
             <span className="text-muted-foreground">
-              {language === "th" ? "มีรายได้" : "Has Income"}
+              {t("calendar.hasIncome")}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded-md bg-gradient-to-br from-amber-500 to-orange-500" />
             <span className="text-muted-foreground">
-              {language === "th" ? "เลือกแล้ว" : "Selected"}
+              {t("calendar.selected")}
             </span>
           </div>
         </div>

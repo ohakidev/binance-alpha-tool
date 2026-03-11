@@ -2,6 +2,14 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { Language, translations } from "../i18n/translations";
 
+const DEFAULT_LANGUAGE: Language = "th";
+
+function syncDocumentLanguage(lang: Language) {
+  if (typeof document !== "undefined") {
+    document.documentElement.lang = lang;
+  }
+}
+
 interface LanguageStore {
   language: Language;
   setLanguage: (lang: Language) => void;
@@ -11,14 +19,11 @@ interface LanguageStore {
 export const useLanguage = create<LanguageStore>()(
   persist(
     (set, get) => ({
-      language: "th",
+      language: DEFAULT_LANGUAGE,
 
       setLanguage: (lang: Language) => {
         set({ language: lang });
-        // Update document language attribute
-        if (typeof document !== "undefined") {
-          document.documentElement.lang = lang;
-        }
+        syncDocumentLanguage(lang);
       },
 
       t: (key: string): string => {
@@ -54,6 +59,7 @@ export const useLanguage = create<LanguageStore>()(
       name: "language-storage",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ language: state.language }),
+      skipHydration: true,
     },
   ),
 );

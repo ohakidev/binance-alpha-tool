@@ -50,6 +50,18 @@ export default function SettingsPage() {
   const { t, language, setLanguage } = useLanguage();
   const pageCopy = settingsPageCopy[language];
   const mounted = useMounted();
+  const languageOptions = [
+    {
+      code: "en" as const,
+      label: t("settings.languageEnglish").replace(/^🇬🇧\s*/, ""),
+      flag: "🇺🇸",
+    },
+    {
+      code: "th" as const,
+      label: t("settings.languageThai").replace(/^🇹🇭\s*/, ""),
+      flag: "🇹🇭",
+    },
+  ];
 
   // API Keys State
   const [, setApiKey] = useState("");
@@ -276,10 +288,7 @@ export default function SettingsPage() {
               </div>
               <div className="p-4 md:p-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-                  {[
-                    { code: "en", label: "English", flag: "🇺🇸" },
-                    { code: "th", label: "ไทย", flag: "🇹🇭" },
-                  ].map((lang) => (
+                  {languageOptions.map((lang) => (
                     <motion.button
                       key={lang.code}
                       whileHover={{ scale: 1.02 }}
@@ -683,7 +692,7 @@ export default function SettingsPage() {
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel className="bg-white/5 border-white/10 hover:bg-white/10 hover:text-white">
-                          Cancel
+                          {t("common.cancel")}
                         </AlertDialogCancel>
                         <AlertDialogAction
                           onClick={handleResetData}

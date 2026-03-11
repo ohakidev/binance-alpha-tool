@@ -3,6 +3,9 @@ import type { Language } from "@/lib/i18n/translations";
 type CopyMap<T> = Record<Language, T>;
 
 export const airdropsPageCopy: CopyMap<{
+  project: string;
+  type: string;
+  points: string;
   heroTitle: string;
   heroDescription: string;
   telegramCtaPrimary: string;
@@ -17,9 +20,12 @@ export const airdropsPageCopy: CopyMap<{
   allShort: string;
   searchPlaceholder: string;
   chain: string;
+  filtersLabel: string;
+  clearAll: string;
   alphaPoints: string;
   average: string;
   totalDeducted: string;
+  deductedShort: string;
   totalProjects: string;
   allProjects: string;
   amount: string;
@@ -30,7 +36,10 @@ export const airdropsPageCopy: CopyMap<{
   notify: string;
   viewMore: string;
   page: string;
+  of: string;
   items: string;
+  previous: string;
+  next: string;
   detailDescription: string;
   estimatedValue: string;
   claimStart: string;
@@ -42,8 +51,13 @@ export const airdropsPageCopy: CopyMap<{
   emptyToday: string;
   emptyUpcoming: string;
   emptyAll: string;
+  filteredResultsHint: string;
+  waitingForUpdates: string;
 }> = {
   th: {
+    project: "โปรเจกต์",
+    type: "ประเภท",
+    points: "คะแนน",
     heroTitle: "Binance Alpha Airdrops",
     heroDescription: "ติดตาม Airdrop และ TGE จาก Binance Alpha แบบเรียลไทม์",
     telegramCtaPrimary: "คลิกเลย รับแจ้งเตือน Binance Alpha",
@@ -58,9 +72,12 @@ export const airdropsPageCopy: CopyMap<{
     allShort: "ทั้งหมด",
     searchPlaceholder: "ค้นหาโปรเจกต์ หรือ Symbol...",
     chain: "เชน",
+    filtersLabel: "กรอง",
+    clearAll: "ล้างทั้งหมด",
     alphaPoints: "Alpha Points",
     average: "เฉลี่ย",
     totalDeducted: "หักรวม",
+    deductedShort: "หัก",
     totalProjects: "ทั้งหมด",
     allProjects: "โปรเจกต์ทั้งหมด",
     amount: "จำนวน",
@@ -71,7 +88,10 @@ export const airdropsPageCopy: CopyMap<{
     notify: "แจ้งเตือน",
     viewMore: "ดูเพิ่ม",
     page: "หน้า",
+    of: "จาก",
     items: "รายการ",
+    previous: "ก่อนหน้า",
+    next: "ถัดไป",
     detailDescription: "รายละเอียด Airdrop",
     estimatedValue: "มูลค่าประเมิน",
     claimStart: "เวลาเริ่ม Claim",
@@ -83,8 +103,13 @@ export const airdropsPageCopy: CopyMap<{
     emptyToday: "ยังไม่มี Airdrop วันนี้",
     emptyUpcoming: "ยังไม่มี Airdrop ที่กำลังจะมา",
     emptyAll: "ยังไม่มี Airdrop",
+    filteredResultsHint: "ลองปรับตัวกรองใหม่เพื่อดูผลลัพธ์ที่มากขึ้น",
+    waitingForUpdates: "รอติดตามการอัปเดตจาก Binance Alpha",
   },
   en: {
+    project: "Project",
+    type: "Type",
+    points: "Points",
     heroTitle: "Binance Alpha Airdrops",
     heroDescription: "Track Binance Alpha airdrops and TGE events in real time.",
     telegramCtaPrimary: "Click here for Binance Alpha alerts",
@@ -99,9 +124,12 @@ export const airdropsPageCopy: CopyMap<{
     allShort: "All",
     searchPlaceholder: "Search project or symbol...",
     chain: "Chain",
+    filtersLabel: "Filters",
+    clearAll: "Clear all",
     alphaPoints: "Alpha Points",
     average: "avg",
     totalDeducted: "Total deducted",
+    deductedShort: "Deduct",
     totalProjects: "Total",
     allProjects: "All projects",
     amount: "Amount",
@@ -112,7 +140,10 @@ export const airdropsPageCopy: CopyMap<{
     notify: "Notify",
     viewMore: "View more",
     page: "Page",
+    of: "of",
     items: "items",
+    previous: "Previous",
+    next: "Next",
     detailDescription: "Airdrop details",
     estimatedValue: "Estimated Value",
     claimStart: "Claim start",
@@ -124,6 +155,8 @@ export const airdropsPageCopy: CopyMap<{
     emptyToday: "No airdrops today",
     emptyUpcoming: "No upcoming airdrops",
     emptyAll: "No airdrops available",
+    filteredResultsHint: "Try adjusting the filters to see more results.",
+    waitingForUpdates: "Waiting for the next Binance Alpha update.",
   },
 };
 

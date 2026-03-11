@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useSyncExternalStore } from "react";
 import { motion } from "framer-motion";
+import { getIntlLocale } from "@/lib/i18n/locale";
 import { useLanguage } from "@/lib/stores/language-store";
 import { useUserStore } from "@/lib/stores/user-store";
 import { useIncomeStore } from "@/lib/stores/income-store";
@@ -41,6 +42,7 @@ function useHydrated() {
 
 export function UnifiedCalculator() {
   const { t, language } = useLanguage();
+  const numberLocale = getIntlLocale(language);
   const [activeTab, setActiveTab] = useState("calculator");
   const mounted = useHydrated();
 
@@ -345,7 +347,9 @@ export function UnifiedCalculator() {
                   <ResultRow
                     label={t("calc.pointsPerWeek")}
                     value={`${calculations.points15Days} ${t("calc.points")}`}
-                    hint={`17 × ${calculations.pointsPerDay / 15}`}
+                    hint={`${t("calc.avgDaily")}: ${Math.floor(
+                      calculations.points15Days / 15,
+                    ).toLocaleString(numberLocale)} ${t("calc.points")}`}
                     color="purple"
                   />
 
@@ -486,7 +490,7 @@ export function UnifiedCalculator() {
 
           <TabsContent value="volume" className="mt-0">
             <SectionCard
-              title="Daily Volume & Points Tracker"
+              title={t("calc.dailyVolumeTracker")}
               icon={<BarChart3 className="w-5 h-5" />}
               gradient="from-purple-500/20 to-pink-500/20"
               border="border-purple-500/30"

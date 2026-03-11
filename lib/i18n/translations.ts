@@ -213,6 +213,11 @@ export const translations = {
       today: "วันนี้",
       previousMonth: "เดือนก่อน",
       nextMonth: "เดือนถัดไป",
+      totalLabel: "รวม",
+      daysLabel: "วัน",
+      averageLabel: "เฉลี่ย",
+      hasIncome: "มีรายได้",
+      selected: "เลือกแล้ว",
     },
 
     // Settings
@@ -239,6 +244,7 @@ export const translations = {
       display: "การแสดงผล",
       displayDesc: "ปรับแต่งธีมและการแสดงผล",
       theme: "ธีม",
+      themeDesc: "เลือกรูปแบบธีมของแอปพลิเคชัน",
       themeDark: "🌙 Dark (แนะนำ)",
       themeLight: "☀️ Light",
       themeAuto: "🔄 ตามระบบ",
@@ -347,6 +353,20 @@ export const translations = {
       dark: "มืด",
       light: "สว่าง",
       system: "ตามระบบ",
+      channel: "ช่อง",
+      changeLanguageAnytime: "เปลี่ยนภาษาได้ทุกเมื่อ",
+      telegramSent: "ส่งแจ้งเตือนไปยัง Telegram แล้ว",
+      telegramSentDescription:
+        "ตรวจสอบข้อความล่าสุดในช่อง Telegram ของคุณได้เลย",
+      telegramSendFailed: "ส่งแจ้งเตือนไม่สำเร็จ",
+      telegramSendFailedDescription:
+        "เกิดข้อผิดพลาดระหว่างส่งข้อความไป Telegram",
+      telegramConnectionUnavailable: "ไม่สามารถเชื่อมต่อกับ Telegram ได้",
+      telegramConnected: "เชื่อมต่อ Telegram แล้ว",
+      telegramNotConfigured: "Telegram ยังไม่ได้ตั้งค่า",
+      telegramNotConfiguredDescription:
+        "กรุณาตั้งค่า TELEGRAM_BOT_TOKEN และ TELEGRAM_CHAT_ID",
+      telegramConnectionCheckFailed: "ไม่สามารถตรวจสอบการเชื่อมต่อ Telegram ได้",
     },
   },
 
@@ -562,6 +582,11 @@ export const translations = {
       today: "Today",
       previousMonth: "Previous Month",
       nextMonth: "Next Month",
+      totalLabel: "Total",
+      daysLabel: "Days",
+      averageLabel: "Avg",
+      hasIncome: "Has Income",
+      selected: "Selected",
     },
 
     // Settings
@@ -588,6 +613,7 @@ export const translations = {
       display: "Display",
       displayDesc: "Customize theme and display",
       theme: "Theme",
+      themeDesc: "Choose how the application theme should appear",
       themeDark: "🌙 Dark (Recommended)",
       themeLight: "☀️ Light",
       themeAuto: "🔄 Auto",
@@ -697,6 +723,21 @@ export const translations = {
       dark: "Dark",
       light: "Light",
       system: "System",
+      channel: "Channel",
+      changeLanguageAnytime: "Change language anytime",
+      telegramSent: "Telegram alert sent",
+      telegramSentDescription:
+        "Check your latest message in the Telegram channel.",
+      telegramSendFailed: "Failed to send Telegram alert",
+      telegramSendFailedDescription:
+        "An error occurred while sending the message to Telegram.",
+      telegramConnectionUnavailable: "Unable to connect to Telegram.",
+      telegramConnected: "Telegram connected",
+      telegramNotConfigured: "Telegram is not configured",
+      telegramNotConfiguredDescription:
+        "Please set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.",
+      telegramConnectionCheckFailed:
+        "Unable to verify the Telegram connection.",
     },
   },
 } as const;
