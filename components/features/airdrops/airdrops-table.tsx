@@ -545,6 +545,11 @@ export function AirdropsTable() {
   const isMobileViewport = useIsMobile();
   const { language } = useLanguage();
   const copy = airdropsPageCopy[language];
+  const telegramCtaPrimary = copy.telegramCtaPrimary.trim();
+  const telegramCtaSecondary = copy.telegramCtaSecondary.trim();
+  const telegramCtaAriaLabel = [telegramCtaPrimary, telegramCtaSecondary]
+    .filter(Boolean)
+    .join(" ");
   const dateLocale = getDateFnsLocale(language);
   const numberLocale = getIntlLocale(language);
   const responsiveLayoutMode = getResponsiveAirdropsLayoutMode({
@@ -1173,7 +1178,7 @@ export function AirdropsTable() {
                     href={TELEGRAM_JOIN_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    aria-label={`${copy.telegramCtaPrimary} ${copy.telegramCtaSecondary}`}
+                    aria-label={telegramCtaAriaLabel}
                   >
                     <span className="flex w-full items-start gap-3 text-left">
                       <span className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#030305]/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]">
@@ -1181,10 +1186,10 @@ export function AirdropsTable() {
                       </span>
                       <span className="flex min-w-0 flex-col">
                         <span className="text-sm font-semibold leading-tight sm:text-base">
-                          {copy.telegramCtaPrimary}
+                          {telegramCtaPrimary}
                         </span>
                         <span className="mt-1 text-xs leading-snug text-[#030305]/80 sm:text-sm">
-                          {copy.telegramCtaSecondary}
+                          {telegramCtaSecondary}
                         </span>
                       </span>
                     </span>
