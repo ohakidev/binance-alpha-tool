@@ -17,7 +17,6 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Trophy,
-  ExternalLink,
   ChevronDown,
   ChevronUp,
   ChevronsUpDown,
@@ -83,7 +82,6 @@ import {
 } from "@/components/ui/shine-border";
 import { NumberTicker } from "@/components/ui/number-ticker";
 import { GradientText } from "@/components/ui/animated-text";
-import { useTelegram } from "@/lib/hooks/use-telegram";
 import { dedupeEventApiRows } from "@/lib/services/alpha/binance-event-pipeline";
 import { useLanguage } from "@/lib/stores/language-store";
 import {
@@ -344,8 +342,6 @@ export function isHistoricalScheduleAirdrop(
 interface MobileAirdropCardProps {
   airdrop: Airdrop;
   onClick: () => void;
-  onSendAlert: () => void;
-  isSendingTelegram: boolean;
   language: "th" | "en";
   copy: (typeof airdropsPageCopy)["en"];
 }
@@ -353,8 +349,6 @@ interface MobileAirdropCardProps {
 function MobileAirdropCard({
   airdrop,
   onClick,
-  onSendAlert,
-  isSendingTelegram,
   language,
   copy,
 }: MobileAirdropCardProps) {
@@ -374,9 +368,6 @@ function MobileAirdropCard({
   const isExpiringSoon =
     airdrop.claimEndDate &&
     isBefore(new Date(airdrop.claimEndDate), addDays(new Date(), 3));
-  const contractLink = airdrop.contractAddress
-    ? `https://bscscan.com/token/${airdrop.contractAddress}`
-    : null;
 
   return (
     <motion.div
@@ -407,17 +398,6 @@ function MobileAirdropCard({
             <h3 className="font-bold text-foreground text-base truncate">
               {airdrop.projectName}
             </h3>
-            {contractLink && (
-              <a
-                href={contractLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-primary transition-colors flex-shrink-0 p-1"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <ExternalLink className="w-4 h-4" />
-              </a>
-            )}
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-primary font-medium">
@@ -509,20 +489,7 @@ function MobileAirdropCard({
       </div>
 
       {/* Action Buttons */}
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            onSendAlert();
-          }}
-          disabled={isSendingTelegram}
-          className="flex-1 h-10 text-sm gap-2 border-primary/30 hover:bg-primary/10 font-medium"
-        >
-          <Send className="w-4 h-4" />
-          {copy.notify}
-        </Button>
+      <div className="flex">
         <Button
           variant="default"
           size="sm"
@@ -530,9 +497,8 @@ function MobileAirdropCard({
             e.stopPropagation();
             onClick();
           }}
-          className="h-10 px-4 text-sm gap-2 bg-primary/20 hover:bg-primary/30 text-primary font-medium"
+          className="h-10 w-full text-sm bg-primary/20 hover:bg-primary/30 text-primary font-medium"
         >
-          <ArrowUpRight className="w-4 h-4" />
           {copy.viewMore}
         </Button>
       </div>
@@ -566,11 +532,6 @@ export function AirdropsTable() {
   const [selectedChains, setSelectedChains] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [, setLastRefresh] = useState<Date>(new Date());
-
-  const {
-    isLoading: isSendingTelegram,
-    sendAirdropAlert,
-  } = useTelegram();
 
   // Fetch all airdrops for "All" tab
   const {
@@ -759,9 +720,6 @@ export function AirdropsTable() {
         header: copy.project,
         cell: ({ row }) => {
           const airdrop = row.original;
-          const contractLink = airdrop.contractAddress
-            ? `https://bscscan.com/token/${airdrop.contractAddress}`
-            : null;
 
           return (
             <div className="flex items-center gap-3">
@@ -784,17 +742,6 @@ export function AirdropsTable() {
                   <span className="font-bold text-lg text-foreground">
                     {airdrop.symbol}
                   </span>
-                  {contractLink && (
-                    <a
-                      href={contractLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-muted-foreground hover:text-primary transition-colors"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  )}
                 </div>
                 <span className="text-sm text-muted-foreground">
                   {airdrop.projectName}
@@ -1019,42 +966,9 @@ export function AirdropsTable() {
         header: "",
         cell: ({ row }) => {
           const airdrop = row.original;
-          const alertData = {
-            name: airdrop.projectName,
-            symbol: airdrop.symbol,
-            chain: airdrop.chain,
-            status: airdrop.status,
-            claimStartDate: airdrop.claimStartDate
-              ? new Date(airdrop.claimStartDate)
-              : undefined,
-            claimEndDate: airdrop.claimEndDate
-              ? new Date(airdrop.claimEndDate)
-              : undefined,
-            estimatedPrice: airdrop.estimatedPrice || undefined,
-            estimatedValue: airdrop.estimatedValue || undefined,
-            airdropAmount: airdrop.airdropAmount,
-            requirements: airdrop.requirements,
-            requiredPoints: airdrop.requiredPoints,
-            pointsText: airdrop.pointsText || undefined,
-            deductPoints: airdrop.deductPoints,
-            slotText: airdrop.slotText || undefined,
-            contractAddress: airdrop.contractAddress,
-          };
 
           return (
             <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  sendAirdropAlert(alertData);
-                }}
-                disabled={isSendingTelegram}
-                className="h-8 px-2 text-muted-foreground hover:text-primary"
-              >
-                <Send className="w-4 h-4" />
-              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -1073,9 +987,7 @@ export function AirdropsTable() {
       copy,
       dateLocale,
       handleAirdropClick,
-      isSendingTelegram,
       language,
-      sendAirdropAlert,
     ],
   );
 
@@ -1620,33 +1532,6 @@ export function AirdropsTable() {
                                   key={row.id}
                                   airdrop={airdrop}
                                   onClick={() => handleAirdropClick(airdrop)}
-                                  onSendAlert={() => {
-                                    sendAirdropAlert({
-                                      name: airdrop.projectName,
-                                      symbol: airdrop.symbol,
-                                      chain: airdrop.chain,
-                                      status: airdrop.status,
-                                      claimStartDate: airdrop.claimStartDate
-                                        ? new Date(airdrop.claimStartDate)
-                                        : undefined,
-                                      claimEndDate: airdrop.claimEndDate
-                                        ? new Date(airdrop.claimEndDate)
-                                        : undefined,
-                                      estimatedPrice:
-                                        airdrop.estimatedPrice || undefined,
-                                      estimatedValue:
-                                        airdrop.estimatedValue || undefined,
-                                      airdropAmount: airdrop.airdropAmount,
-                                      requirements: airdrop.requirements,
-                                      requiredPoints: airdrop.requiredPoints,
-                                      pointsText:
-                                        airdrop.pointsText || undefined,
-                                      deductPoints: airdrop.deductPoints,
-                                      slotText: airdrop.slotText || undefined,
-                                      contractAddress: airdrop.contractAddress,
-                                    });
-                                  }}
-                                  isSendingTelegram={isSendingTelegram}
                                   language={language}
                                   copy={copy}
                                 />
@@ -1931,75 +1816,17 @@ export function AirdropsTable() {
                 {/* Contract Address */}
                 {selectedAirdrop.contractAddress && (
                   <div className="p-4 rounded-xl bg-muted/30 border border-primary/10">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-xs text-muted-foreground mb-1">
-                          {copy.contractAddress}
-                        </div>
-                        <div className="text-sm font-mono">
-                          {selectedAirdrop.contractAddress.slice(0, 10)}...
-                          {selectedAirdrop.contractAddress.slice(-8)}
-                        </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">
+                        {copy.contractAddress}
                       </div>
-                      <a
-                        href={`https://bscscan.com/token/${selectedAirdrop.contractAddress}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors"
-                      >
-                        <ExternalLink className="w-4 h-4 text-primary" />
-                      </a>
+                      <div className="text-sm font-mono">
+                        {selectedAirdrop.contractAddress.slice(0, 10)}...
+                        {selectedAirdrop.contractAddress.slice(-8)}
+                      </div>
                     </div>
                   </div>
                 )}
-
-                {/* Actions */}
-                <div className="flex gap-2">
-                  <Button
-                    className="flex-1 gap-2"
-                    onClick={() => {
-                      sendAirdropAlert({
-                        name: selectedAirdrop.projectName,
-                        symbol: selectedAirdrop.symbol,
-                        chain: selectedAirdrop.chain,
-                        status: selectedAirdrop.status,
-                        claimStartDate: selectedAirdrop.claimStartDate
-                          ? new Date(selectedAirdrop.claimStartDate)
-                          : undefined,
-                        claimEndDate: selectedAirdrop.claimEndDate
-                          ? new Date(selectedAirdrop.claimEndDate)
-                          : undefined,
-                        estimatedPrice:
-                          selectedAirdrop.estimatedPrice || undefined,
-                        estimatedValue:
-                          selectedAirdrop.estimatedValue || undefined,
-                        airdropAmount: selectedAirdrop.airdropAmount,
-                        requirements: selectedAirdrop.requirements,
-                        requiredPoints: selectedAirdrop.requiredPoints,
-                        pointsText: selectedAirdrop.pointsText || undefined,
-                        deductPoints: selectedAirdrop.deductPoints,
-                        slotText: selectedAirdrop.slotText || undefined,
-                        contractAddress: selectedAirdrop.contractAddress,
-                      });
-                    }}
-                    disabled={isSendingTelegram}
-                  >
-                    <Send className="w-4 h-4" />
-                    {copy.sendTelegram}
-                  </Button>
-                  {selectedAirdrop.contractAddress && (
-                    <Button variant="outline" className="gap-2" asChild>
-                      <a
-                        href={`https://bscscan.com/token/${selectedAirdrop.contractAddress}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                        {copy.bscscan}
-                      </a>
-                    </Button>
-                  )}
-                </div>
               </div>
             </>
           )}
