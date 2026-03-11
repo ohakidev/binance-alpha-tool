@@ -78,7 +78,7 @@ jobs:
             exit 1
           fi
 
-          RESPONSE_FILE="${RESPONSE_FILE}" node <<'NODE'
+          RESPONSE_FILE="response.json" node <<'NODE'
           const fs = require("fs");
 
           const responseFile = process.env.RESPONSE_FILE;
