@@ -79,16 +79,13 @@ export interface EventApiRow {
 }
 
 const MONTH_PATTERN =
-  "January|February|March|April|May|June|July|August|September|October|November|December";
-const DATE_WITH_OPTIONAL_YEAR_RE = new RegExp(
-  `(${MONTH_PATTERN})\\s+\\d{1,2}(?:,\\s*\\d{4})?(?:,?\\s+at\\s+\\d{1,2}:\\d{2}\\s*\\(UTC\\))?`,
+  "January|Jan|February|Feb|March|Mar|April|Apr|May|June|Jun|July|Jul|August|Aug|September|Sept|Sep|October|Oct|November|Nov|December|Dec";
+const ABSOLUTE_DATE_TIME_RE = new RegExp(
+  `(${MONTH_PATTERN})\\s+(\\d{1,2})(?:,\\s*(\\d{4}))?,?\\s+(?:at|from)\\s+(\\d{1,2})(?::(\\d{2}))?\\s*(AM|PM)?(?:\\s+to\\s+\\d{1,2}(?::\\d{2})?\\s*(?:AM|PM)?)?\\s*\\(UTC\\)`,
   "i",
 );
-const DATE_TIME_RE = new RegExp(
-  `(${MONTH_PATTERN})\\s+\\d{1,2},\\s*\\d{4},?\\s+at\\s+\\d{1,2}:\\d{2}\\s*\\(UTC\\)`,
-  "i",
-);
-const RELATIVE_DAY_TIME_RE = /\b(today|tomorrow)\s+at\s+(\d{1,2}):(\d{2})\s*\(UTC\)/i;
+const RELATIVE_DAY_TIME_RE =
+  /\b(today|tomorrow)\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?\s*\(UTC\)/i;
 const DATE_ONLY_RE = new RegExp(
   `(${MONTH_PATTERN})\\s+(\\d{1,2})(?:,\\s*(\\d{4}))?`,
   "i",
@@ -171,41 +168,76 @@ function buildUtcDate(
 }
 
 function sourceTextHasExplicitClockTime(text: string): boolean {
-  return DATE_TIME_RE.test(text) || RELATIVE_DAY_TIME_RE.test(text);
+  return ABSOLUTE_DATE_TIME_RE.test(text) || RELATIVE_DAY_TIME_RE.test(text);
+}
+
+function parseUtcClockTime(
+  hourText: string,
+  minuteText?: string | null,
+  meridiem?: string | null,
+): { hour: number; minute: number } | null {
+  let hour = Number.parseInt(hourText, 10);
+  const minute = minuteText ? Number.parseInt(minuteText, 10) : 0;
+
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) {
+    return null;
+  }
+
+  if (meridiem) {
+    const normalizedMeridiem = meridiem.toUpperCase();
+    if (hour < 1 || hour > 12) {
+      return null;
+    }
+
+    if (normalizedMeridiem === "AM") {
+      hour = hour === 12 ? 0 : hour;
+    } else if (normalizedMeridiem === "PM") {
+      hour = hour === 12 ? 12 : hour + 12;
+    } else {
+      return null;
+    }
+  }
+
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return null;
+  }
+
+  return { hour, minute };
 }
 
 function pickFirstDate(text: string, sourcePublishedAt: Date | null): Date | null {
-  const explicitDateTimeMatch = text.match(
-    new RegExp(
-      `(${MONTH_PATTERN})\\s+(\\d{1,2})(?:,\\s*(\\d{4}))?,?\\s+at\\s+(\\d{1,2}):(\\d{2})\\s*\\(UTC\\)`,
-      "i",
-    ),
-  );
+  const explicitDateTimeMatch = text.match(ABSOLUTE_DATE_TIME_RE);
   if (explicitDateTimeMatch) {
-    const [, monthName, dayText, yearText, hourText, minuteText] =
+    const [, monthName, dayText, yearText, hourText, minuteText, meridiem] =
       explicitDateTimeMatch;
     const year =
       yearText !== undefined
         ? Number.parseInt(yearText, 10)
         : sourcePublishedAt?.getUTCFullYear();
-    if (year) {
+    const parsedTime = parseUtcClockTime(hourText, minuteText, meridiem);
+    if (year && parsedTime) {
       return buildUtcDate(
         year,
         monthName,
         Number.parseInt(dayText, 10),
-        Number.parseInt(hourText, 10),
-        Number.parseInt(minuteText, 10),
+        parsedTime.hour,
+        parsedTime.minute,
       );
     }
   }
 
   const relativeDayMatch = text.match(RELATIVE_DAY_TIME_RE);
   if (relativeDayMatch && sourcePublishedAt) {
-    const [, relativeDay, hourText, minuteText] = relativeDayMatch;
+    const [, relativeDay, hourText, minuteText, meridiem] = relativeDayMatch;
+    const parsedTime = parseUtcClockTime(hourText, minuteText, meridiem);
+    if (!parsedTime) {
+      return null;
+    }
+
     const parsed = new Date(sourcePublishedAt);
     parsed.setUTCHours(
-      Number.parseInt(hourText, 10),
-      Number.parseInt(minuteText, 10),
+      parsedTime.hour,
+      parsedTime.minute,
       0,
       0,
     );
