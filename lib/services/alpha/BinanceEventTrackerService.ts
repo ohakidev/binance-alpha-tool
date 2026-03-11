@@ -251,6 +251,28 @@ function buildDescription(event: CanonicalEventRecord): string {
   return parts.join(" | ");
 }
 
+function mergeNoteTexts(
+  ...values: Array<string | null | undefined>
+): string | null {
+  const parts: string[] = [];
+
+  for (const value of values) {
+    if (!value) {
+      continue;
+    }
+
+    for (const part of value.split("|")) {
+      const normalized = part.trim();
+      if (!normalized || parts.includes(normalized)) {
+        continue;
+      }
+      parts.push(normalized);
+    }
+  }
+
+  return parts.length ? parts.join(" | ") : null;
+}
+
 function mapEventStatusToScheduleStatus(
   status: CanonicalEventStatus,
 ): "UPCOMING" | "TODAY" | "LIVE" | "ENDED" {
@@ -726,7 +748,7 @@ function mapDbEventToApiRow(event: any): EventApiRow {
       event.requiredAlphaPoints !== null && event.requiredAlphaPoints !== undefined
         ? String(event.requiredAlphaPoints)
         : null,
-    slotText: extractSlotText(event.sourceRawText),
+    slotText: extractSlotText(event.sourceRawText) || extractSlotText(event.notes),
   };
 }
 
@@ -1372,6 +1394,38 @@ function enrichApiRowWithHistory(
   };
 }
 
+function enrichCanonicalEventWithHistory(
+  event: CanonicalEventRecord,
+  historyLookup: Map<string, HistoryEnrichment[]>,
+): CanonicalEventRecord {
+  const match = findHistoryMatchForApiRow(
+    mapCanonicalEventToApiRow(event),
+    historyLookup,
+  );
+
+  if (!match) {
+    return event;
+  }
+
+  const slotNote = match.enrichment.slotText
+    ? `Slots: ${match.enrichment.slotText}`
+    : null;
+
+  return {
+    ...event,
+    requiredAlphaPoints:
+      event.requiredAlphaPoints ?? match.enrichment.pointsValue,
+    tokenAmount: event.tokenAmount ?? match.enrichment.amountValue,
+    tokenAmountText:
+      event.tokenAmountText || buildHistoryAmountText(match.enrichment),
+    estimatedUsdValue:
+      event.estimatedUsdValue ?? match.enrichment.estimatedValue,
+    contractAddress: event.contractAddress ?? match.enrichment.contractAddress,
+    sourceUrl: event.sourceUrl ?? match.enrichment.sourceUrl,
+    notes: mergeNoteTexts(event.notes, slotNote),
+  };
+}
+
 function matchesApiRowFilters(
   row: EventApiRow,
   options?: {
@@ -1833,6 +1887,17 @@ export class BinanceEventTrackerService {
       );
     }
 
+    let historyLookup = new Map<string, HistoryEnrichment[]>();
+    try {
+      historyLookup = await fetchHistoryEnrichmentLookup();
+    } catch (error) {
+      stats.errors.push(
+        `History enrichment fetch failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
     const tokenBySymbol = new Map(
       tokens.map((token) => [token.symbol.toUpperCase(), token]),
     );
@@ -1866,6 +1931,7 @@ export class BinanceEventTrackerService {
         tokenByName,
       );
       group.event = enrichEventWithToken(group.event, token, now);
+      group.event = enrichCanonicalEventWithHistory(group.event, historyLookup);
       if (token) {
         stats.enrichmentSuccessCount++;
       } else {
@@ -1884,6 +1950,30 @@ export class BinanceEventTrackerService {
           const existing = await (prisma as any).airdropEvent.findUnique({
             where: { dedupeKey: group.event.dedupeKey },
           });
+          const persistedRequiredAlphaPoints =
+            group.event.requiredAlphaPoints ??
+            existing?.requiredAlphaPoints ??
+            null;
+          const persistedDeductPoints =
+            group.event.deductPoints ?? existing?.deductPoints ?? null;
+          const persistedTokenAmount =
+            group.event.tokenAmount ?? existing?.tokenAmount ?? null;
+          const persistedEstimatedUsdValue =
+            group.event.estimatedUsdValue ?? existing?.estimatedUsdValue ?? null;
+          const persistedContractAddress =
+            group.event.contractAddress ?? existing?.contractAddress ?? null;
+          const persistedLatestPrice =
+            group.event.latestPrice ?? existing?.latestPrice ?? null;
+          const persistedNotes = mergeNoteTexts(existing?.notes, group.event.notes);
+          const persistedTokenAmountText =
+            formatTokenAmount({
+              tokenAmountText:
+                group.event.tokenAmountText ?? existing?.tokenAmountText ?? null,
+              tokenAmount: persistedTokenAmount,
+              symbol: group.event.symbol,
+            }) ??
+            existing?.tokenAmountText ??
+            null;
           const persisted = await (prisma as any).airdropEvent.upsert({
             where: { dedupeKey: group.event.dedupeKey },
             create: {
@@ -1902,18 +1992,18 @@ export class BinanceEventTrackerService {
               normalizedClaimDay: normalizeClaimDay(
                 group.event.claimStartAt || group.event.listingTime,
               ),
-              requiredAlphaPoints: group.event.requiredAlphaPoints,
-              deductPoints: group.event.deductPoints,
-              tokenAmount: group.event.tokenAmount,
-              tokenAmountText: formatTokenAmount(group.event),
-              estimatedUsdValue: group.event.estimatedUsdValue,
+              requiredAlphaPoints: persistedRequiredAlphaPoints,
+              deductPoints: persistedDeductPoints,
+              tokenAmount: persistedTokenAmount,
+              tokenAmountText: persistedTokenAmountText,
+              estimatedUsdValue: persistedEstimatedUsdValue,
               chain: group.event.chain,
-              contractAddress: group.event.contractAddress,
+              contractAddress: persistedContractAddress,
               alphaId: group.event.alphaId,
-              latestPrice: group.event.latestPrice,
+              latestPrice: persistedLatestPrice,
               onlineAirdrop: group.event.onlineAirdrop,
               onlineTge: group.event.onlineTge,
-              notes: group.event.notes,
+              notes: persistedNotes,
               phaseLabel: group.event.phaseLabel,
             },
             update: {
@@ -1931,18 +2021,18 @@ export class BinanceEventTrackerService {
               normalizedClaimDay: normalizeClaimDay(
                 group.event.claimStartAt || group.event.listingTime,
               ),
-              requiredAlphaPoints: group.event.requiredAlphaPoints,
-              deductPoints: group.event.deductPoints,
-              tokenAmount: group.event.tokenAmount,
-              tokenAmountText: formatTokenAmount(group.event),
-              estimatedUsdValue: group.event.estimatedUsdValue,
+              requiredAlphaPoints: persistedRequiredAlphaPoints,
+              deductPoints: persistedDeductPoints,
+              tokenAmount: persistedTokenAmount,
+              tokenAmountText: persistedTokenAmountText,
+              estimatedUsdValue: persistedEstimatedUsdValue,
               chain: group.event.chain,
-              contractAddress: group.event.contractAddress,
+              contractAddress: persistedContractAddress,
               alphaId: group.event.alphaId,
-              latestPrice: group.event.latestPrice,
+              latestPrice: persistedLatestPrice,
               onlineAirdrop: group.event.onlineAirdrop,
               onlineTge: group.event.onlineTge,
-              notes: group.event.notes,
+              notes: persistedNotes,
               phaseLabel: group.event.phaseLabel,
             },
           });
