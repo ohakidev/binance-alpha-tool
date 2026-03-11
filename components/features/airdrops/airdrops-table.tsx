@@ -270,6 +270,76 @@ function sortByClaimStartAsc(left: Airdrop, right: Airdrop): number {
   return leftTime - rightTime;
 }
 
+function normalizeScheduleStatus(value?: string | null): string {
+  return (value || "").toLowerCase();
+}
+
+function isEndedScheduleStatus(value?: string | null): boolean {
+  const status = normalizeScheduleStatus(value);
+  return status === "ended" || status === "cancelled";
+}
+
+function getClaimStartDate(airdrop: Airdrop): Date | null {
+  if (!airdrop.claimStartDate) {
+    return null;
+  }
+
+  const parsed = new Date(airdrop.claimStartDate);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export function isUpcomingScheduleAirdrop(
+  airdrop: Airdrop,
+  language: "th" | "en",
+  now: Date = new Date(),
+): boolean {
+  const scheduleStatus = normalizeScheduleStatus(airdrop.scheduleStatus);
+  if (!scheduleStatus || isEndedScheduleStatus(scheduleStatus)) {
+    return false;
+  }
+
+  if (scheduleStatus === "upcoming") {
+    return true;
+  }
+
+  const targetDate = getClaimStartDate(airdrop);
+  if (!targetDate) {
+    return false;
+  }
+
+  return (
+    targetDate.getTime() > now.getTime() &&
+    !isDateTodayByLanguage(targetDate, language)
+  );
+}
+
+export function isTodayScheduleAirdrop(
+  airdrop: Airdrop,
+  language: "th" | "en",
+): boolean {
+  if (!airdrop.scheduleStatus || isEndedScheduleStatus(airdrop.scheduleStatus)) {
+    return false;
+  }
+
+  const targetDate = getClaimStartDate(airdrop);
+  return targetDate ? isDateTodayByLanguage(targetDate, language) : false;
+}
+
+export function isHistoricalScheduleAirdrop(
+  airdrop: Airdrop,
+  language: "th" | "en",
+  now: Date = new Date(),
+): boolean {
+  if (!airdrop.scheduleStatus) {
+    return true;
+  }
+
+  return (
+    !isTodayScheduleAirdrop(airdrop, language) &&
+    !isUpcomingScheduleAirdrop(airdrop, language, now)
+  );
+}
+
 // Mobile Airdrop Card Component
 interface MobileAirdropCardProps {
   airdrop: Airdrop;
@@ -530,18 +600,7 @@ export function AirdropsTable() {
   const todayData = useMemo(() => {
     if (hasScheduleBuckets) {
       return allData
-        .filter((airdrop) => {
-          if (!airdrop.scheduleStatus || !airdrop.claimStartDate) {
-            return false;
-          }
-
-          const targetDate = new Date(airdrop.claimStartDate);
-          return (
-            isDateTodayByLanguage(targetDate, language) &&
-            airdrop.scheduleStatus !== "ended" &&
-            airdrop.scheduleStatus !== "cancelled"
-          );
-        })
+        .filter((airdrop) => isTodayScheduleAirdrop(airdrop, language))
         .sort(sortByClaimStartDesc);
     }
 
@@ -555,27 +614,24 @@ export function AirdropsTable() {
 
   const futureData = useMemo(() => {
     if (hasScheduleBuckets) {
-      const now = new Date();
       return allData
-        .filter((airdrop) => {
-          if (!airdrop.scheduleStatus || !airdrop.claimStartDate) {
-            return false;
-          }
-
-          const targetDate = new Date(airdrop.claimStartDate);
-          return (
-            targetDate.getTime() > now.getTime() &&
-            !isDateTodayByLanguage(targetDate, language) &&
-            airdrop.scheduleStatus !== "ended" &&
-            airdrop.scheduleStatus !== "cancelled"
-          );
-        })
+        .filter((airdrop) => isUpcomingScheduleAirdrop(airdrop, language))
         .sort(sortByClaimStartAsc);
     }
 
     return allData
       .filter((airdrop) => airdrop.status === "upcoming")
       .sort(sortByClaimStartAsc);
+  }, [allData, hasScheduleBuckets, language]);
+
+  const historicalData = useMemo(() => {
+    if (hasScheduleBuckets) {
+      return allData.filter((airdrop) =>
+        isHistoricalScheduleAirdrop(airdrop, language),
+      );
+    }
+
+    return allData;
   }, [allData, hasScheduleBuckets, language]);
 
   // Filter and search data
@@ -587,7 +643,7 @@ export function AirdropsTable() {
     } else if (activeTab === "upcoming") {
       data = futureData || [];
     } else {
-      data = allData || [];
+      data = historicalData || [];
     }
 
     // Apply chain filter
@@ -608,7 +664,7 @@ export function AirdropsTable() {
     }
 
     return data;
-  }, [activeTab, todayData, futureData, allData, selectedChains, searchQuery]);
+  }, [activeTab, todayData, futureData, historicalData, selectedChains, searchQuery]);
 
   const isLoading = allLoading;
 
@@ -616,7 +672,7 @@ export function AirdropsTable() {
   const stats = useMemo(() => {
     const todayCount = todayData.length;
     const upcomingCount = futureData.length;
-    const allCount = allData.length;
+    const allCount = historicalData.length;
 
     // Calculate total required points for today's airdrops
     const todayTotalPoints = todayData.reduce(
@@ -670,7 +726,7 @@ export function AirdropsTable() {
       upcomingTGE,
       upcomingAirdrop,
     };
-  }, [todayData, futureData, allData]);
+  }, [todayData, futureData, historicalData]);
 
   // Refresh all data
   const handleRefresh = useCallback(async () => {
@@ -1046,12 +1102,12 @@ export function AirdropsTable() {
         ? todayData
         : activeTab === "upcoming"
           ? futureData
-          : allData;
+          : historicalData;
     data.forEach((item) => {
       if (item.chain) chains.add(item.chain);
     });
     return Array.from(chains);
-  }, [activeTab, todayData, futureData, allData]);
+  }, [activeTab, todayData, futureData, historicalData]);
 
   const clearFilters = useCallback(() => {
     setSelectedChains([]);
