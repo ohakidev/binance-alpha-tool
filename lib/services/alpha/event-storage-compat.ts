@@ -103,6 +103,7 @@ export async function writeLegacyScheduleRecord(
       where: { dedupeKey: args.dedupeKey },
       create: createData,
       update: updateData,
+      select: { id: true },
     });
 
     return { created: !existing };
@@ -120,12 +121,14 @@ export async function writeLegacyScheduleRecord(
     await writer.update({
       where: { id: existing.id },
       data: updateData,
+      select: { id: true },
     });
     return { created: false };
   }
 
   await writer.create({
     data: createData,
+    select: { id: true },
   });
 
   return { created: true };

@@ -206,6 +206,20 @@ export async function GET(request: Request) {
             notIn: ["ENDED", "CANCELLED"],
           },
         },
+        select: {
+          id: true,
+          name: true,
+          token: true,
+          scheduledTime: true,
+          chain: true,
+          points: true,
+          amount: true,
+          description: true,
+          contractAddress: true,
+          type: true,
+          estimatedPrice: true,
+          estimatedValue: true,
+        },
         orderBy: {
           scheduledTime: "asc",
         },
@@ -299,6 +313,7 @@ export async function GET(request: Request) {
             await (prisma as any).airdropSchedule.update({
               where: { id: schedule.id },
               data: { notified: true },
+              select: { id: true },
             });
             notificationSummary.live++;
           } else if (stage === "20m") {

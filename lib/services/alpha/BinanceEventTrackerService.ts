@@ -748,6 +748,7 @@ let hasWarnedLegacyEventFallback = false;
 let hasWarnedCurrentEnrichmentFallback = false;
 let hasWarnedCanonicalEventProbeFailure = false;
 let hasWarnedLegacySyncFallback = false;
+const warnedCurrentSourceFailures = new Set<string>();
 let canonicalEventTableReadinessCache:
   | {
       checkedAt: number;
@@ -860,6 +861,18 @@ function warnLegacySyncFallback(reason: string): void {
   console.warn(
     "[binance-event-tracker] Canonical event persistence is unavailable. Continuing with legacy schedule/airdrop sync only until Prisma schema changes are applied to the database.",
     reason,
+  );
+}
+
+function warnCurrentSourceFailure(source: string, error: unknown): void {
+  if (warnedCurrentSourceFailures.has(source)) {
+    return;
+  }
+
+  warnedCurrentSourceFailures.add(source);
+  console.warn(
+    `[binance-event-tracker] Current enrichment source "${source}" failed; continuing with remaining sources.`,
+    error instanceof Error ? error.message : String(error),
   );
 }
 
@@ -1334,11 +1347,33 @@ async function getCurrentEnrichedApiRows(
   },
   now: Date = new Date(),
 ): Promise<EventApiRow[]> {
-  const [historyLookup, tokens, telegramPosts] = await Promise.all([
+  const [historyResult, tokensResult, telegramResult] = await Promise.allSettled([
     fetchHistoryEnrichmentLookup(),
-    binanceAlphaSource.fetchTokens().catch(() => [] as AlphaToken[]),
-    fetchTelegramAnnouncementRecords().catch(() => [] as OfficialTextRecord[]),
+    binanceAlphaSource.fetchTokens(),
+    fetchTelegramAnnouncementRecords(),
   ]);
+  const historyLookup =
+    historyResult.status === "fulfilled"
+      ? historyResult.value
+      : new Map<string, HistoryEnrichment[]>();
+  const tokens =
+    tokensResult.status === "fulfilled" ? tokensResult.value : ([] as AlphaToken[]);
+  const telegramPosts =
+    telegramResult.status === "fulfilled"
+      ? telegramResult.value
+      : ([] as OfficialTextRecord[]);
+
+  if (historyResult.status === "rejected") {
+    warnCurrentSourceFailure("history-source", historyResult.reason);
+  }
+
+  if (tokensResult.status === "rejected") {
+    warnCurrentSourceFailure("binance-token-list", tokensResult.reason);
+  }
+
+  if (telegramResult.status === "rejected") {
+    warnCurrentSourceFailure("telegram-wallet-mirror", telegramResult.reason);
+  }
   const tokenBySymbol = new Map(
     tokens.map((token) => [token.symbol.toUpperCase(), token]),
   );
