@@ -441,7 +441,7 @@ export function Navigation() {
         />
 
         <div
-          className="backdrop-blur-xl border-t"
+          className="mobile-performance-surface backdrop-blur-xl border-t"
           style={{
             background:
               "linear-gradient(180deg, rgba(10, 10, 12, 0.98) 0%, rgba(3, 3, 5, 0.99) 100%)",
@@ -479,7 +479,7 @@ export function Navigation() {
         transition={{ duration: 0.5, ease: easings.premium }}
       >
         <motion.div
-          className="backdrop-blur-xl border-b transition-all duration-300"
+          className="mobile-performance-surface backdrop-blur-xl border-b transition-all duration-300"
           style={{
             background: isScrolled
               ? "linear-gradient(135deg, rgba(10, 10, 12, 0.98) 0%, rgba(3, 3, 5, 0.99) 100%)"
@@ -551,7 +551,7 @@ export function Navigation() {
           <>
             {/* Backdrop */}
             <motion.div
-              className="md:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+              className="mobile-performance-overlay md:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}

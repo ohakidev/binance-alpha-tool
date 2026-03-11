@@ -15,7 +15,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { endOfMonth } from "date-fns";
+import { endOfMonth } from "date-fns/endOfMonth";
 import { MagicCard } from "@/components/ui/magic-card";
 
 interface CalculatorState {

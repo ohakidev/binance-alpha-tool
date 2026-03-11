@@ -7,10 +7,27 @@
 "use client";
 
 import { memo } from "react";
+import { useMediaQuery, useMounted } from "@/lib/hooks/use-mobile";
 
 interface AnimatedBackgroundProps {
   variant?: "default" | "subtle" | "intense";
   className?: string;
+}
+
+type BackgroundVariantInput = {
+  isMobileViewport: boolean;
+  prefersReducedMotion: boolean;
+};
+
+export function selectBackgroundVariantForViewport({
+  isMobileViewport,
+  prefersReducedMotion,
+}: BackgroundVariantInput): "animated" | "static" {
+  if (isMobileViewport || prefersReducedMotion) {
+    return "static";
+  }
+
+  return "animated";
 }
 
 /**
@@ -21,6 +38,20 @@ export const AnimatedBackground = memo(function AnimatedBackground({
   variant = "default",
   className = "",
 }: AnimatedBackgroundProps) {
+  const mounted = useMounted();
+  const isMobileViewport = useMediaQuery(
+    "(max-width: 767px), (hover: none) and (pointer: coarse)",
+  );
+  const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const backgroundVariant = selectBackgroundVariantForViewport({
+    isMobileViewport,
+    prefersReducedMotion,
+  });
+
+  if (mounted && backgroundVariant === "static") {
+    return <StaticBackground className={className} />;
+  }
+
   const intensityConfig = {
     default: {
       glow1Opacity: "0.08",
@@ -60,7 +91,7 @@ export const AnimatedBackground = memo(function AnimatedBackground({
 
       {/* Animated gold glow - top left */}
       <div
-        className="absolute -top-1/4 -left-1/4 rounded-full animate-glow-1"
+        className="animated-bg-layer animated-bg-layer-1 absolute -top-1/4 -left-1/4 rounded-full animate-glow-1"
         style={{
           width: config.glow1Size,
           height: config.glow1Size,
@@ -72,7 +103,7 @@ export const AnimatedBackground = memo(function AnimatedBackground({
 
       {/* Animated gold glow - bottom right */}
       <div
-        className="absolute -bottom-1/4 -right-1/4 rounded-full animate-glow-2"
+        className="animated-bg-layer animated-bg-layer-2 absolute -bottom-1/4 -right-1/4 rounded-full animate-glow-2"
         style={{
           width: config.glow2Size,
           height: config.glow2Size,
@@ -84,7 +115,7 @@ export const AnimatedBackground = memo(function AnimatedBackground({
 
       {/* Animated gold glow - center */}
       <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full animate-glow-3"
+        className="animated-bg-layer animated-bg-layer-3 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full animate-glow-3"
         style={{
           width: config.glow3Size,
           height: config.glow3Size,

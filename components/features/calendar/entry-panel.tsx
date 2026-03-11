@@ -8,13 +8,16 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Plus, Edit2, Trash2, Calendar, DollarSign } from "lucide-react";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { useIncomeStore } from "@/lib/stores/income-store";
 import { useUserStore } from "@/lib/stores/user-store";
 import { useToast } from "@/lib/hooks/use-toast";
 import { sidePanelVariants, overlayVariants } from "@/lib/animations";
 import { IncomeEntry } from "@/lib/types";
 import { MagicCard } from "@/components/ui/magic-card";
+import { useLanguage } from "@/lib/stores/language-store";
+import { getDateFnsLocale } from "@/lib/i18n/locale";
+import { userManagementCopy } from "@/lib/i18n/route-copy";
 
 interface EntryPanelProps {
   isOpen: boolean;
@@ -24,6 +27,9 @@ interface EntryPanelProps {
 
 export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
   const { success, error } = useToast();
+  const { language } = useLanguage();
+  const copy = userManagementCopy[language];
+  const locale = getDateFnsLocale(language);
   const activeUserId = useUserStore((state) => state.activeUserId);
   const activeUser = useUserStore((state) => state.getActiveUser());
   const { addEntry, updateEntry, deleteEntry, getEntriesByDate } =
@@ -51,13 +57,13 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
     e.preventDefault();
 
     if (!activeUserId || !selectedDate) {
-      error("Please select a user and date");
+      error(copy.selectUserAndDate);
       return;
     }
 
     const amount = parseFloat(formData.amount);
     if (isNaN(amount) || amount <= 0) {
-      error("Please enter a valid amount");
+      error(copy.validAmount);
       return;
     }
 
@@ -69,7 +75,7 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
         category: formData.category,
         notes: formData.notes,
       });
-      success("Entry updated successfully");
+      success(copy.entryUpdated);
       setEditingId(null);
     } else {
       // Add new entry
@@ -81,7 +87,7 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
         category: formData.category,
         notes: formData.notes,
       });
-      success("Entry added successfully");
+      success(copy.entryAdded);
     }
 
     // Reset form
@@ -106,9 +112,9 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this entry?")) {
+    if (confirm(copy.deleteEntryConfirm)) {
       deleteEntry(id);
-      success("Entry deleted");
+      success(copy.entryDeleted);
     }
   };
 
@@ -147,11 +153,11 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
                 <div>
                   <h2 className="text-2xl font-bold flex items-center gap-2">
                     <Calendar className="w-6 h-6 text-primary" />
-                    Income Entries
+                    {copy.incomeEntries}
                   </h2>
                   {selectedDate && (
                     <p className="text-sm text-muted-foreground mt-1">
-                      {format(selectedDate, "EEEE, MMMM d, yyyy")}
+                      {format(selectedDate, "EEEE, MMMM d, yyyy", { locale })}
                     </p>
                   )}
                 </div>
@@ -176,7 +182,7 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
                     <div className="flex-1">
                       <p className="font-medium">{activeUser.username}</p>
                       <p className="text-sm text-muted-foreground">
-                        Today&apos;s Total: ${totalForDay.toFixed(2)}
+                        {copy.todaysTotal}: ${totalForDay.toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -187,7 +193,7 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
               {dateEntries.length > 0 && (
                 <div className="mb-6">
                   <h3 className="text-sm font-medium text-muted-foreground mb-3">
-                    Today&apos;s Entries ({dateEntries.length})
+                    {copy.todaysEntries} ({dateEntries.length})
                   </h3>
                   <div className="space-y-2">
                     {dateEntries.map((entry) => (
@@ -204,7 +210,7 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
                                 className={`inline-block px-2 py-0.5 rounded-full text-xs mt-1 ${categoryColors[entry.category]
                                   }`}
                               >
-                                {entry.category}
+                                {copy.categories[entry.category]}
                               </span>
                             </div>
                             <div className="flex items-center gap-2">
@@ -241,13 +247,12 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                   <Plus className="w-4 h-4" />
-                  {editingId ? "Edit Entry" : "Add New Entry"}
+                  {editingId ? copy.updateEntry : copy.addEntry}
                 </h3>
 
-                {/* Project Name */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
-                    Project Name *
+                    {copy.projectName}
                   </label>
                   <input
                     type="text"
@@ -256,7 +261,7 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
                     onChange={(e) =>
                       setFormData({ ...formData, projectName: e.target.value })
                     }
-                    placeholder="e.g., Zeta Protocol"
+                    placeholder={copy.projectNamePlaceholder}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:border-primary focus:outline-none"
                   />
                 </div>
@@ -264,7 +269,7 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
                 {/* Amount */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
-                    Amount (USD) *
+                    {copy.amountUsd}
                   </label>
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -286,7 +291,7 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
                 {/* Category */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
-                    Category *
+                    {copy.category}
                   </label>
                   <select
                     value={formData.category}
@@ -302,24 +307,24 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
                     }
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:border-primary focus:outline-none"
                   >
-                    <option value="airdrop">Airdrop</option>
-                    <option value="trading">Trading</option>
-                    <option value="staking">Staking</option>
-                    <option value="other">Other</option>
+                    <option value="airdrop">{copy.categories.airdrop}</option>
+                    <option value="trading">{copy.categories.trading}</option>
+                    <option value="staking">{copy.categories.staking}</option>
+                    <option value="other">{copy.categories.other}</option>
                   </select>
                 </div>
 
                 {/* Notes */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
-                    Notes (Optional)
+                    {copy.notesOptional}
                   </label>
                   <textarea
                     value={formData.notes}
                     onChange={(e) =>
                       setFormData({ ...formData, notes: e.target.value })
                     }
-                    placeholder="Additional notes..."
+                    placeholder={copy.notesPlaceholder}
                     rows={3}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:border-primary focus:outline-none resize-none"
                   />
@@ -331,7 +336,7 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
                     type="submit"
                     className="flex-1 px-6 py-3 gradient-gold text-black font-medium rounded-lg hover:glow-gold transition-all"
                   >
-                    {editingId ? "Update Entry" : "Add Entry"}
+                    {editingId ? copy.updateEntry : copy.addEntry}
                   </button>
                   {editingId && (
                     <button
@@ -348,7 +353,7 @@ export function EntryPanel({ isOpen, onClose, selectedDate }: EntryPanelProps) {
                       }}
                       className="px-6 py-3 glass hover:bg-white/10 rounded-lg transition-colors"
                     >
-                      Cancel
+                      {copy.cancel}
                     </button>
                   )}
                 </div>

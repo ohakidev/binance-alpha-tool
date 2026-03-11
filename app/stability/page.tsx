@@ -40,6 +40,9 @@ import {
   Sparkles,
 } from "lucide-react";
 import { LiveIndicator } from "@/components/ui/spinner";
+import { useLanguage } from "@/lib/stores/language-store";
+import { getIntlLocale } from "@/lib/i18n/locale";
+import { stabilityPageCopy } from "@/lib/i18n/route-copy";
 
 // ============= Types =============
 
@@ -86,61 +89,65 @@ interface ApiResponse {
 
 const REFRESH_INTERVAL = 5000;
 
-const stabilityConfig: Record<
-  StabilityLevel,
-  {
-    label: string;
-    icon: React.ElementType;
-    gradient: string;
-    textClass: string;
-    ringClass: string;
-    order: number;
-  }
-> = {
-  STABLE: {
-    label: "Stable",
-    icon: Shield,
-    gradient: "from-emerald-500/20 to-emerald-600/10",
-    textClass: "text-emerald-400",
-    ringClass: "ring-emerald-500/30",
-    order: 1,
-  },
-  MODERATE: {
-    label: "Moderate",
-    icon: AlertTriangle,
-    gradient: "from-amber-500/20 to-amber-600/10",
-    textClass: "text-amber-400",
-    ringClass: "ring-amber-500/30",
-    order: 2,
-  },
-  UNSTABLE: {
-    label: "Unstable",
-    icon: XCircle,
-    gradient: "from-rose-500/20 to-rose-600/10",
-    textClass: "text-rose-400",
-    ringClass: "ring-rose-500/30",
-    order: 3,
-  },
-  NO_TRADE: {
-    label: "No Trade",
-    icon: Info,
-    gradient: "from-slate-500/20 to-slate-600/10",
-    textClass: "text-slate-400",
-    ringClass: "ring-slate-500/30",
-    order: 4,
-  },
-};
+function getStabilityConfig(copy: (typeof stabilityPageCopy)["en"]) {
+  return {
+    STABLE: {
+      label: copy.stable,
+      icon: Shield,
+      gradient: "from-emerald-500/20 to-emerald-600/10",
+      textClass: "text-emerald-400",
+      ringClass: "ring-emerald-500/30",
+      order: 1,
+    },
+    MODERATE: {
+      label: copy.moderate,
+      icon: AlertTriangle,
+      gradient: "from-amber-500/20 to-amber-600/10",
+      textClass: "text-amber-400",
+      ringClass: "ring-amber-500/30",
+      order: 2,
+    },
+    UNSTABLE: {
+      label: copy.unstable,
+      icon: XCircle,
+      gradient: "from-rose-500/20 to-rose-600/10",
+      textClass: "text-rose-400",
+      ringClass: "ring-rose-500/30",
+      order: 3,
+    },
+    NO_TRADE: {
+      label: copy.noTrade,
+      icon: Info,
+      gradient: "from-slate-500/20 to-slate-600/10",
+      textClass: "text-slate-400",
+      ringClass: "ring-slate-500/30",
+      order: 4,
+    },
+  } satisfies Record<
+    StabilityLevel,
+    {
+      label: string;
+      icon: React.ElementType;
+      gradient: string;
+      textClass: string;
+      ringClass: string;
+      order: number;
+    }
+  >;
+}
 
 // ============= Components =============
 
 function StabilityBadge({
   stability,
   compact = false,
+  configMap,
 }: {
   stability: StabilityLevel;
   compact?: boolean;
+  configMap: ReturnType<typeof getStabilityConfig>;
 }) {
-  const config = stabilityConfig[stability];
+  const config = configMap[stability];
   const Icon = config.icon;
 
   return (
@@ -218,6 +225,10 @@ const columnHelper = createColumnHelper<TokenData>();
 // ============= Main Component =============
 
 export default function StabilityPage() {
+  const { language } = useLanguage();
+  const copy = stabilityPageCopy[language];
+  const numberLocale = getIntlLocale(language);
+  const stabilityConfig = useMemo(() => getStabilityConfig(copy), [copy]);
   const [data, setData] = useState<TokenData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -235,7 +246,7 @@ export default function StabilityPage() {
   const columns = useMemo(
     () => [
       columnHelper.accessor("symbol", {
-        header: "Project",
+        header: copy.project,
         cell: (info) => {
           const token = info.row.original;
           const isKoge = token.symbol === "KOGE";
@@ -279,8 +290,13 @@ export default function StabilityPage() {
         },
       }),
       columnHelper.accessor("stability", {
-        header: "Stability",
-        cell: (info) => <StabilityBadge stability={info.getValue()} />,
+        header: copy.stability,
+        cell: (info) => (
+          <StabilityBadge
+            stability={info.getValue()}
+            configMap={stabilityConfig}
+          />
+        ),
         sortingFn: (rowA, rowB) => {
           const orderA = stabilityConfig[rowA.original.stability].order;
           const orderB = stabilityConfig[rowB.original.stability].order;
@@ -288,7 +304,7 @@ export default function StabilityPage() {
         },
       }),
       columnHelper.accessor("spreadBps", {
-        header: "Spread BPS",
+        header: copy.spreadBps,
         cell: (info) => {
           const token = info.row.original;
           const config = stabilityConfig[token.stability];
@@ -303,12 +319,12 @@ export default function StabilityPage() {
                 <span className={`font-bold text-base ${config.textClass}`}>
                   {token.spreadBps.toFixed(2)}
                 </span>
-                <span className="text-xs text-slate-500">bps</span>
+                <span className="text-xs text-slate-500">{copy.bps}</span>
               </div>
               <div className="flex items-center gap-1 mt-0.5">
                 <Activity className="w-3 h-3 text-slate-500" />
                 <span className="text-[10px] text-slate-500">
-                  {token.tradeCount} trades
+                  {token.tradeCount} {copy.trades}
                 </span>
               </div>
             </div>
@@ -317,7 +333,7 @@ export default function StabilityPage() {
         sortingFn: "basic",
       }),
       columnHelper.accessor("fourXDays", {
-        header: "4x Days",
+        header: copy.fourXDays,
         cell: (info) => {
           const days = info.getValue();
           const urgency =
@@ -340,14 +356,16 @@ export default function StabilityPage() {
               >
                 <span className="text-xs font-bold text-white">{days}</span>
               </div>
-              <span className={`text-xs font-medium ${textColor}`}>days</span>
+              <span className={`text-xs font-medium ${textColor}`}>
+                {copy.days}
+              </span>
             </div>
           );
         },
         sortingFn: "basic",
       }),
     ],
-    [],
+    [copy, stabilityConfig],
   );
 
   // Initialize TanStack Table
@@ -443,8 +461,12 @@ export default function StabilityPage() {
             Notification.permission === "granted"
           ) {
             const token = data.find((t) => t.symbol === symbol);
-            new Notification(`🟢 ${symbol} Stable Alert`, {
-              body: `${symbol} has been stable for ${Math.floor(duration)}s! Spread: ${token?.spreadBps.toFixed(2)} bps`,
+            new Notification(copy.stableAlertTitle(symbol), {
+              body: copy.stableAlertBody(
+                symbol,
+                duration,
+                token?.spreadBps ?? 0,
+              ),
               icon: "/favicon.ico",
             });
           }
@@ -495,9 +517,9 @@ export default function StabilityPage() {
             <Sparkles className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 text-amber-400" />
           </div>
           <div className="text-center">
-            <p className="text-slate-300 font-medium">Loading stability data</p>
+            <p className="text-slate-300 font-medium">{copy.loadingTitle}</p>
             <p className="text-slate-500 text-sm mt-1">
-              Analyzing market conditions...
+              {copy.loadingDesc}
             </p>
           </div>
         </div>
@@ -533,17 +555,17 @@ export default function StabilityPage() {
             </div>
             <div>
               <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-                Stability Dashboard
+                {copy.title}
               </h1>
               <div className="flex items-center gap-3 mt-1">
                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 ring-1 ring-emerald-500/30">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   <span className="text-[11px] font-semibold text-emerald-400">
-                    LIVE
+                    {copy.live}
                   </span>
                 </span>
                 <span className="text-sm text-slate-500">
-                  {data.length} tokens tracked
+                  {data.length} {copy.tokensTracked}
                 </span>
                 <LiveIndicator
                   isLive={!isRefreshing}
@@ -631,7 +653,7 @@ export default function StabilityPage() {
               <div className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 ring-1 ring-emerald-500/30 rounded-2xl p-4 backdrop-blur-sm">
                 <div className="flex items-center gap-4 flex-wrap">
                   <span className="text-sm text-emerald-400 font-medium">
-                    🔔 Alert after stable for:
+                    {copy.alertAfterStableFor}:
                   </span>
                   <div className="flex gap-2">
                     {[6, 12, 18, 21, 35, 60].map((sec) => (
@@ -657,7 +679,7 @@ export default function StabilityPage() {
         {/* Summary Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
           <StatCard
-            label="Stable"
+            label={copy.stable}
             value={summary.stable}
             icon={Shield}
             gradient="from-emerald-500/10 to-emerald-600/5"
@@ -665,7 +687,7 @@ export default function StabilityPage() {
             delay={0}
           />
           <StatCard
-            label="Moderate"
+            label={copy.moderate}
             value={summary.moderate}
             icon={AlertTriangle}
             gradient="from-amber-500/10 to-amber-600/5"
@@ -673,7 +695,7 @@ export default function StabilityPage() {
             delay={0.1}
           />
           <StatCard
-            label="Unstable"
+            label={copy.unstable}
             value={summary.unstable}
             icon={XCircle}
             gradient="from-rose-500/10 to-rose-600/5"
@@ -681,7 +703,7 @@ export default function StabilityPage() {
             delay={0.2}
           />
           <StatCard
-            label="Total"
+            label={copy.total}
             value={summary.total}
             icon={Activity}
             gradient="from-slate-500/10 to-slate-600/5"
@@ -786,7 +808,7 @@ export default function StabilityPage() {
                     >
                       <div className="flex flex-col items-center gap-3">
                         <Info className="w-8 h-8 text-slate-600" />
-                        <p className="text-sm">No data available</p>
+                        <p className="text-sm">{copy.noDataAvailable}</p>
                       </div>
                     </td>
                   </tr>
@@ -799,12 +821,12 @@ export default function StabilityPage() {
           <div className="px-4 md:px-6 py-3 bg-slate-800/30 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Auto-refresh every 5s</span>
+              <span>{copy.autoRefreshEvery}</span>
             </div>
             <span>
-              Last update:{" "}
+              {copy.lastUpdate}:{" "}
               {lastUpdate
-                ? new Date(lastUpdate).toLocaleTimeString("en-US", {
+                ? new Date(lastUpdate).toLocaleTimeString(numberLocale, {
                     hour: "2-digit",
                     minute: "2-digit",
                     second: "2-digit",
@@ -827,7 +849,7 @@ export default function StabilityPage() {
           >
             <div className="flex items-center gap-3 text-slate-400">
               <Info className="w-4 h-4" />
-              <span className="text-sm font-medium">Information & Tips</span>
+              <span className="text-sm font-medium">{copy.informationTips}</span>
             </div>
             <ChevronDown
               className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${
@@ -849,41 +871,44 @@ export default function StabilityPage() {
                   <div className="flex gap-3 items-start">
                     <span className="text-emerald-400 text-lg">⚙️</span>
                     <p>
-                      <strong className="text-emerald-400">Criteria:</strong>{" "}
-                      Price range, volume swings, abnormal spikes, short-term
-                      trend analysis.
+                      <strong className="text-emerald-400">
+                        {copy.criteriaTitle}:
+                      </strong>{" "}
+                      {copy.criteriaDesc}
                     </p>
                   </div>
                   <div className="flex gap-3 items-start">
                     <span className="text-amber-400 text-lg">💡</span>
                     <p>
-                      <strong className="text-amber-400">Spread BPS:</strong>{" "}
-                      Standard Deviation of trade prices. Lower = more
-                      consistent = STABLE. {"<"}5 bps = Stable, {"<"}50 bps =
-                      Moderate.
+                      <strong className="text-amber-400">
+                        {copy.spreadTitle}:
+                      </strong>{" "}
+                      {copy.spreadDesc}
                     </p>
                   </div>
                   <div className="flex gap-3 items-start">
                     <span className="text-cyan-400 text-lg">📊</span>
                     <p>
-                      <strong className="text-cyan-400">Sorting:</strong> Click
-                      column headers to sort. KOGE (1x) as baseline → Green
-                      (Stable) → Yellow (Moderate) → Red (Unstable)
+                      <strong className="text-cyan-400">
+                        {copy.sortingTitle}:
+                      </strong>{" "}
+                      {copy.sortingDesc}
                     </p>
                   </div>
                   <div className="flex gap-3 items-start">
                     <span className="text-purple-400 text-lg">🔔</span>
                     <p>
-                      <strong className="text-purple-400">Alerts:</strong> When
-                      enabled, you&apos;ll be notified after continuous
-                      stability. Keep the page in foreground.
+                      <strong className="text-purple-400">
+                        {copy.alertsTitle}:
+                      </strong>{" "}
+                      {copy.alertsDesc}
                     </p>
                   </div>
                   <div className="flex gap-3 items-start pt-2 border-t border-white/5">
                     <span className="text-rose-400 text-lg">⚠️</span>
                     <p className="text-rose-400/80">
-                      <strong>Disclaimer:</strong> Markets are unpredictable.
-                      DYOR; no liability for losses.
+                      <strong>{copy.disclaimerTitle}:</strong>{" "}
+                      {copy.disclaimerDesc}
                     </p>
                   </div>
                 </div>

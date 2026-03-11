@@ -255,6 +255,20 @@ class TelegramService {
     return `${time} \u0E19.`;
   }
 
+  private requireText(value: string | null | undefined, fallback: string): string {
+    const normalized = typeof value === "string" ? value.trim() : "";
+    return normalized || fallback;
+  }
+
+  private normalizeAirdropAlert(airdrop: AirdropAlertData): AirdropAlertData {
+    return {
+      ...airdrop,
+      name: this.requireText(airdrop.name, "Unknown Project"),
+      symbol: this.requireText(airdrop.symbol, "TBA"),
+      chain: this.requireText(airdrop.chain, "BSC"),
+    };
+  }
+
   private getDexscreenerUrl(chain: string, contractAddress?: string): string {
     const dexChain = CHAIN_TO_DEXSCREENER[chain] || chain.toLowerCase();
     if (contractAddress) {
@@ -423,11 +437,12 @@ class TelegramService {
     }
 
     try {
-      const message = this.buildEnhancedAirdropMessage(airdrop);
+      const normalizedAirdrop = this.normalizeAirdropAlert(airdrop);
+      const message = this.buildEnhancedAirdropMessage(normalizedAirdrop);
       const keyboard = this.buildAirdropKeyboard(
-        airdrop.symbol,
-        airdrop.chain,
-        airdrop.contractAddress,
+        normalizedAirdrop.symbol,
+        normalizedAirdrop.chain,
+        normalizedAirdrop.contractAddress,
       );
 
       await this.sendFormattedMessage(message, {
@@ -448,47 +463,48 @@ class TelegramService {
   }
 
   private buildEnhancedAirdropMessage(airdrop: AirdropAlertData): string {
+    const normalizedAirdrop = this.normalizeAirdropAlert(airdrop);
     const lines: string[] = [
       `\u{1F381} <b>Binance Alpha Airdrop Tracker</b>`,
       this.t("newAirdrop"),
       "",
-      `<b>${escapeHtml(airdrop.name)}</b>`,
-      `${this.t("symbol")}: $${escapeHtml(airdrop.symbol)}`,
+      `<b>${escapeHtml(normalizedAirdrop.name)}</b>`,
+      `${this.t("symbol")}: $${escapeHtml(normalizedAirdrop.symbol)}`,
     ];
 
-    if (airdrop.claimStartDate) {
-      const startDate = new Date(airdrop.claimStartDate);
+    if (normalizedAirdrop.claimStartDate) {
+      const startDate = new Date(normalizedAirdrop.claimStartDate);
       lines.push(`${this.t("date")}: ${this.formatThaiDate(startDate)}`);
       lines.push(`${this.t("time")}: ${this.formatThaiTime(startDate)}`);
     }
 
     lines.push("");
 
-    this.appendOptionalLine(lines, this.t("amount"), airdrop.airdropAmount);
+    this.appendOptionalLine(lines, this.t("amount"), normalizedAirdrop.airdropAmount);
 
     const pointsText = this.getPointsText(
-      airdrop.requiredPoints,
-      airdrop.pointsText,
+      normalizedAirdrop.requiredPoints,
+      normalizedAirdrop.pointsText,
     );
     this.appendOptionalLine(lines, "Points", pointsText);
-    this.appendOptionalLine(lines, this.t("slots"), airdrop.slotText);
+    this.appendOptionalLine(lines, this.t("slots"), normalizedAirdrop.slotText);
 
-    if (airdrop.deductPoints && airdrop.deductPoints > 0) {
-      lines.push(`${this.t("deductPoints")}: -${airdrop.deductPoints} pts`);
+    if (normalizedAirdrop.deductPoints && normalizedAirdrop.deductPoints > 0) {
+      lines.push(`${this.t("deductPoints")}: -${normalizedAirdrop.deductPoints} pts`);
     }
 
-    const priceText = this.formatPrice(airdrop.estimatedPrice);
+    const priceText = this.formatPrice(normalizedAirdrop.estimatedPrice);
     this.appendOptionalLine(lines, this.t("price"), priceText);
 
     const valueText = this.formatValue(
-      airdrop.estimatedValue,
-      airdrop.marketCap,
+      normalizedAirdrop.estimatedValue,
+      normalizedAirdrop.marketCap,
     );
     this.appendOptionalLine(lines, this.t("estimatedValue"), valueText);
 
     lines.push("");
-    lines.push(`${this.t("chain")}: #${escapeHtml(airdrop.chain)}`);
-    this.appendContract(lines, airdrop.contractAddress);
+    lines.push(`${this.t("chain")}: #${escapeHtml(normalizedAirdrop.chain)}`);
+    this.appendContract(lines, normalizedAirdrop.contractAddress);
     lines.push(...this.buildFooterLines());
 
     return lines.join("\n");

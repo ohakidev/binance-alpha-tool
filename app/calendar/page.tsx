@@ -19,11 +19,13 @@ import {
   Target,
   Award,
 } from "lucide-react";
-import { format, addMonths, subMonths } from "date-fns";
-import { th, enUS } from "date-fns/locale";
+import { format } from "date-fns/format";
+import { addMonths } from "date-fns/addMonths";
+import { subMonths } from "date-fns/subMonths";
 import { useUserStore } from "@/lib/stores/user-store";
 import { useIncomeStore } from "@/lib/stores/income-store";
 import { useLanguage } from "@/lib/stores/language-store";
+import { getDateFnsLocale } from "@/lib/i18n/locale";
 import { IncomeCalendar } from "@/components/features/calendar/income-calendar";
 import { EntryPanel } from "@/components/features/calendar/entry-panel";
 import { UserSwitcher } from "@/components/features/users/user-switcher";
@@ -114,7 +116,7 @@ export default function CalendarPage() {
     setSelectedDate(new Date());
   };
 
-  const locale = language === "th" ? th : enUS;
+  const locale = getDateFnsLocale(language);
 
   const stats = [
     {

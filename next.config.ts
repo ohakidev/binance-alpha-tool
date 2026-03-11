@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import bundleAnalyzer from "@next/bundle-analyzer";
+import path from "path";
 
 // Bundle analyzer
 const withBundleAnalyzer = bundleAnalyzer({
@@ -69,7 +70,6 @@ const nextConfig: NextConfig = {
       "@tanstack/react-query",
       "@tanstack/react-table",
       "recharts",
-      "date-fns",
       "lodash",
       "@radix-ui/react-dialog",
       "@radix-ui/react-dropdown-menu",
@@ -99,6 +99,7 @@ const nextConfig: NextConfig = {
   // ============================================
 
   turbopack: {
+    root: path.resolve(__dirname),
     rules: {
       "*.svg": {
         loaders: ["@svgr/webpack"],

@@ -14,20 +14,18 @@ import {
   DollarSign,
   TrendingUp,
 } from "lucide-react";
-import {
-  isSameDay,
-  isSameMonth,
-  startOfMonth,
-  endOfMonth,
-  eachDayOfInterval,
-  getDay,
-  addMonths,
-  subMonths,
-  setMonth as setMonthFn,
-  setYear as setYearFn,
-  getYear,
-  getMonth,
-} from "date-fns";
+import { isSameMonth } from "date-fns/isSameMonth";
+import { isSameDay } from "date-fns/isSameDay";
+import { startOfMonth } from "date-fns/startOfMonth";
+import { endOfMonth } from "date-fns/endOfMonth";
+import { eachDayOfInterval } from "date-fns/eachDayOfInterval";
+import { getDay } from "date-fns/getDay";
+import { addMonths } from "date-fns/addMonths";
+import { subMonths } from "date-fns/subMonths";
+import { setMonth as setMonthFn } from "date-fns/setMonth";
+import { setYear as setYearFn } from "date-fns/setYear";
+import { getYear } from "date-fns/getYear";
+import { getMonth } from "date-fns/getMonth";
 import { useIncomeStore } from "@/lib/stores/income-store";
 import { useUserStore } from "@/lib/stores/user-store";
 import { useLanguage } from "@/lib/stores/language-store";

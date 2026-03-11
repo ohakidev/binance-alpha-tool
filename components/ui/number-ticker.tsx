@@ -56,6 +56,11 @@ interface NumberTickerProps {
    * @default 30
    */
   damping?: number;
+  /**
+   * Locale used for number formatting
+   * @default "en-US"
+   */
+  locale?: string;
 }
 
 export function NumberTicker({
@@ -70,6 +75,7 @@ export function NumberTicker({
   formatNumber = true,
   stiffness = 100,
   damping = 30,
+  locale = "en-US",
 }: NumberTickerProps) {
   const ref = useRef<HTMLSpanElement>(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
@@ -116,7 +122,7 @@ export function NumberTicker({
 
   // Format the number
   const formattedValue = formatNumber
-    ? displayValue.toLocaleString("en-US", {
+    ? displayValue.toLocaleString(locale, {
         minimumFractionDigits: decimals,
         maximumFractionDigits: decimals,
       })
