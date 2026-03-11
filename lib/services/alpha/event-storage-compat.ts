@@ -94,10 +94,36 @@ export async function writeLegacyScheduleRecord(
   );
 
   if (capabilities.legacyScheduleHasDedupeKey) {
-    const existing = await writer.findFirst({
+    const existingByDedupeKey = await writer.findFirst({
       where: { dedupeKey: args.dedupeKey },
       select: { id: true },
     });
+
+    if (existingByDedupeKey?.id) {
+      await writer.update({
+        where: { id: existingByDedupeKey.id },
+        data: updateData,
+        select: { id: true },
+      });
+      return { created: false };
+    }
+
+    const existingByLegacyIdentity = await writer.findFirst({
+      where: {
+        token: args.token,
+        scheduledTime: args.scheduledTime,
+      },
+      select: { id: true },
+    });
+
+    if (existingByLegacyIdentity?.id) {
+      await writer.update({
+        where: { id: existingByLegacyIdentity.id },
+        data: updateData,
+        select: { id: true },
+      });
+      return { created: false };
+    }
 
     await writer.upsert({
       where: { dedupeKey: args.dedupeKey },
@@ -106,7 +132,7 @@ export async function writeLegacyScheduleRecord(
       select: { id: true },
     });
 
-    return { created: !existing };
+    return { created: true };
   }
 
   const existing = await writer.findFirst({

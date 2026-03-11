@@ -197,13 +197,15 @@ export const DEFAULT_API_HEADERS: Record<string, string> = {
 
 // ============= API URLs =============
 
+export const BINANCE_ALPHA_DEFAULT_API_URL =
+  "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list";
+
 /**
  * Default API URLs
  */
 export const API_URLS = {
   BINANCE_ALPHA:
-    process.env.BINANCE_ALPHA_API_URL ||
-    "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list",
+    process.env.BINANCE_ALPHA_API_URL || BINANCE_ALPHA_DEFAULT_API_URL,
   HISTORY_SOURCE:
     process.env.EXTERNAL_HISTORY_BASE_URL ||
     process.env.AIRDROP_HISTORY_BASE_URL ||

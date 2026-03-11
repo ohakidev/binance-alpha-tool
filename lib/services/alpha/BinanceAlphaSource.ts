@@ -16,9 +16,14 @@ import {
   normalizeChainName,
   DEFAULT_API_HEADERS,
   API_URLS,
+  BINANCE_ALPHA_DEFAULT_API_URL,
   DEFAULT_TIMEOUT,
   HEALTH_CHECK_TIMEOUT,
 } from "@/lib/constants/alpha.constants";
+
+const BINANCE_ALPHA_DEPRECATED_API_URLS = new Set([
+  "https://www.binance.com/bapi/composite/v1/public/alpha/project/list",
+]);
 
 /**
  * Binance Alpha Data Source
@@ -26,58 +31,42 @@ import {
  */
 export class BinanceAlphaSource implements IAlphaDataSource {
   readonly name = AlphaDataSourceType.BINANCE_ALPHA;
-  readonly priority = 1; // Highest priority
+  readonly priority = 1;
 
   private apiUrl: string;
   private timeout: number;
 
   constructor(options: { apiUrl?: string; timeout?: number } = {}) {
-    this.apiUrl = options.apiUrl || API_URLS.BINANCE_ALPHA;
+    this.apiUrl = this.normalizeApiUrl(options.apiUrl || API_URLS.BINANCE_ALPHA);
     this.timeout = options.timeout || DEFAULT_TIMEOUT;
   }
 
-  /**
-   * Check if Binance Alpha API is available
-   */
-  async isAvailable(): Promise<boolean> {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(
-        () => controller.abort(),
-        HEALTH_CHECK_TIMEOUT,
-      );
-
-      const response = await fetch(this.apiUrl, {
-        method: "GET",
-        headers: DEFAULT_API_HEADERS,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      return response.ok;
-    } catch (error) {
-      console.warn("⚠️ Binance Alpha API not available:", error);
-      return false;
-    }
+  private normalizeApiUrl(url: string): string {
+    return BINANCE_ALPHA_DEPRECATED_API_URLS.has(url)
+      ? BINANCE_ALPHA_DEFAULT_API_URL
+      : url;
   }
 
-  /**
-   * Fetch all tokens from Binance Alpha API
-   */
-  async fetchTokens(): Promise<AlphaToken[]> {
-    console.log("🔍 Fetching from Binance Alpha API...");
+  private getCandidateUrls(): string[] {
+    const urls = [this.apiUrl];
 
+    if (this.apiUrl !== BINANCE_ALPHA_DEFAULT_API_URL) {
+      urls.push(BINANCE_ALPHA_DEFAULT_API_URL);
+    }
+
+    return urls;
+  }
+
+  private async fetchTokensFromUrl(url: string): Promise<AlphaToken[]> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     try {
-      const response = await fetch(this.apiUrl, {
+      const response = await fetch(url, {
         method: "GET",
         headers: DEFAULT_API_HEADERS,
         signal: controller.signal,
       });
-
-      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(
@@ -97,18 +86,72 @@ export class BinanceAlphaSource implements IAlphaDataSource {
         throw new Error("Invalid Binance Alpha API response structure");
       }
 
-      console.log(`✅ Found ${data.data.length} tokens from Binance Alpha API`);
-
       return data.data.map((token) => this.transformToken(token));
     } catch (error) {
-      clearTimeout(timeoutId);
-
       if (error instanceof Error && error.name === "AbortError") {
         throw new Error("Binance Alpha API request timeout");
       }
 
       throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
+  }
+
+  /**
+   * Check if Binance Alpha API is available
+   */
+  async isAvailable(): Promise<boolean> {
+    try {
+      for (const url of this.getCandidateUrls()) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(
+          () => controller.abort(),
+          HEALTH_CHECK_TIMEOUT,
+        );
+
+        try {
+          const response = await fetch(url, {
+            method: "GET",
+            headers: DEFAULT_API_HEADERS,
+            signal: controller.signal,
+          });
+
+          if (response.ok) {
+            return true;
+          }
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      }
+
+      return false;
+    } catch (error) {
+      console.warn("Binance Alpha API not available:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Fetch all tokens from Binance Alpha API
+   */
+  async fetchTokens(): Promise<AlphaToken[]> {
+    console.log("Fetching from Binance Alpha API...");
+    let lastError: unknown = null;
+
+    for (const url of this.getCandidateUrls()) {
+      try {
+        const tokens = await this.fetchTokensFromUrl(url);
+        console.log(`Found ${tokens.length} tokens from Binance Alpha API`);
+        return tokens;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError instanceof Error
+      ? lastError
+      : new Error(String(lastError || "Unknown Binance Alpha API error"));
   }
 
   /**
