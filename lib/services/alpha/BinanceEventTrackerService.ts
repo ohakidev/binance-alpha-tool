@@ -22,6 +22,11 @@ import {
   type OfficialTextRecord,
   type SquarePostRecord,
 } from "@/lib/services/alpha/binance-event-pipeline";
+import {
+  buildEventStorageCapabilitiesFromCatalog,
+  writeLegacyScheduleRecord,
+  type EventStorageCapabilities,
+} from "@/lib/services/alpha/event-storage-compat";
 
 const BINANCE_SQUARE_PROFILE_URL =
   "https://www.binance.com/en/square/profile/BinanceWallet";
@@ -61,6 +66,11 @@ export interface EventSyncStats {
   finalEventCount: number;
   errors: string[];
   newEvents: CanonicalEventRecord[];
+}
+
+interface LegacyUpsertResult {
+  scheduleWritten: boolean;
+  createdSchedule: boolean;
 }
 
 function sanitize(value: string): string {
@@ -527,105 +537,121 @@ function enrichEventWithToken(
 async function upsertSourceHealth(
   sourceKey: string,
   displayName: string,
+  capabilities: EventStorageCapabilities,
   status: "healthy" | "degraded",
   options?: { message?: string; details?: unknown },
 ): Promise<void> {
+  if (!capabilities.canonicalStorageReady) {
+    return;
+  }
+
   const now = new Date();
-  const existing = await (prisma as any).sourceHealth.findUnique({
-    where: { sourceKey },
-  });
+  try {
+    const existing = await (prisma as any).sourceHealth.findUnique({
+      where: { sourceKey },
+    });
 
-  await (prisma as any).sourceHealth.upsert({
-    where: { sourceKey },
-    create: {
-      sourceKey,
-      displayName,
-      status,
-      lastSuccessAt: status === "healthy" ? now : null,
-      lastFailureAt: status === "degraded" ? now : null,
-      lastCheckedAt: now,
-      consecutiveFailures: status === "degraded" ? 1 : 0,
-      message: options?.message || null,
-      details: options?.details ? JSON.stringify(options.details) : null,
-    },
-    update: {
-      displayName,
-      status,
-      lastSuccessAt: status === "healthy" ? now : existing?.lastSuccessAt,
-      lastFailureAt: status === "degraded" ? now : existing?.lastFailureAt,
-      lastCheckedAt: now,
-      consecutiveFailures:
-        status === "degraded" ? (existing?.consecutiveFailures || 0) + 1 : 0,
-      message: options?.message || null,
-      details: options?.details ? JSON.stringify(options.details) : null,
-    },
-  });
-}
-
-async function upsertLegacyRows(event: CanonicalEventRecord): Promise<boolean> {
-  const scheduledTime = event.claimStartAt || event.listingTime;
-  let scheduleWritten = false;
-
-  if (scheduledTime) {
-    await (prisma as any).airdropSchedule.upsert({
-      where: { dedupeKey: event.dedupeKey },
+    await (prisma as any).sourceHealth.upsert({
+      where: { sourceKey },
       create: {
-        dedupeKey: event.dedupeKey,
-        token: event.symbol || event.projectName,
-        name: event.projectName,
-        scheduledTime,
-        endTime:
-          event.sourceRawText.includes("24-hour") && event.claimStartAt
-            ? new Date(event.claimStartAt.getTime() + 24 * 60 * 60 * 1000)
-            : null,
-        points: event.requiredAlphaPoints,
-        deductPoints: event.deductPoints,
-        amount: formatTokenAmount(event),
-        chain: event.chain || "BSC",
-        contractAddress: event.contractAddress,
-        status: mapEventStatusToScheduleStatus(event.status),
-        type: event.eventType === "PRE_TGE" ? "PRETGE" : event.eventType,
-        estimatedPrice: event.latestPrice,
-        estimatedValue: event.estimatedUsdValue,
-        source: event.sourceType,
-        sourceUrl: event.sourceUrl,
-        description: buildDescription(event) || event.sourceRawText,
-        confidence: event.confidence,
-        sourcePublishedAt: event.sourcePublishedAt,
-        isActive: event.status !== "ended",
-        isVerified:
-          event.sourceType === "BINANCE_SQUARE" ||
-          event.sourceType === "BINANCE_ANNOUNCEMENT",
-        notified: false,
+        sourceKey,
+        displayName,
+        status,
+        lastSuccessAt: status === "healthy" ? now : null,
+        lastFailureAt: status === "degraded" ? now : null,
+        lastCheckedAt: now,
+        consecutiveFailures: status === "degraded" ? 1 : 0,
+        message: options?.message || null,
+        details: options?.details ? JSON.stringify(options.details) : null,
       },
       update: {
-        name: event.projectName,
-        scheduledTime,
-        endTime:
-          event.sourceRawText.includes("24-hour") && event.claimStartAt
-            ? new Date(event.claimStartAt.getTime() + 24 * 60 * 60 * 1000)
-            : null,
-        points: event.requiredAlphaPoints,
-        deductPoints: event.deductPoints,
-        amount: formatTokenAmount(event),
-        chain: event.chain || "BSC",
-        contractAddress: event.contractAddress,
-        status: mapEventStatusToScheduleStatus(event.status),
-        type: event.eventType === "PRE_TGE" ? "PRETGE" : event.eventType,
-        estimatedPrice: event.latestPrice,
-        estimatedValue: event.estimatedUsdValue,
-        source: event.sourceType,
-        sourceUrl: event.sourceUrl,
-        description: buildDescription(event) || event.sourceRawText,
-        confidence: event.confidence,
-        sourcePublishedAt: event.sourcePublishedAt,
-        isActive: event.status !== "ended",
-        isVerified:
-          event.sourceType === "BINANCE_SQUARE" ||
-          event.sourceType === "BINANCE_ANNOUNCEMENT",
+        displayName,
+        status,
+        lastSuccessAt: status === "healthy" ? now : existing?.lastSuccessAt,
+        lastFailureAt: status === "degraded" ? now : existing?.lastFailureAt,
+        lastCheckedAt: now,
+        consecutiveFailures:
+          status === "degraded" ? (existing?.consecutiveFailures || 0) + 1 : 0,
+        message: options?.message || null,
+        details: options?.details ? JSON.stringify(options.details) : null,
       },
     });
+  } catch (error) {
+    if (isCanonicalEventStorageError(error)) {
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function upsertLegacyRows(
+  event: CanonicalEventRecord,
+  capabilities: EventStorageCapabilities,
+): Promise<LegacyUpsertResult> {
+  const scheduledTime = event.claimStartAt || event.listingTime;
+  let scheduleWritten = false;
+  let createdSchedule = false;
+
+  if (scheduledTime) {
+    const scheduleDelegate = getPrismaDelegate("airdropSchedule", [
+      "findFirst",
+      "upsert",
+      "create",
+      "update",
+    ]);
+    const scheduleIdentityToken = event.symbol || event.projectName;
+    const scheduleBaseData = {
+      dedupeKey: event.dedupeKey,
+      token: scheduleIdentityToken,
+      name: event.projectName,
+      scheduledTime,
+      endTime:
+        event.sourceRawText.includes("24-hour") && event.claimStartAt
+          ? new Date(event.claimStartAt.getTime() + 24 * 60 * 60 * 1000)
+          : null,
+      points: event.requiredAlphaPoints,
+      deductPoints: event.deductPoints,
+      amount: formatTokenAmount(event),
+      chain: event.chain || "BSC",
+      contractAddress: event.contractAddress,
+      status: mapEventStatusToScheduleStatus(event.status),
+      type: event.eventType === "PRE_TGE" ? "PRETGE" : event.eventType,
+      estimatedPrice: event.latestPrice,
+      estimatedValue: event.estimatedUsdValue,
+      source: event.sourceType,
+      sourceUrl: event.sourceUrl,
+      description: buildDescription(event) || event.sourceRawText,
+      confidence: event.confidence,
+      sourcePublishedAt: event.sourcePublishedAt,
+      isActive: event.status !== "ended",
+      isVerified:
+        event.sourceType === "BINANCE_SQUARE" ||
+        event.sourceType === "BINANCE_ANNOUNCEMENT",
+    };
+
+    const writeResult = await writeLegacyScheduleRecord(
+      scheduleDelegate as {
+        findFirst(args: unknown): Promise<{ id: string } | null>;
+        upsert(args: unknown): Promise<unknown>;
+        create(args: unknown): Promise<unknown>;
+        update(args: unknown): Promise<unknown>;
+      },
+      {
+        dedupeKey: event.dedupeKey,
+        token: scheduleIdentityToken,
+        scheduledTime,
+        createData: {
+          ...scheduleBaseData,
+          notified: false,
+        },
+        updateData: scheduleBaseData,
+      },
+      capabilities,
+    );
+
     scheduleWritten = true;
+    createdSchedule = writeResult.created;
   }
 
   if (event.symbol) {
@@ -670,7 +696,10 @@ async function upsertLegacyRows(event: CanonicalEventRecord): Promise<boolean> {
     }
   }
 
-  return scheduleWritten;
+  return {
+    scheduleWritten,
+    createdSchedule,
+  };
 }
 
 function mapDbEventToApiRow(event: any): EventApiRow {
@@ -718,10 +747,17 @@ function mapCanonicalEventToApiRow(event: CanonicalEventRecord): EventApiRow {
 let hasWarnedLegacyEventFallback = false;
 let hasWarnedCurrentEnrichmentFallback = false;
 let hasWarnedCanonicalEventProbeFailure = false;
+let hasWarnedLegacySyncFallback = false;
 let canonicalEventTableReadinessCache:
   | {
       checkedAt: number;
       exists: boolean;
+    }
+  | null = null;
+let eventStorageCapabilitiesCache:
+  | {
+      checkedAt: number;
+      capabilities: EventStorageCapabilities;
     }
   | null = null;
 
@@ -810,9 +846,127 @@ function warnCanonicalEventProbeFailure(error: unknown): void {
 
   hasWarnedCanonicalEventProbeFailure = true;
   console.warn(
-    "[binance-event-tracker] Canonical event readiness probe failed; attempting the direct canonical read path.",
+    "[binance-event-tracker] Canonical event readiness probe failed; falling back to compatibility safeguards.",
     error instanceof Error ? error.message : String(error),
   );
+}
+
+function warnLegacySyncFallback(reason: string): void {
+  if (hasWarnedLegacySyncFallback) {
+    return;
+  }
+
+  hasWarnedLegacySyncFallback = true;
+  console.warn(
+    "[binance-event-tracker] Canonical event persistence is unavailable. Continuing with legacy schedule/airdrop sync only until Prisma schema changes are applied to the database.",
+    reason,
+  );
+}
+
+function downgradeEventStorageCapabilities(
+  capabilities: EventStorageCapabilities,
+  error: unknown,
+): EventStorageCapabilities {
+  const reason = error instanceof Error ? error.message : String(error);
+  const nextCapabilities: EventStorageCapabilities = {
+    ...capabilities,
+    canonicalStorageReady: false,
+    canonicalStorageReason: reason,
+  };
+
+  eventStorageCapabilitiesCache = {
+    checkedAt: Date.now(),
+    capabilities: nextCapabilities,
+  };
+  canonicalEventTableReadinessCache = {
+    checkedAt: Date.now(),
+    exists: false,
+  };
+
+  return nextCapabilities;
+}
+
+function recordCanonicalSyncFallback(
+  stats: EventSyncStats,
+  capabilities: EventStorageCapabilities,
+): void {
+  const reason =
+    capabilities.canonicalStorageReason ||
+    "Canonical event storage is unavailable for sync.";
+
+  if (!stats.errors.includes(reason)) {
+    stats.errors.push(reason);
+  }
+
+  warnLegacySyncFallback(reason);
+}
+
+async function resolveEventStorageCapabilities(): Promise<EventStorageCapabilities> {
+  const now = Date.now();
+  if (
+    eventStorageCapabilitiesCache &&
+    now - eventStorageCapabilitiesCache.checkedAt <
+      CANONICAL_EVENT_TABLE_READINESS_TTL_MS
+  ) {
+    return eventStorageCapabilitiesCache.capabilities;
+  }
+
+  let delegateErrorMessage: string | null = null;
+  try {
+    ensureCanonicalEventPersistenceReady();
+  } catch (error) {
+    delegateErrorMessage = error instanceof Error ? error.message : String(error);
+  }
+
+  try {
+    const rows = await prisma.$queryRaw<{
+      table_name: string;
+      column_name: string | null;
+    }[]>`
+      SELECT table_name::text AS table_name, NULL::text AS column_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name IN ('airdrop_events', 'event_raw_sources', 'source_health')
+      UNION ALL
+      SELECT table_name::text AS table_name, column_name::text AS column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'airdrop_schedules'
+        AND column_name IN ('dedupeKey', 'confidence', 'sourcePublishedAt')
+    `;
+    const capabilities = buildEventStorageCapabilitiesFromCatalog({
+      tableNames: rows
+        .filter((row) => row.column_name === null)
+        .map((row) => row.table_name),
+      legacyScheduleColumns: rows
+        .filter((row): row is { table_name: string; column_name: string } =>
+          row.column_name !== null
+        )
+        .map((row) => row.column_name),
+      delegateErrorMessage,
+    });
+
+    eventStorageCapabilitiesCache = {
+      checkedAt: now,
+      capabilities,
+    };
+    return capabilities;
+  } catch (error) {
+    warnCanonicalEventProbeFailure(error);
+    const capabilities = buildEventStorageCapabilitiesFromCatalog({
+      tableNames: [],
+      legacyScheduleColumns: [],
+      delegateErrorMessage:
+        delegateErrorMessage ||
+        (error instanceof Error ? error.message : String(error)),
+    });
+
+    eventStorageCapabilitiesCache = {
+      checkedAt: now,
+      capabilities,
+    };
+    return capabilities;
+  }
 }
 
 async function probeCanonicalEventTableExists(): Promise<boolean | null> {
@@ -1248,8 +1402,6 @@ async function getCurrentEnrichedApiRows(
 
 export class BinanceEventTrackerService {
   async syncEvents(now: Date = new Date()): Promise<EventSyncStats> {
-    ensureCanonicalEventPersistenceReady();
-
     const stats: EventSyncStats = {
       squareFetchStatus: "healthy",
       squarePostCount: 0,
@@ -1265,6 +1417,10 @@ export class BinanceEventTrackerService {
       errors: [],
       newEvents: [],
     };
+    let storageCapabilities = await resolveEventStorageCapabilities();
+    if (!storageCapabilities.canonicalStorageReady) {
+      recordCanonicalSyncFallback(stats, storageCapabilities);
+    }
 
     const groupedEvents = new Map<string, EventGroup>();
     const aliasToGroupKey = new Map<string, string>();
@@ -1313,9 +1469,15 @@ export class BinanceEventTrackerService {
       const squareProfileHtml = await fetchHtml(BINANCE_SQUARE_PROFILE_URL);
       squareUrls = parseSquareProfileHtml(squareProfileHtml).slice(0, 12);
       stats.squarePostCount = squareUrls.length;
-      await upsertSourceHealth("square:binance-wallet", "Binance Wallet Square", "healthy", {
-        details: { count: squareUrls.length },
-      });
+      await upsertSourceHealth(
+        "square:binance-wallet",
+        "Binance Wallet Square",
+        storageCapabilities,
+        "healthy",
+        {
+          details: { count: squareUrls.length },
+        },
+      );
     } catch (error) {
       stats.squareFetchStatus = "degraded";
       stats.errors.push(
@@ -1323,9 +1485,15 @@ export class BinanceEventTrackerService {
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      await upsertSourceHealth("square:binance-wallet", "Binance Wallet Square", "degraded", {
-        message: error instanceof Error ? error.message : String(error),
-      });
+      await upsertSourceHealth(
+        "square:binance-wallet",
+        "Binance Wallet Square",
+        storageCapabilities,
+        "degraded",
+        {
+          message: error instanceof Error ? error.message : String(error),
+        },
+      );
     }
 
     for (const squareUrl of squareUrls) {
@@ -1379,6 +1547,7 @@ export class BinanceEventTrackerService {
       await upsertSourceHealth(
         "telegram:binance-wallet",
         "Binance Wallet Announcements",
+        storageCapabilities,
         "healthy",
         {
           details: { count: telegramPosts.length },
@@ -1393,6 +1562,7 @@ export class BinanceEventTrackerService {
       await upsertSourceHealth(
         "telegram:binance-wallet",
         "Binance Wallet Announcements",
+        storageCapabilities,
         "degraded",
         {
           message: error instanceof Error ? error.message : String(error),
@@ -1432,18 +1602,30 @@ export class BinanceEventTrackerService {
     let tokens: AlphaToken[] = [];
     try {
       tokens = await binanceAlphaSource.fetchTokens();
-      await upsertSourceHealth("alpha:token-list", "Binance Alpha Token List", "healthy", {
-        details: { count: tokens.length },
-      });
+      await upsertSourceHealth(
+        "alpha:token-list",
+        "Binance Alpha Token List",
+        storageCapabilities,
+        "healthy",
+        {
+          details: { count: tokens.length },
+        },
+      );
     } catch (error) {
       stats.errors.push(
         `Alpha token fetch failed: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      await upsertSourceHealth("alpha:token-list", "Binance Alpha Token List", "degraded", {
-        message: error instanceof Error ? error.message : String(error),
-      });
+      await upsertSourceHealth(
+        "alpha:token-list",
+        "Binance Alpha Token List",
+        storageCapabilities,
+        "degraded",
+        {
+          message: error instanceof Error ? error.message : String(error),
+        },
+      );
     }
 
     const tokenBySymbol = new Map(
@@ -1490,106 +1672,147 @@ export class BinanceEventTrackerService {
     stats.dedupedEvents = finalGroups.length;
 
     for (const group of finalGroups) {
-      const existing = await (prisma as any).airdropEvent.findUnique({
-        where: { dedupeKey: group.event.dedupeKey },
-      });
-      const persisted = await (prisma as any).airdropEvent.upsert({
-        where: { dedupeKey: group.event.dedupeKey },
-        create: {
-          dedupeKey: group.event.dedupeKey,
-          sourceType: group.event.sourceType,
-          sourceUrl: group.event.sourceUrl,
-          sourcePublishedAt: group.event.sourcePublishedAt,
-          sourceRawText: group.event.sourceRawText,
-          projectName: group.event.projectName,
-          symbol: group.event.symbol,
-          eventType: group.event.eventType,
-          status: group.event.status.toUpperCase(),
-          confidence: group.event.confidence,
-          claimStartAt: group.event.claimStartAt,
-          listingTime: group.event.listingTime,
-          normalizedClaimDay: normalizeClaimDay(
-            group.event.claimStartAt || group.event.listingTime,
-          ),
-          requiredAlphaPoints: group.event.requiredAlphaPoints,
-          deductPoints: group.event.deductPoints,
-          tokenAmount: group.event.tokenAmount,
-          tokenAmountText: formatTokenAmount(group.event),
-          estimatedUsdValue: group.event.estimatedUsdValue,
-          chain: group.event.chain,
-          contractAddress: group.event.contractAddress,
-          alphaId: group.event.alphaId,
-          latestPrice: group.event.latestPrice,
-          onlineAirdrop: group.event.onlineAirdrop,
-          onlineTge: group.event.onlineTge,
-          notes: group.event.notes,
-          phaseLabel: group.event.phaseLabel,
-        },
-        update: {
-          sourceType: group.event.sourceType,
-          sourceUrl: group.event.sourceUrl,
-          sourcePublishedAt: group.event.sourcePublishedAt,
-          sourceRawText: group.event.sourceRawText,
-          projectName: group.event.projectName,
-          symbol: group.event.symbol,
-          eventType: group.event.eventType,
-          status: group.event.status.toUpperCase(),
-          confidence: group.event.confidence,
-          claimStartAt: group.event.claimStartAt,
-          listingTime: group.event.listingTime,
-          normalizedClaimDay: normalizeClaimDay(
-            group.event.claimStartAt || group.event.listingTime,
-          ),
-          requiredAlphaPoints: group.event.requiredAlphaPoints,
-          deductPoints: group.event.deductPoints,
-          tokenAmount: group.event.tokenAmount,
-          tokenAmountText: formatTokenAmount(group.event),
-          estimatedUsdValue: group.event.estimatedUsdValue,
-          chain: group.event.chain,
-          contractAddress: group.event.contractAddress,
-          alphaId: group.event.alphaId,
-          latestPrice: group.event.latestPrice,
-          onlineAirdrop: group.event.onlineAirdrop,
-          onlineTge: group.event.onlineTge,
-          notes: group.event.notes,
-          phaseLabel: group.event.phaseLabel,
-        },
-      });
+      let canonicalWriteSucceeded = false;
 
-      if (existing) {
-        stats.updatedEvents++;
-      } else {
-        stats.insertedEvents++;
-        stats.newEvents.push(group.event);
+      if (storageCapabilities.canonicalStorageReady) {
+        try {
+          const existing = await (prisma as any).airdropEvent.findUnique({
+            where: { dedupeKey: group.event.dedupeKey },
+          });
+          const persisted = await (prisma as any).airdropEvent.upsert({
+            where: { dedupeKey: group.event.dedupeKey },
+            create: {
+              dedupeKey: group.event.dedupeKey,
+              sourceType: group.event.sourceType,
+              sourceUrl: group.event.sourceUrl,
+              sourcePublishedAt: group.event.sourcePublishedAt,
+              sourceRawText: group.event.sourceRawText,
+              projectName: group.event.projectName,
+              symbol: group.event.symbol,
+              eventType: group.event.eventType,
+              status: group.event.status.toUpperCase(),
+              confidence: group.event.confidence,
+              claimStartAt: group.event.claimStartAt,
+              listingTime: group.event.listingTime,
+              normalizedClaimDay: normalizeClaimDay(
+                group.event.claimStartAt || group.event.listingTime,
+              ),
+              requiredAlphaPoints: group.event.requiredAlphaPoints,
+              deductPoints: group.event.deductPoints,
+              tokenAmount: group.event.tokenAmount,
+              tokenAmountText: formatTokenAmount(group.event),
+              estimatedUsdValue: group.event.estimatedUsdValue,
+              chain: group.event.chain,
+              contractAddress: group.event.contractAddress,
+              alphaId: group.event.alphaId,
+              latestPrice: group.event.latestPrice,
+              onlineAirdrop: group.event.onlineAirdrop,
+              onlineTge: group.event.onlineTge,
+              notes: group.event.notes,
+              phaseLabel: group.event.phaseLabel,
+            },
+            update: {
+              sourceType: group.event.sourceType,
+              sourceUrl: group.event.sourceUrl,
+              sourcePublishedAt: group.event.sourcePublishedAt,
+              sourceRawText: group.event.sourceRawText,
+              projectName: group.event.projectName,
+              symbol: group.event.symbol,
+              eventType: group.event.eventType,
+              status: group.event.status.toUpperCase(),
+              confidence: group.event.confidence,
+              claimStartAt: group.event.claimStartAt,
+              listingTime: group.event.listingTime,
+              normalizedClaimDay: normalizeClaimDay(
+                group.event.claimStartAt || group.event.listingTime,
+              ),
+              requiredAlphaPoints: group.event.requiredAlphaPoints,
+              deductPoints: group.event.deductPoints,
+              tokenAmount: group.event.tokenAmount,
+              tokenAmountText: formatTokenAmount(group.event),
+              estimatedUsdValue: group.event.estimatedUsdValue,
+              chain: group.event.chain,
+              contractAddress: group.event.contractAddress,
+              alphaId: group.event.alphaId,
+              latestPrice: group.event.latestPrice,
+              onlineAirdrop: group.event.onlineAirdrop,
+              onlineTge: group.event.onlineTge,
+              notes: group.event.notes,
+              phaseLabel: group.event.phaseLabel,
+            },
+          });
+
+          if (existing) {
+            stats.updatedEvents++;
+          } else {
+            stats.insertedEvents++;
+            stats.newEvents.push(group.event);
+          }
+
+          for (const rawSource of group.rawSources.values()) {
+            await (prisma as any).eventRawSource.upsert({
+              where: { sourceKey: buildSourceKey(rawSource) },
+              create: {
+                eventId: persisted.id,
+                sourceType: rawSource.sourceType,
+                sourceKey: buildSourceKey(rawSource),
+                sourceUrl: rawSource.sourceUrl,
+                sourcePublishedAt: rawSource.sourcePublishedAt,
+                rawText: rawSource.rawText,
+                parsedPayload: rawSource.parsedPayload || null,
+              },
+              update: {
+                eventId: persisted.id,
+                sourcePublishedAt: rawSource.sourcePublishedAt,
+                rawText: rawSource.rawText,
+                parsedPayload: rawSource.parsedPayload || null,
+              },
+            });
+          }
+
+          canonicalWriteSucceeded = true;
+        } catch (error) {
+          if (!isCanonicalEventStorageError(error)) {
+            throw error;
+          }
+
+          storageCapabilities = downgradeEventStorageCapabilities(
+            storageCapabilities,
+            error,
+          );
+          recordCanonicalSyncFallback(stats, storageCapabilities);
+        }
       }
 
-      for (const rawSource of group.rawSources.values()) {
-        await (prisma as any).eventRawSource.upsert({
-          where: { sourceKey: buildSourceKey(rawSource) },
-          create: {
-            eventId: persisted.id,
-            sourceType: rawSource.sourceType,
-            sourceKey: buildSourceKey(rawSource),
-            sourceUrl: rawSource.sourceUrl,
-            sourcePublishedAt: rawSource.sourcePublishedAt,
-            rawText: rawSource.rawText,
-            parsedPayload: rawSource.parsedPayload || null,
-          },
-          update: {
-            eventId: persisted.id,
-            sourcePublishedAt: rawSource.sourcePublishedAt,
-            rawText: rawSource.rawText,
-            parsedPayload: rawSource.parsedPayload || null,
-          },
-        });
-      }
-
-      if (await upsertLegacyRows(group.event)) {
+      const legacyWriteResult = await upsertLegacyRows(
+        group.event,
+        storageCapabilities,
+      );
+      if (legacyWriteResult.scheduleWritten) {
         stats.finalScheduleCount++;
+      }
+      if (!canonicalWriteSucceeded && legacyWriteResult.createdSchedule) {
+        stats.newEvents.push(group.event);
       }
     }
 
-    stats.finalEventCount = await (prisma as any).airdropEvent.count();
+    if (storageCapabilities.canonicalStorageReady) {
+      try {
+        stats.finalEventCount = await (prisma as any).airdropEvent.count();
+      } catch (error) {
+        if (!isCanonicalEventStorageError(error)) {
+          throw error;
+        }
+
+        storageCapabilities = downgradeEventStorageCapabilities(
+          storageCapabilities,
+          error,
+        );
+        recordCanonicalSyncFallback(stats, storageCapabilities);
+        stats.finalEventCount = 0;
+      }
+    }
+
     return stats;
   }
 
