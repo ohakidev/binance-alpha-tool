@@ -1,0 +1,683 @@
+const BINANCE_HOST = "https://www.binance.com";
+
+export type EventSourceType =
+  | "BINANCE_SQUARE"
+  | "BINANCE_WALLET_TELEGRAM"
+  | "BINANCE_ANNOUNCEMENT"
+  | "BINANCE_ALPHA_TOKEN_LIST"
+  | "DATABASE_CACHE";
+
+export type CanonicalEventType = "AIRDROP" | "TGE" | "PRE_TGE";
+
+export type CanonicalEventStatus =
+  | "upcoming"
+  | "today"
+  | "live"
+  | "claimable"
+  | "ended"
+  | "unknown";
+
+export interface SquarePostRecord {
+  sourceType: Extract<EventSourceType, "BINANCE_SQUARE">;
+  sourceUrl: string;
+  sourcePublishedAt: Date | null;
+  sourceRawText: string;
+}
+
+export interface OfficialTextRecord {
+  sourceType: Exclude<EventSourceType, "BINANCE_ALPHA_TOKEN_LIST" | "DATABASE_CACHE">;
+  sourceUrl: string | null;
+  sourcePublishedAt: Date | null;
+  sourceRawText: string;
+}
+
+export interface CanonicalEventRecord {
+  dedupeKey: string;
+  sourceType: EventSourceType;
+  sourceUrl: string | null;
+  sourcePublishedAt: Date | null;
+  sourceRawText: string;
+  projectName: string;
+  symbol: string | null;
+  eventType: CanonicalEventType;
+  status: CanonicalEventStatus;
+  confidence: number;
+  claimStartAt: Date | null;
+  listingTime: Date | null;
+  requiredAlphaPoints: number | null;
+  deductPoints: number | null;
+  tokenAmount: number | null;
+  tokenAmountText: string | null;
+  estimatedUsdValue: number | null;
+  chain: string | null;
+  contractAddress: string | null;
+  alphaId: string | null;
+  latestPrice: number | null;
+  onlineAirdrop: boolean | null;
+  onlineTge: boolean | null;
+  notes: string | null;
+  phaseLabel: string | null;
+}
+
+export interface EventApiRow {
+  id: string;
+  projectName: string;
+  symbol: string | null;
+  chain: string;
+  type: CanonicalEventType;
+  status: CanonicalEventStatus;
+  claimStartDate: string | null;
+  listingTime: string | null;
+  requiredPoints: number | null;
+  deductPoints: number | null;
+  airdropAmount: string | null;
+  estimatedValue: number | null;
+  contractAddress: string | null;
+  scheduleStatus: CanonicalEventStatus | null;
+  sourceUrl: string | null;
+  confidence: number;
+}
+
+const MONTH_PATTERN =
+  "January|February|March|April|May|June|July|August|September|October|November|December";
+const DATE_WITH_OPTIONAL_YEAR_RE = new RegExp(
+  `(${MONTH_PATTERN})\\s+\\d{1,2}(?:,\\s*\\d{4})?(?:,?\\s+at\\s+\\d{1,2}:\\d{2}\\s*\\(UTC\\))?`,
+  "i",
+);
+const DATE_TIME_RE = new RegExp(
+  `(${MONTH_PATTERN})\\s+\\d{1,2},\\s*\\d{4},?\\s+at\\s+\\d{1,2}:\\d{2}\\s*\\(UTC\\)`,
+  "i",
+);
+const RELATIVE_DAY_TIME_RE = /\b(today|tomorrow)\s+at\s+(\d{1,2}):(\d{2})\s*\(UTC\)/i;
+const DATE_ONLY_RE = new RegExp(
+  `(${MONTH_PATTERN})\\s+(\\d{1,2})(?:,\\s*(\\d{4}))?`,
+  "i",
+);
+const SYMBOL_RE = /\(([A-Z0-9]{2,15})\)/;
+const AMOUNT_RE =
+  /(?:claim(?:\s+(?:an?|the))?(?:\s+token)?(?:\s+airdrop)?(?:\s+of)?|receive|users can claim(?:\s+(?:an?|the))?(?:\s+token)?(?:\s+airdrop)?(?:\s+of)?|eligible users can claim(?:\s+(?:an?|the))?(?:\s+token)?(?:\s+airdrop)?(?:\s+of)?|reward(?:s)?(?: pool)?(?: of)?)\s+([\d,]+(?:\.\d+)?)\s+([A-Z0-9]{2,15})\s+tokens?/i;
+const POINTS_RE =
+  /(?:at least|minimum of|have|with)\s+([\d,]+)\s+Binance Alpha Points/i;
+const DEDUCT_RE =
+  /(?:consume|deduct(?:ed)?|spend|cost(?:s)?|priced at)\s+([\d,]+)\s+Binance Alpha Points/i;
+const CLAIM_NOW_RE = /\b(claim now|claimable now|now claimable|can now claim)\b/i;
+const END_RE = /\b(ended|expired|claim period ended|closed)\b/i;
+const LIVE_NOW_RE = /\b(rewards are here|reward(?:s)? are here|is now live|now live)\b/i;
+const BOOSTER_RE = /\bbooster\b/i;
+const PRE_TGE_RE = /\bpre[\s-]?tge\b/i;
+const TGE_RE = /\btge\b/i;
+const AIRDROP_RE = /\bairdrop\b/i;
+const ROUND_RE = /\b(second wave|wave 2|round 2|phase 2|season \d+)\b/i;
+const IGNORED_SYMBOLS = new Set(["UTC"]);
+
+function sanitizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function isGenericListSourceUrl(value: string | null | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  return /\/history\.html(?:[?#].*)?$/i.test(value);
+}
+
+function parsePositiveNumber(value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(value.replace(/,/g, ""));
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function extractSymbol(text: string): string | null {
+  for (const match of text.matchAll(new RegExp(SYMBOL_RE.source, "g"))) {
+    const candidate = match[1]?.toUpperCase();
+    if (candidate && !IGNORED_SYMBOLS.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function startOfUtcDay(date: Date | null): string | null {
+  if (!date) {
+    return null;
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
+function buildUtcDate(
+  year: number,
+  monthName: string,
+  day: number,
+  hour: number = 0,
+  minute: number = 0,
+): Date | null {
+  const monthIndex = new Date(`${monthName} 1, 2000 UTC`).getUTCMonth();
+  if (!Number.isFinite(monthIndex)) {
+    return null;
+  }
+
+  const parsed = new Date(Date.UTC(year, monthIndex, day, hour, minute, 0, 0));
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function sourceTextHasExplicitClockTime(text: string): boolean {
+  return DATE_TIME_RE.test(text) || RELATIVE_DAY_TIME_RE.test(text);
+}
+
+function pickFirstDate(text: string, sourcePublishedAt: Date | null): Date | null {
+  const explicitDateTimeMatch = text.match(
+    new RegExp(
+      `(${MONTH_PATTERN})\\s+(\\d{1,2})(?:,\\s*(\\d{4}))?,?\\s+at\\s+(\\d{1,2}):(\\d{2})\\s*\\(UTC\\)`,
+      "i",
+    ),
+  );
+  if (explicitDateTimeMatch) {
+    const [, monthName, dayText, yearText, hourText, minuteText] =
+      explicitDateTimeMatch;
+    const year =
+      yearText !== undefined
+        ? Number.parseInt(yearText, 10)
+        : sourcePublishedAt?.getUTCFullYear();
+    if (year) {
+      return buildUtcDate(
+        year,
+        monthName,
+        Number.parseInt(dayText, 10),
+        Number.parseInt(hourText, 10),
+        Number.parseInt(minuteText, 10),
+      );
+    }
+  }
+
+  const relativeDayMatch = text.match(RELATIVE_DAY_TIME_RE);
+  if (relativeDayMatch && sourcePublishedAt) {
+    const [, relativeDay, hourText, minuteText] = relativeDayMatch;
+    const parsed = new Date(sourcePublishedAt);
+    parsed.setUTCHours(
+      Number.parseInt(hourText, 10),
+      Number.parseInt(minuteText, 10),
+      0,
+      0,
+    );
+
+    if (relativeDay.toLowerCase() === "tomorrow") {
+      parsed.setUTCDate(parsed.getUTCDate() + 1);
+    }
+
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const dateMatch = text.match(DATE_ONLY_RE);
+  if (dateMatch) {
+    const [, monthName, dayText, yearText] = dateMatch;
+    const year =
+      yearText !== undefined
+        ? Number.parseInt(yearText, 10)
+        : sourcePublishedAt?.getUTCFullYear();
+    if (year) {
+      return buildUtcDate(year, monthName, Number.parseInt(dayText, 10));
+    }
+  }
+
+  if (sourcePublishedAt && LIVE_NOW_RE.test(text)) {
+    return new Date(sourcePublishedAt);
+  }
+
+  return null;
+}
+
+function extractProjectName(text: string, symbol: string | null): string {
+  if (symbol) {
+    const escapedSymbol = symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const beforeSymbol = text.match(
+      new RegExp(
+        `(?:feature|announces?|launch(?:es|ing)?|introduces?|for|second wave of|wave 2 of|round 2 of|phase 2 of)\\s+(.+?)\\s+\\(${escapedSymbol}\\)`,
+        "i",
+      ),
+    );
+    if (beforeSymbol?.[1]) {
+      return sanitizeWhitespace(beforeSymbol[1]).replace(/^(the)\s+/i, "");
+    }
+
+    const bareSymbol = text.match(
+      new RegExp(`(.+?)\\s+\\(${escapedSymbol}\\)`, "i"),
+    );
+    if (bareSymbol?.[1]) {
+      const candidate = sanitizeWhitespace(bareSymbol[1])
+        .replace(/^(Binance (?:Alpha|Wallet) (?:will be the first platform to feature|announces?))\s+/i, "")
+        .replace(/^(the)\s+/i, "");
+      if (candidate && candidate.length <= 80) {
+        return candidate;
+      }
+    }
+  }
+
+  const fallback = text.match(/Binance (?:Wallet|Alpha) announces? the\s+(.+?)(?:\.|,)/i);
+  if (fallback?.[1]) {
+    return sanitizeWhitespace(fallback[1]).replace(/^(the)\s+/i, "");
+  }
+
+  return symbol || "Unknown Project";
+}
+
+function detectPhaseLabel(text: string): string | null {
+  const match = text.match(ROUND_RE);
+  if (!match?.[1]) {
+    return null;
+  }
+
+  return sanitizeWhitespace(match[1]).toLowerCase().replace(/\s+/g, "-");
+}
+
+function deriveEventType(text: string): CanonicalEventType {
+  const hasAirdrop = AIRDROP_RE.test(text);
+  if (BOOSTER_RE.test(text) || PRE_TGE_RE.test(text)) {
+    return "PRE_TGE";
+  }
+
+  if (TGE_RE.test(text) && !hasAirdrop) {
+    return "TGE";
+  }
+
+  return "AIRDROP";
+}
+
+function deriveConfidence(event: {
+  sourceType: EventSourceType;
+  symbol: string | null;
+  claimStartAt: Date | null;
+  listingTime: Date | null;
+  requiredAlphaPoints: number | null;
+  hasExplicitTime: boolean;
+}): number {
+  const hasToken = Boolean(event.symbol);
+  const hasTime = Boolean(event.claimStartAt || event.listingTime);
+  const hasThreshold = event.requiredAlphaPoints !== null;
+
+  if (event.sourceType === "BINANCE_SQUARE") {
+    if (hasToken && hasTime && hasThreshold) return 1;
+    if (hasToken && hasTime && event.hasExplicitTime) return 0.95;
+    if (hasToken) return 0.9;
+    return 0.5;
+  }
+
+  if (event.sourceType === "BINANCE_WALLET_TELEGRAM") {
+    if (hasToken && hasTime && hasThreshold) return 0.96;
+    if (hasToken && hasTime) return 0.92;
+    if (hasToken) return 0.88;
+    return 0.5;
+  }
+
+  if (event.sourceType === "BINANCE_ANNOUNCEMENT") {
+    return 0.85;
+  }
+
+  if (event.sourceType === "BINANCE_ALPHA_TOKEN_LIST") {
+    return hasToken ? 0.7 : 0.5;
+  }
+
+  return 0.5;
+}
+
+export function deriveCanonicalStatus(
+  input: Pick<
+    CanonicalEventRecord,
+    | "eventType"
+    | "claimStartAt"
+    | "listingTime"
+    | "sourceRawText"
+    | "onlineAirdrop"
+    | "onlineTge"
+  >,
+  now: Date = new Date(),
+): CanonicalEventStatus {
+  const text = input.sourceRawText || "";
+
+  if (END_RE.test(text)) {
+    return "ended";
+  }
+
+  if (CLAIM_NOW_RE.test(text) || input.onlineAirdrop) {
+    return "claimable";
+  }
+
+  const effectiveTime = input.claimStartAt || input.listingTime;
+  if (!effectiveTime) {
+    return "unknown";
+  }
+
+  if (effectiveTime.getTime() <= now.getTime()) {
+    const sameUtcDay = startOfUtcDay(effectiveTime) === startOfUtcDay(now);
+    if (
+      sameUtcDay &&
+      !sourceTextHasExplicitClockTime(text) &&
+      !LIVE_NOW_RE.test(text) &&
+      !input.onlineAirdrop &&
+      !input.onlineTge
+    ) {
+      return "today";
+    }
+
+    if (input.eventType === "PRE_TGE" || input.onlineTge) {
+      return "live";
+    }
+
+    return "claimable";
+  }
+
+  const sameUtcDay = startOfUtcDay(effectiveTime) === startOfUtcDay(now);
+  return sameUtcDay ? "today" : "upcoming";
+}
+
+function compareSourcePriority(
+  left: EventSourceType,
+  right: EventSourceType,
+): number {
+  const priority: Record<EventSourceType, number> = {
+    BINANCE_SQUARE: 4,
+    BINANCE_WALLET_TELEGRAM: 3,
+    BINANCE_ANNOUNCEMENT: 2,
+    BINANCE_ALPHA_TOKEN_LIST: 1,
+    DATABASE_CACHE: 0,
+  };
+
+  return priority[left] - priority[right];
+}
+
+function isValuePresent(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return false;
+  }
+
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+
+  return true;
+}
+
+function prefersCandidate(
+  left:
+    | CanonicalEventRecord
+    | EventApiRow,
+  right:
+    | CanonicalEventRecord
+    | EventApiRow,
+): boolean {
+  if (left.confidence !== right.confidence) {
+    return left.confidence > right.confidence;
+  }
+
+  const leftHasAmount = isValuePresent("tokenAmount" in left ? left.tokenAmount : left.airdropAmount);
+  const rightHasAmount = isValuePresent("tokenAmount" in right ? right.tokenAmount : right.airdropAmount);
+  if (leftHasAmount !== rightHasAmount) {
+    return leftHasAmount;
+  }
+
+  const leftHasTime = isValuePresent(
+    "claimStartAt" in left ? left.claimStartAt || left.listingTime : left.claimStartDate || left.listingTime,
+  );
+  const rightHasTime = isValuePresent(
+    "claimStartAt" in right ? right.claimStartAt || right.listingTime : right.claimStartDate || right.listingTime,
+  );
+  if (leftHasTime !== rightHasTime) {
+    return leftHasTime;
+  }
+
+  if ("sourceType" in left && "sourceType" in right) {
+    const sourceDelta = compareSourcePriority(left.sourceType, right.sourceType);
+    if (sourceDelta !== 0) {
+      return sourceDelta > 0;
+    }
+  }
+
+  return true;
+}
+
+export function parseSquareProfileHtml(html: string): string[] {
+  const matches = html.match(/href="([^"]*\/square\/post\/[^"]+)"/gi) || [];
+  const urls = new Set<string>();
+
+  for (const match of matches) {
+    const href = match.match(/href="([^"]+)"/i)?.[1];
+    if (!href) {
+      continue;
+    }
+
+    const absoluteUrl = href.startsWith("http") ? href : `${BINANCE_HOST}${href}`;
+    urls.add(absoluteUrl);
+  }
+
+  return [...urls];
+}
+
+export function buildCanonicalDedupeKey(
+  event: Pick<
+    CanonicalEventRecord,
+    | "sourceUrl"
+    | "symbol"
+    | "projectName"
+    | "eventType"
+    | "claimStartAt"
+    | "listingTime"
+    | "contractAddress"
+    | "phaseLabel"
+  >,
+): string {
+  if (event.sourceUrl) {
+    return `url:${event.sourceUrl}`;
+  }
+
+  const normalizedDay = startOfUtcDay(event.claimStartAt || event.listingTime);
+  const phaseSuffix = event.phaseLabel ? `:${event.phaseLabel}` : "";
+
+  if (event.symbol && normalizedDay) {
+    return `symbol:${event.symbol}:${event.eventType}:${normalizedDay}${phaseSuffix}`;
+  }
+
+  if (event.projectName && normalizedDay) {
+    return `project:${event.projectName.toLowerCase()}:${event.eventType}:${normalizedDay}${phaseSuffix}`;
+  }
+
+  if (event.contractAddress && normalizedDay) {
+    return `contract:${event.contractAddress.toLowerCase()}:${event.eventType}:${normalizedDay}${phaseSuffix}`;
+  }
+
+  return `fallback:${event.projectName.toLowerCase()}:${event.eventType}${phaseSuffix}`;
+}
+
+export function buildCanonicalAliasKeys(
+  event: Pick<
+    CanonicalEventRecord,
+    | "sourceUrl"
+    | "symbol"
+    | "projectName"
+    | "eventType"
+    | "claimStartAt"
+    | "listingTime"
+    | "contractAddress"
+    | "phaseLabel"
+  >,
+): string[] {
+  const normalizedDay = startOfUtcDay(event.claimStartAt || event.listingTime);
+  const phaseSuffix = event.phaseLabel ? `:${event.phaseLabel}` : "";
+  const aliases = new Set<string>();
+
+  if (event.sourceUrl) {
+    aliases.add(`url:${event.sourceUrl}`);
+  }
+
+  if (event.symbol && normalizedDay) {
+    aliases.add(`symbol:${event.symbol}:${event.eventType}:${normalizedDay}${phaseSuffix}`);
+  }
+
+  if (event.projectName && normalizedDay) {
+    aliases.add(
+      `project:${event.projectName.toLowerCase()}:${event.eventType}:${normalizedDay}${phaseSuffix}`,
+    );
+  }
+
+  if (event.contractAddress && normalizedDay) {
+    aliases.add(
+      `contract:${event.contractAddress.toLowerCase()}:${event.eventType}:${normalizedDay}${phaseSuffix}`,
+    );
+  }
+
+  if (aliases.size === 0) {
+    aliases.add(`fallback:${event.projectName.toLowerCase()}:${event.eventType}${phaseSuffix}`);
+  }
+
+  return [...aliases];
+}
+
+export function normalizeOfficialTextToEvent(
+  post: OfficialTextRecord,
+  now: Date = new Date(),
+): CanonicalEventRecord {
+  const sourceRawText = sanitizeWhitespace(post.sourceRawText);
+  const hasExplicitTime = sourceTextHasExplicitClockTime(sourceRawText);
+  const symbol = extractSymbol(sourceRawText);
+  const claimStartAt = pickFirstDate(sourceRawText, post.sourcePublishedAt);
+  const requiredAlphaPoints = parsePositiveNumber(
+    sourceRawText.match(POINTS_RE)?.[1],
+  );
+  const deductPoints = parsePositiveNumber(sourceRawText.match(DEDUCT_RE)?.[1]);
+  const amountMatch = sourceRawText.match(AMOUNT_RE);
+  const tokenAmount = parsePositiveNumber(amountMatch?.[1]);
+  const tokenAmountText =
+    amountMatch?.[1] && amountMatch?.[2]
+      ? `${amountMatch[1].replace(/,/g, "")} ${amountMatch[2]}`
+      : null;
+  const projectName = extractProjectName(sourceRawText, symbol);
+  const eventType = deriveEventType(sourceRawText);
+  const phaseLabel = detectPhaseLabel(sourceRawText);
+  const listingTime = eventType === "TGE" ? claimStartAt : null;
+  const confidence = deriveConfidence({
+    sourceType: post.sourceType,
+    symbol,
+    claimStartAt,
+    listingTime,
+    requiredAlphaPoints,
+    hasExplicitTime,
+  });
+
+  const event: CanonicalEventRecord = {
+    dedupeKey: "",
+    sourceType: post.sourceType,
+    sourceUrl: post.sourceUrl,
+    sourcePublishedAt: post.sourcePublishedAt,
+    sourceRawText,
+    projectName,
+    symbol,
+    eventType,
+    status: "unknown",
+    confidence,
+    claimStartAt,
+    listingTime,
+    requiredAlphaPoints,
+    deductPoints,
+    tokenAmount,
+    tokenAmountText,
+    estimatedUsdValue: null,
+    chain: null,
+    contractAddress: null,
+    alphaId: null,
+    latestPrice: null,
+    onlineAirdrop: null,
+    onlineTge: null,
+    notes: null,
+    phaseLabel,
+  };
+
+  event.status = deriveCanonicalStatus(event, now);
+  event.dedupeKey = buildCanonicalDedupeKey(event);
+
+  return event;
+}
+
+export function normalizeSquarePostToEvent(
+  post: SquarePostRecord,
+  now: Date = new Date(),
+): CanonicalEventRecord {
+  return normalizeOfficialTextToEvent(post, now);
+}
+
+function mergeNotes(
+  preferred: string | null,
+  fallback: string | null,
+): string | null {
+  if (preferred && fallback && preferred !== fallback) {
+    return `${preferred} | ${fallback}`;
+  }
+
+  return preferred || fallback;
+}
+
+export function mergeCanonicalEvents(
+  left: CanonicalEventRecord,
+  right: CanonicalEventRecord,
+  now: Date = new Date(),
+): CanonicalEventRecord {
+  const preferred = prefersCandidate(left, right) ? left : right;
+  const fallback = preferred === left ? right : left;
+
+  const merged: CanonicalEventRecord = {
+    ...preferred,
+    sourcePublishedAt: preferred.sourcePublishedAt || fallback.sourcePublishedAt,
+    claimStartAt: preferred.claimStartAt || fallback.claimStartAt,
+    listingTime: preferred.listingTime || fallback.listingTime,
+    requiredAlphaPoints:
+      preferred.requiredAlphaPoints ?? fallback.requiredAlphaPoints,
+    deductPoints: preferred.deductPoints ?? fallback.deductPoints,
+    tokenAmount: preferred.tokenAmount ?? fallback.tokenAmount,
+    tokenAmountText: preferred.tokenAmountText || fallback.tokenAmountText,
+    estimatedUsdValue:
+      preferred.estimatedUsdValue ?? fallback.estimatedUsdValue,
+    chain: preferred.chain || fallback.chain,
+    contractAddress: preferred.contractAddress || fallback.contractAddress,
+    alphaId: preferred.alphaId || fallback.alphaId,
+    latestPrice: preferred.latestPrice ?? fallback.latestPrice,
+    onlineAirdrop: preferred.onlineAirdrop ?? fallback.onlineAirdrop,
+    onlineTge: preferred.onlineTge ?? fallback.onlineTge,
+    notes: mergeNotes(preferred.notes, fallback.notes),
+    phaseLabel: preferred.phaseLabel || fallback.phaseLabel,
+  };
+
+  merged.status = deriveCanonicalStatus(merged, now);
+  merged.dedupeKey = buildCanonicalDedupeKey(merged);
+
+  return merged;
+}
+
+function buildApiDedupeKey(row: EventApiRow): string {
+  if (row.sourceUrl && !isGenericListSourceUrl(row.sourceUrl)) {
+    return `url:${row.sourceUrl}`;
+  }
+
+  const day = row.claimStartDate ? row.claimStartDate.slice(0, 10) : "unknown";
+  return `symbol:${row.symbol || row.projectName}:${row.type}:${day}`;
+}
+
+export function dedupeEventApiRows(rows: EventApiRow[]): EventApiRow[] {
+  const deduped = new Map<string, EventApiRow>();
+
+  for (const row of rows) {
+    const key = buildApiDedupeKey(row);
+    const existing = deduped.get(key);
+    if (!existing || prefersCandidate(row, existing)) {
+      deduped.set(key, row);
+    }
+  }
+
+  return [...deduped.values()];
+}

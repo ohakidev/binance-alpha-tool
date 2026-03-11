@@ -1,6 +1,9 @@
 # GitHub Actions Cron Job for Airdrop Updates
-# Runs every 5 minutes to sync data from Binance Alpha API
-# Free alternative to Vercel Pro cron jobs
+# Runs every 5 minutes to sync data and trigger Telegram alerts:
+# - about 20 minutes before claim
+# - about 5 minutes before claim
+# - at claim start on the first run after go-live
+
 
 name: Update Airdrops Cron
 
@@ -95,14 +98,15 @@ jobs:
           }
 
           const details = payload.data || {};
+          const notificationSummary = details.notificationSummary || {};
           console.log("Airdrop update completed successfully.");
           console.log(
             JSON.stringify(
               {
-                synced: details.synced ?? null,
-                created: details.created ?? null,
-                updated: details.updated ?? null,
+                insertedEvents: details.insertedEvents ?? null,
+                updatedEvents: details.updatedEvents ?? null,
                 notified: details.notified ?? null,
+                notificationSummary,
                 errors: details.errors ?? null,
                 duration: details.duration ?? null,
               },
@@ -118,6 +122,7 @@ jobs:
             echo "- URL: \`${CRON_URL}\`"
             echo "- HTTP: \`${HTTP_CODE}\`"
             echo "- Result: success"
+            echo "- Telegram summary: staged reminder scan completed"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report Status

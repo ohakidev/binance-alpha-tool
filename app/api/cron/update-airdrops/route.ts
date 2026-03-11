@@ -1,268 +1,134 @@
 /**
- * Auto-Sync Cron Job - Automatic airdrop updates and Telegram notifications
+ * Official Binance Alpha event sync cron.
  *
- * This cron job runs automatically to:
- * 1. Sync data from Binance Alpha API directly to Airdrop table
- * 2. Update airdrop schedules and statuses
- * 3. Send Telegram notifications for new/upcoming airdrops (20 min before)
- * 4. No manual intervention required - fully automated from external history data
- *
- * Vercel Cron Schedule: Every 5 minutes for real-time updates
- * GET /api/cron/update-airdrops
+ * Flow:
+ * 1. Ingest Binance Wallet Square posts
+ * 2. Verify linked official announcements
+ * 3. Enrich with Binance Alpha token metadata and price
+ * 4. Persist canonical events + raw sources
+ * 5. Refresh legacy schedule rows for notifications/UI compatibility
  */
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
-import {
-  fetchHistoryEnrichmentLookup,
-  findBestHistoryEnrichmentMatch,
-  type HistoryEnrichment,
-} from "@/lib/services/alpha/history-enrichment";
+import { binanceEventTrackerService } from "@/lib/services/alpha/BinanceEventTrackerService";
 import {
   telegramService,
   type AirdropReminderData,
 } from "@/lib/services/telegram";
-import { AirdropStatus, AirdropType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 30; // 30 seconds max for Vercel
+export const maxDuration = 30;
 
-// Security: Verify request from Vercel Cron or with secret
+export type ScheduleNotificationStage = "20m" | "5m" | "live";
+
+const SCHEDULE_NOTIFICATION_SOURCE_PREFIX = "airdrop-schedule";
+const SCHEDULE_NOTIFICATION_ACTIONS: ScheduleNotificationStage[] = [
+  "20m",
+  "5m",
+  "live",
+];
+
 function isAuthorized(request: Request): boolean {
-  // Allow Vercel Cron (has specific header)
-  const vercelCron = request.headers.get("x-vercel-cron");
-  if (vercelCron) {
+  if (request.headers.get("x-vercel-cron")) {
     return true;
   }
 
-  // Check authorization header
-  const authHeader = request.headers.get("authorization");
-  if (authHeader === `Bearer ${process.env.CRON_SECRET}`) {
+  if (request.headers.get("authorization") === `Bearer ${process.env.CRON_SECRET}`) {
     return true;
   }
 
-  // Check query parameter (for manual testing)
   const { searchParams } = new URL(request.url);
-  const secret = searchParams.get("secret");
-  if (secret === process.env.CRON_SECRET) {
+  if (searchParams.get("secret") === process.env.CRON_SECRET) {
     return true;
   }
 
-  // Allow in development
-  if (process.env.NODE_ENV === "development") {
-    return true;
-  }
-
-  return false;
+  return process.env.NODE_ENV === "development";
 }
 
-/**
- * Binance Alpha API response types
- */
-interface BinanceAlphaToken {
-  alphaId: string;
-  tokenId: string;
-  symbol: string;
-  name: string;
-  chainId: string;
-  chainName: string;
-  contractAddress: string;
-  price: string;
-  percentChange24h: string;
-  priceHigh24h: string;
-  priceLow24h: string;
-  volume24h: string;
-  marketCap: string;
-  fdv: string;
-  liquidity: string;
-  holders: string;
-  totalSupply: string;
-  circulatingSupply: string;
-  score: number;
-  mulPoint: number;
-  listingTime: number;
-  onlineTge: boolean;
-  onlineAirdrop: boolean;
-  hotTag: boolean;
-  offline: boolean;
-  offsell: boolean;
-  listingCex: boolean;
-  iconUrl: string;
-}
-
-interface BinanceAlphaResponse {
-  code: string;
-  message: string | null;
-  data: BinanceAlphaToken[];
-}
-
-// Chain ID to name mapping
-const CHAIN_MAP: Record<string, string> = {
-  "1": "Ethereum",
-  "56": "BSC",
-  "137": "Polygon",
-  "42161": "Arbitrum",
-  "10": "Optimism",
-  "43114": "Avalanche",
-  "8453": "Base",
-  "324": "zkSync",
-};
-
-function normalizeChainName(chainId: string, chainName: string): string {
-  if (chainId && CHAIN_MAP[chainId]) {
-    return CHAIN_MAP[chainId];
-  }
-  const lower = chainName?.toLowerCase() || "";
-  if (lower.includes("bsc") || lower.includes("bnb")) return "BSC";
-  if (lower.includes("eth")) return "Ethereum";
-  if (lower.includes("sol")) return "Solana";
-  if (lower.includes("arb")) return "Arbitrum";
-  if (lower.includes("base")) return "Base";
-  return chainName || "BSC";
-}
-
-function determineStatus(token: BinanceAlphaToken): AirdropStatus {
-  const now = Date.now();
-  const listingTime = token.listingTime || 0;
-
-  // Offline tokens are always ended
-  if (token.offline || token.offsell) {
-    return "ENDED";
-  }
-
-  // Token not launched yet
-  if (listingTime > now) {
-    return "UPCOMING";
-  }
-
-  // PRIMARY: If onlineAirdrop is true, token is CLAIMABLE regardless of time
-  // This is the key indicator from Binance Alpha API
-  if (token.onlineAirdrop) {
-    return "CLAIMABLE";
-  }
-
-  // If TGE is active but no airdrop, still show as claimable for visibility
-  if (token.onlineTge) {
-    return "CLAIMABLE";
-  }
-
-  // No active airdrop or TGE - mark as ended
-  return "ENDED";
-}
-
-function determineType(token: BinanceAlphaToken): AirdropType {
-  if (token.onlineTge) return "TGE";
-  return "AIRDROP";
-}
-
-/**
- * Fetch tokens directly from Binance Alpha API using fetch API
- * Better compatibility with Vercel serverless functions
- */
-async function fetchBinanceAlphaTokens(): Promise<BinanceAlphaToken[]> {
-  const BINANCE_API_URL =
-    "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list";
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 25000);
-
-  try {
-    const response = await fetch(BINANCE_API_URL, {
-      method: "GET",
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        Accept: "application/json",
-        "Cache-Control": "no-cache",
-      },
-      signal: controller.signal,
-      cache: "no-store",
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`API responded with status: ${response.status}`);
-    }
-
-    const json: BinanceAlphaResponse = await response.json();
-
-    if (json.code !== "000000") {
-      throw new Error(`API Error: ${json.message || "Unknown error"}`);
-    }
-
-    return json.data || [];
-  } catch (error) {
-    clearTimeout(timeoutId);
-
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("Request timeout after 25 seconds");
-    }
-
-    throw error;
-  }
-}
-
-/**
- * Check if a date is within X minutes from now
- */
-function isWithinMinutes(date: Date, minutes: number): boolean {
-  const now = new Date();
-  const targetTime = date.getTime();
-  const diff = targetTime - now.getTime();
-  return diff > 0 && diff <= minutes * 60 * 1000;
-}
-
-/**
- * Check if a date is today
- */
-function isToday(date: Date): boolean {
-  const today = new Date();
-  return (
-    date.getDate() === today.getDate() &&
-    date.getMonth() === today.getMonth() &&
-    date.getFullYear() === today.getFullYear()
-  );
-}
-
-function formatEstimatedAmount(amountText: string | null): string | null {
-  return amountText ? `${amountText}(estimated)` : null;
-}
-
-function buildScheduleDescription(
-  token: BinanceAlphaToken,
-  slotText: string | null,
-): string {
-  const parts = [`${token.name} (${token.symbol})`, `${token.mulPoint}x multiplier`];
-
-  if (slotText) {
-    parts.push(slotText);
-  }
-
-  return parts.join(" - ");
-}
-
-function extractSlotText(description?: string | null): string | null {
-  if (!description) {
+function extractSlotText(value?: string | null): string | null {
+  if (!value) {
     return null;
   }
 
-  const match = description.match(/\b\d+k slots\b/i);
+  const match = value.match(/\b\d+(?:\.\d+)?k?\s+slots\b/i);
   return match?.[0] || null;
 }
 
+function formatAmount(event: {
+  tokenAmountText?: string | null;
+  tokenAmount?: number | null;
+  symbol?: string | null;
+}): string | null {
+  if (event.tokenAmountText) {
+    return event.tokenAmountText;
+  }
+
+  if (
+    event.tokenAmount !== null &&
+    event.tokenAmount !== undefined &&
+    event.symbol
+  ) {
+    const numeric = Number.isInteger(event.tokenAmount)
+      ? String(event.tokenAmount)
+      : event.tokenAmount.toFixed(4).replace(/\.?0+$/, "");
+    return `${numeric} ${event.symbol}`;
+  }
+
+  return null;
+}
+
+export function getScheduleNotificationStage(
+  scheduledTime: Date,
+  now: Date = new Date(),
+): ScheduleNotificationStage | null {
+  const diffMs = scheduledTime.getTime() - now.getTime();
+
+  if (diffMs <= 0 && diffMs > -5 * 60 * 1000) {
+    return "live";
+  }
+
+  if (diffMs > 0 && diffMs <= 5 * 60 * 1000) {
+    return "5m";
+  }
+
+  if (diffMs > 15 * 60 * 1000 && diffMs <= 20 * 60 * 1000) {
+    return "20m";
+  }
+
+  return null;
+}
+
+function getScheduleNotificationSource(scheduleId: string): string {
+  return `${SCHEDULE_NOTIFICATION_SOURCE_PREFIX}:${scheduleId}`;
+}
+
+function getScheduleNotificationAction(stage: ScheduleNotificationStage): string {
+  return `notify-${stage}`;
+}
+
+function getReminderMinutesForStage(stage: ScheduleNotificationStage): number {
+  switch (stage) {
+    case "20m":
+      return 20;
+    case "5m":
+      return 5;
+    case "live":
+      return 0;
+  }
+}
+
 export async function GET(request: Request) {
-  const startTime = Date.now();
-  const results = {
-    synced: 0,
-    created: 0,
-    updated: 0,
-    notified: 0,
-    errors: [] as string[],
+  const startedAt = Date.now();
+  const notificationSummary = {
+    newEvent: 0,
+    reminder20m: 0,
+    reminder5m: 0,
+    live: 0,
+    total: 0,
   };
 
   try {
-    // Verify authorization
     if (!isAuthorized(request)) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
@@ -270,611 +136,270 @@ export async function GET(request: Request) {
       );
     }
 
-    console.log("🤖 [AUTO-SYNC] Starting automatic sync job...");
+    const syncStats = await binanceEventTrackerService.syncEvents();
 
-    // ========================================
-    // STEP 1: Fetch fresh data from Binance Alpha API
-    // ========================================
-    console.log("📡 [STEP 1] Fetching data from Binance Alpha API...");
-
-    let tokens: BinanceAlphaToken[] = [];
-    try {
-      tokens = await fetchBinanceAlphaTokens();
-      results.synced = tokens.length;
-      console.log(`✅ Fetched ${tokens.length} tokens from Binance Alpha`);
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      results.errors.push(`API fetch failed: ${errMsg}`);
-      console.error("❌ Failed to fetch from Binance Alpha:", errMsg);
-      // Don't fail completely - continue with what we have
-    }
-
-    let historyLookup = new Map<string, HistoryEnrichment[]>();
-    try {
-      historyLookup = await fetchHistoryEnrichmentLookup();
-      console.log(`Fetched history enrichment for ${historyLookup.size} tokens`);
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      results.errors.push(`History enrichment unavailable: ${errMsg}`);
-      console.warn("History enrichment unavailable:", errMsg);
-    }
-
-    // ========================================
-    // STEP 2: Sync directly to main Airdrop table
-    // ========================================
-    console.log("📅 [STEP 2] Syncing to main Airdrop table...");
-
-    const now = new Date();
-    const newAirdrops: Array<{
-      token: string;
-      name: string;
-      chain: string;
-      status: AirdropStatus;
-      type: AirdropType;
-      claimStartDate: Date | null;
-      pointText: string | null;
-      points: number | null;
-      amountText: string | null;
-      slotText: string | null;
-      estimatedPrice: number | null;
-      estimatedValue: number | null;
-      contractAddress: string | null;
-      marketCap: number | null;
-    }> = [];
-
-    for (const token of tokens) {
-      // Only process tokens with active airdrops or TGE, or upcoming ones
-      const status = determineStatus(token);
-      const type = determineType(token);
-
-      // Skip ended tokens that aren't interesting
-      if (status === "ENDED" && !token.onlineAirdrop && !token.onlineTge) {
-        continue;
-      }
-
-      try {
-        const enrichment = findBestHistoryEnrichmentMatch(historyLookup, {
-          symbol: token.symbol,
-          chainId: token.chainId,
-          contractAddress: token.contractAddress,
-          listingTime: token.listingTime > 0 ? token.listingTime : null,
-        });
-        const chain = normalizeChainName(token.chainId, token.chainName);
-        const listingTime =
-          token.listingTime > 0
-            ? new Date(token.listingTime)
-            : enrichment?.scheduledAt ?? null;
-        // Don't set a fixed claimEndDate - let onlineAirdrop flag determine if still active
-        // Set a far future date if airdrop is active, otherwise use listing + 30 days as estimate
-        const claimEndDate =
-          token.onlineAirdrop || token.onlineTge
-            ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) // 1 year from now if active
-            : listingTime
-              ? new Date(listingTime.getTime() + 30 * 24 * 60 * 60 * 1000)
-              : null;
-        const pointText = enrichment?.pointsText ?? null;
-        const requiredPoints = enrichment?.pointsValue ?? null;
-        const amountText = enrichment?.amountText ?? null;
-        const slotText = enrichment?.slotText ?? null;
-        const estimatedPrice = enrichment?.estimatedPrice ?? null;
-        const estimatedValue = enrichment?.estimatedValue ?? null;
-        const marketCap =
-          enrichment?.marketCap ?? (parseFloat(token.marketCap || "0") || null);
-        const description = [
-          `${token.name} (${token.symbol}) on ${chain}. Alpha ID: ${token.alphaId}. Point Multiplier: ${token.mulPoint}x`,
-          pointText ? `Points: ${pointText}` : null,
-          amountText ? `Amount: ${amountText}` : null,
-          slotText ? `Slots: ${slotText}` : null,
-          estimatedPrice ? `DEX Price: $${estimatedPrice}` : null,
-        ]
-          .filter(Boolean)
-          .join(" ");
-
-        const airdropData = {
-          name: token.name,
-          chain,
-          contractAddress: token.contractAddress || null,
-          airdropAmount: amountText,
-          claimStartDate: listingTime,
-          claimEndDate,
-          requiredPoints,
-          deductPoints: null,
-          type,
-          status,
-          estimatedValue,
-          description,
-          eligibility: JSON.stringify([
-            "Binance Alpha User",
-            pointText
-              ? `Points: ${pointText}`
-              : token.score > 0
-                ? `Alpha Score: ${token.score}`
-                : null,
-          ]),
-          requirements: JSON.stringify(
-            [
-              enrichment ? "External history data" : "Binance Alpha API",
-              pointText ? `Points: ${pointText}` : "",
-              amountText ? `Amount: ${amountText}` : "",
-              slotText ? `Slots: ${slotText}` : "",
-              `Point Multiplier: ${token.mulPoint}x`,
-              token.onlineTge ? "TGE Active" : "",
-              token.onlineAirdrop ? "Airdrop Active" : "",
-            ].filter(Boolean),
-          ),
-          verified: true,
-          isActive: status !== "ENDED",
-          multiplier: token.mulPoint || 1,
-          isBaseline: token.mulPoint === 1,
-          logoUrl: token.iconUrl || null,
-        };
-
-        // Check if exists by token symbol (unique constraint)
-        const existing = await prisma.airdrop.findUnique({
-          where: { token: token.symbol },
-        });
-
-        if (existing) {
-          // Update existing - check if significant changes
-          const hasChanges =
-            existing.status !== status ||
-            existing.estimatedValue !== estimatedValue ||
-            existing.name !== token.name ||
-            existing.requiredPoints !== requiredPoints ||
-            existing.airdropAmount !== amountText ||
-            existing.description !== description;
-
-          if (hasChanges) {
-            await prisma.airdrop.update({
-              where: { id: existing.id },
-              data: {
-                ...airdropData,
-                updatedAt: new Date(),
-              },
-            });
-            results.updated++;
-          }
-        } else {
-          // Create new
-          await prisma.airdrop.create({
-            data: {
-              token: token.symbol,
-              ...airdropData,
-            },
-          });
-          results.created++;
-
-          // Track new airdrops for notifications
-          if (status === "CLAIMABLE" || status === "UPCOMING") {
-            newAirdrops.push({
-              token: token.symbol,
-              name: token.name,
-              chain,
-              status,
-              type,
-              claimStartDate: listingTime,
-              pointText,
-              points: requiredPoints,
-              amountText,
-              slotText,
-              estimatedPrice,
-              estimatedValue,
-              contractAddress: token.contractAddress || null,
-              marketCap,
-            });
-          }
-        }
-      } catch (error) {
-        const errMsg = error instanceof Error ? error.message : String(error);
-        // Don't spam errors for duplicates
-        if (!errMsg.includes("Unique constraint")) {
-          results.errors.push(`Token ${token.symbol}: ${errMsg}`);
-        }
-      }
-    }
-
-    console.log(
-      `✅ Airdrop table synced: ${results.created} created, ${results.updated} updated`,
-    );
-
-    // ========================================
-    // STEP 3: Also update AirdropSchedule for detailed tracking
-    // ========================================
-    console.log("📅 [STEP 3] Updating AirdropSchedule table...");
-
-    for (const token of tokens) {
-      if (!token.onlineAirdrop && !token.onlineTge) {
-        continue;
-      }
-
-      try {
-        const enrichment = findBestHistoryEnrichmentMatch(historyLookup, {
-          symbol: token.symbol,
-          chainId: token.chainId,
-          contractAddress: token.contractAddress,
-          listingTime: token.listingTime > 0 ? token.listingTime : null,
-        });
-        const chain = normalizeChainName(token.chainId, token.chainName);
-        const scheduledTime =
-          token.listingTime > 0
-            ? new Date(token.listingTime)
-            : enrichment?.scheduledAt ?? new Date(now.getTime() + 3600000);
-        const endTime = token.listingTime
-          ? new Date(token.listingTime + 7 * 24 * 60 * 60 * 1000)
-          : null;
-        const slotText = enrichment?.slotText ?? null;
-
-        // Determine schedule status
-        let scheduleStatus = "UPCOMING";
-        if (endTime && now > endTime) {
-          scheduleStatus = "ENDED";
-        } else if (now >= scheduledTime) {
-          scheduleStatus = "LIVE";
-        } else if (isToday(scheduledTime)) {
-          scheduleStatus = "TODAY";
-        }
-
-        const scheduleData = {
-          token: token.symbol,
-          name: token.name,
-          scheduledTime,
-          endTime,
-          points: enrichment?.pointsValue ?? null,
-          deductPoints: null,
-          amount: enrichment?.amountText ?? null,
-          chain,
-          contractAddress: token.contractAddress || null,
-          status: scheduleStatus,
-          type: token.onlineTge ? "TGE" : "AIRDROP",
-          estimatedPrice: enrichment?.estimatedPrice ?? null,
-          estimatedValue: enrichment?.estimatedValue ?? null,
-          source: enrichment ? "external-history" : "binance-alpha",
-          sourceUrl: enrichment?.sourceUrl ?? null,
-          logoUrl: token.iconUrl || null,
-          description: buildScheduleDescription(token, slotText),
-          isActive: !token.offline,
-          isVerified: true,
-        };
-
-        // Use upsert with unique constraint on [token, scheduledTime]
-        await (prisma as any).airdropSchedule.upsert({
-          where: {
-            token_scheduledTime: {
-              token: token.symbol,
-              scheduledTime,
-            },
-          },
-          update: {
-            ...scheduleData,
-            updatedAt: new Date(),
-          },
-          create: scheduleData,
-        });
-      } catch (error) {
-        // Silently handle schedule errors - main table is more important
-        console.warn(`Schedule update warning for ${token.symbol}:`, error);
-      }
-    }
-
-    // ========================================
-    // STEP 4: Update statuses based on time
-    // ========================================
-    console.log("⏰ [STEP 4] Updating statuses based on time...");
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Update main Airdrop table statuses
-    // UPCOMING -> CLAIMABLE (if listing time has passed)
-    await prisma.airdrop.updateMany({
-      where: {
-        status: "UPCOMING",
-        claimStartDate: { lte: now },
-        isActive: true,
-      },
-      data: { status: "CLAIMABLE" },
+    console.log("[cron:update-airdrops] source fetch", {
+      squareFetchStatus: syncStats.squareFetchStatus,
+      squarePostCount: syncStats.squarePostCount,
+    });
+    console.log("[cron:update-airdrops] parse", {
+      success: syncStats.parsedSuccessCount,
+      failure: syncStats.parseFailureCount,
+    });
+    console.log("[cron:update-airdrops] persistence", {
+      inserted: syncStats.insertedEvents,
+      updated: syncStats.updatedEvents,
+      deduped: syncStats.dedupedEvents,
+      enrichmentSuccess: syncStats.enrichmentSuccessCount,
+      enrichmentFailure: syncStats.enrichmentFailureCount,
+      finalScheduleCount: syncStats.finalScheduleCount,
     });
 
-    // NOTE: We don't auto-mark CLAIMABLE -> ENDED based on claimEndDate anymore
-    // The status is determined by onlineAirdrop flag from API during sync
-    // This prevents active airdrops from being incorrectly marked as ended
+    for (const event of syncStats.newEvents) {
+      if (!["upcoming", "today", "live", "claimable"].includes(event.status)) {
+        continue;
+      }
 
-    // Also update schedule statuses
-    try {
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-
-      // UPCOMING -> TODAY
-      await (prisma as any).airdropSchedule.updateMany({
-        where: {
-          status: "UPCOMING",
-          scheduledTime: { gte: today, lt: tomorrow },
-          isActive: true,
-        },
-        data: { status: "TODAY" },
-      });
-
-      // TODAY/UPCOMING -> LIVE
-      await (prisma as any).airdropSchedule.updateMany({
-        where: {
-          status: { in: ["UPCOMING", "TODAY"] },
-          scheduledTime: { lte: now },
-          isActive: true,
-        },
-        data: { status: "LIVE" },
-      });
-
-      // LIVE -> ENDED
-      await (prisma as any).airdropSchedule.updateMany({
-        where: {
-          status: "LIVE",
-          endTime: { lte: now },
-          isActive: true,
-        },
-        data: { status: "ENDED" },
-      });
-    } catch (error) {
-      console.warn("Schedule status update warning:", error);
-    }
-
-    // ========================================
-    // STEP 5: Send Telegram notifications
-    // ========================================
-    console.log("📤 [STEP 5] Sending Telegram notifications...");
-
-    // 5a. Notify for NEW airdrops (just discovered)
-    for (const airdrop of newAirdrops) {
       try {
-        // No end time in notifications - only start date/time
         const sent = await telegramService.sendAirdropAlert({
-          name: airdrop.name,
-          symbol: airdrop.token,
-          chain: airdrop.chain,
-          status: airdrop.status.toLowerCase(),
-          claimStartDate: airdrop.claimStartDate ?? undefined,
-          // Removed claimEndDate - user requested no end time
-          estimatedPrice: airdrop.estimatedPrice ?? undefined,
-          estimatedValue: airdrop.estimatedValue ?? undefined,
-          airdropAmount: formatEstimatedAmount(airdrop.amountText) ?? undefined,
-          pointsText: airdrop.pointText ?? undefined,
-          requiredPoints: airdrop.points ?? undefined,
-          slotText: airdrop.slotText ?? undefined,
-          contractAddress: airdrop.contractAddress ?? undefined,
-          marketCap: airdrop.marketCap ?? undefined,
+          name: event.projectName,
+          symbol: event.symbol || "UNKNOWN",
+          chain: event.chain || "BSC",
+          status: event.status,
+          claimStartDate: event.claimStartAt || event.listingTime || undefined,
+          estimatedPrice: event.latestPrice ?? undefined,
+          estimatedValue: event.estimatedUsdValue ?? undefined,
+          airdropAmount: formatAmount(event) ?? undefined,
+          requiredPoints: event.requiredAlphaPoints ?? undefined,
+          pointsText:
+            event.requiredAlphaPoints !== null &&
+            event.requiredAlphaPoints !== undefined
+              ? String(event.requiredAlphaPoints)
+              : undefined,
+          deductPoints: event.deductPoints ?? undefined,
+          slotText: extractSlotText(event.sourceRawText) ?? undefined,
+          contractAddress: event.contractAddress ?? undefined,
         });
 
         if (sent) {
-          results.notified++;
-          console.log(`📱 NEW airdrop notification sent: ${airdrop.token}`);
+          notificationSummary.newEvent++;
+          notificationSummary.total++;
         }
       } catch (error) {
-        console.error(`Failed to notify for ${airdrop.token}:`, error);
+        console.error("[cron:update-airdrops] new-event notification failed", {
+          sourceUrl: event.sourceUrl,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 
-    // 5b. Notify for airdrops starting in 20 minutes (history-style reminder)
     try {
-      const upcomingNotifications = await (
-        prisma as any
-      ).airdropSchedule.findMany({
+      const now = new Date();
+      const schedules = await (prisma as any).airdropSchedule.findMany({
         where: {
           scheduledTime: {
-            gte: now,
-            lte: new Date(now.getTime() + 25 * 60 * 1000),
+            gte: new Date(now.getTime() - 5 * 60 * 1000),
+            lte: new Date(now.getTime() + 20 * 60 * 1000),
           },
-          notified: false,
           isActive: true,
-          status: { in: ["UPCOMING", "TODAY"] },
+          status: {
+            notIn: ["ENDED", "CANCELLED"],
+          },
+        },
+        orderBy: {
+          scheduledTime: "asc",
         },
       });
 
-      for (const schedule of upcomingNotifications) {
-        if (isWithinMinutes(schedule.scheduledTime, 25)) {
-          try {
-            const minutesUntil = Math.round(
-              (schedule.scheduledTime.getTime() - now.getTime()) / 60000,
-            );
+      const deliveredNotificationKeys = new Set<string>();
+      if (schedules.length > 0) {
+        const syncLogs = await (prisma as any).syncLog.findMany({
+          where: {
+            source: {
+              in: schedules.map((schedule: { id: string }) =>
+                getScheduleNotificationSource(schedule.id),
+              ),
+            },
+            action: {
+              in: SCHEDULE_NOTIFICATION_ACTIONS.map(getScheduleNotificationAction),
+            },
+            success: true,
+          },
+          select: {
+            source: true,
+            action: true,
+          },
+        });
 
-            const reminderData: AirdropReminderData = {
-              name: schedule.name,
-              symbol: schedule.token,
-              scheduledTime: schedule.scheduledTime,
-              minutesUntil,
-              chain: schedule.chain,
-              points: schedule.points,
-              amount: schedule.amount,
-              slotText: extractSlotText(schedule.description),
-              contractAddress: schedule.contractAddress,
-              type: schedule.type,
-              estimatedPrice: schedule.estimatedPrice ?? null,
-              estimatedValue: schedule.estimatedValue ?? null,
-              marketCap: schedule.estimatedPrice
-                ? schedule.estimatedPrice * 1000000
-                : null, // Rough estimate
-            };
-
-            const sent =
-              await telegramService.sendAirdropReminder(reminderData);
-
-            if (sent) {
-              await (prisma as any).airdropSchedule.update({
-                where: { id: schedule.id },
-                data: { notified: true },
-              });
-              results.notified++;
-              console.log(
-                `📱 Reminder sent: ${schedule.token} (${minutesUntil}m)`,
-              );
-            }
-          } catch (error) {
-            console.error(
-              `Failed to send reminder for ${schedule.token}:`,
-              error,
-            );
-          }
+        for (const log of syncLogs) {
+          deliveredNotificationKeys.add(`${log.source}:${log.action}`);
         }
       }
-    } catch (error) {
-      console.warn("Reminder notifications warning:", error);
-    }
 
-    // 5c. Notify for airdrops that just went LIVE
-    try {
-      const justLive = await (prisma as any).airdropSchedule.findMany({
-        where: {
-          status: "LIVE",
-          notified: false,
-          scheduledTime: {
-            gte: new Date(now.getTime() - 15 * 60 * 1000), // 15 minutes window for better coverage
-            lte: now,
-          },
-          isActive: true,
-        },
-      });
+      for (const schedule of schedules) {
+        const stage = getScheduleNotificationStage(schedule.scheduledTime, now);
+        if (!stage) {
+          continue;
+        }
 
-      for (const schedule of justLive) {
+        const notificationSource = getScheduleNotificationSource(schedule.id);
+        const notificationAction = getScheduleNotificationAction(stage);
+        const notificationKey = `${notificationSource}:${notificationAction}`;
+
+        if (deliveredNotificationKeys.has(notificationKey)) {
+          continue;
+        }
+
+        const payload: AirdropReminderData = {
+          name: schedule.name,
+          symbol: schedule.token,
+          scheduledTime: schedule.scheduledTime,
+          minutesUntil: getReminderMinutesForStage(stage),
+          chain: schedule.chain,
+          points: schedule.points,
+          amount: schedule.amount,
+          slotText: extractSlotText(schedule.description),
+          contractAddress: schedule.contractAddress,
+          type: schedule.type,
+          estimatedPrice: schedule.estimatedPrice ?? null,
+          estimatedValue: schedule.estimatedValue ?? null,
+          marketCap: null,
+        };
+
         try {
-          const liveData: AirdropReminderData = {
-            name: schedule.name,
-            symbol: schedule.token,
-            scheduledTime: schedule.scheduledTime,
-            minutesUntil: 0,
-            chain: schedule.chain,
-            points: schedule.points,
-            amount: schedule.amount,
-            slotText: extractSlotText(schedule.description),
-            contractAddress: schedule.contractAddress,
-            type: schedule.type,
-            estimatedPrice: schedule.estimatedPrice ?? null,
-            estimatedValue: schedule.estimatedValue ?? null,
-            marketCap: schedule.estimatedPrice
-              ? schedule.estimatedPrice * 1000000
-              : null, // Rough estimate
-          };
+          const sent = stage === "live"
+            ? await telegramService.sendAirdropLive(payload)
+            : await telegramService.sendAirdropReminder(payload);
 
-          await telegramService.sendAirdropLive(liveData);
+          if (!sent) {
+            continue;
+          }
 
-          await (prisma as any).airdropSchedule.update({
-            where: { id: schedule.id },
-            data: { notified: true },
+          await (prisma as any).syncLog.create({
+            data: {
+              source: notificationSource,
+              action: notificationAction,
+              success: true,
+              tokensCount: 1,
+              created: 0,
+              updated: 0,
+              errors: 0,
+              duration: 0,
+              details: JSON.stringify({
+                scheduleId: schedule.id,
+                symbol: schedule.token,
+                scheduledTime: schedule.scheduledTime.toISOString(),
+                stage,
+              }),
+            },
           });
-          results.notified++;
-          console.log(`📱 LIVE notification sent: ${schedule.token}`);
+          deliveredNotificationKeys.add(notificationKey);
+
+          if (stage === "live") {
+            await (prisma as any).airdropSchedule.update({
+              where: { id: schedule.id },
+              data: { notified: true },
+            });
+            notificationSummary.live++;
+          } else if (stage === "20m") {
+            notificationSummary.reminder20m++;
+          } else {
+            notificationSummary.reminder5m++;
+          }
+
+          notificationSummary.total++;
         } catch (error) {
-          console.error(
-            `Failed to send live notification for ${schedule.token}:`,
-            error,
-          );
+          console.error("[cron:update-airdrops] schedule notification failed", {
+            scheduleId: schedule.id,
+            stage,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
     } catch (error) {
-      console.warn("Live notifications warning:", error);
+      console.warn("[cron:update-airdrops] reminder/live notifications degraded", {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
-    // ========================================
-    // STEP 6: Log sync result
-    // ========================================
-    const duration = Date.now() - startTime;
+    const duration = Date.now() - startedAt;
 
     try {
       await (prisma as any).syncLog.create({
         data: {
-          source: "cron-auto-sync",
-          action: "full-sync",
-          success: results.errors.length === 0,
-          tokensCount: results.synced,
-          created: results.created,
-          updated: results.updated,
-          errors: results.errors.length,
+          source: "official-binance-event-tracker",
+          action: "sync",
+          success: syncStats.errors.length === 0,
+          tokensCount: syncStats.squarePostCount,
+          created: syncStats.insertedEvents,
+          updated: syncStats.updatedEvents,
+          errors: syncStats.errors.length,
           duration,
           details: JSON.stringify({
-            notified: results.notified,
-            errors: results.errors.slice(0, 10), // Limit error details
+            squareFetchStatus: syncStats.squareFetchStatus,
+            parsedSuccessCount: syncStats.parsedSuccessCount,
+            parseFailureCount: syncStats.parseFailureCount,
+            dedupedEvents: syncStats.dedupedEvents,
+            enrichmentSuccessCount: syncStats.enrichmentSuccessCount,
+            enrichmentFailureCount: syncStats.enrichmentFailureCount,
+            finalScheduleCount: syncStats.finalScheduleCount,
+            finalEventCount: syncStats.finalEventCount,
+            notificationSummary,
+            errors: syncStats.errors.slice(0, 20),
           }),
         },
       });
     } catch (error) {
-      console.error("Failed to log sync:", error);
+      console.error("[cron:update-airdrops] sync log write failed", error);
     }
 
-    // ========================================
-    // STEP 7: Cleanup old data
-    // ========================================
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
     try {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 30);
       await (prisma as any).airdropSchedule.deleteMany({
         where: {
           status: "ENDED",
-          scheduledTime: { lt: thirtyDaysAgo },
+          scheduledTime: { lt: cutoff },
         },
       });
     } catch (error) {
-      console.warn("Cleanup warning:", error);
+      console.warn("[cron:update-airdrops] cleanup degraded", error);
     }
-
-    // Get final stats
-    const airdropStats = await prisma.airdrop.groupBy({
-      by: ["status"],
-      _count: { status: true },
-    });
-
-    const finalStats = {
-      upcoming: 0,
-      claimable: 0,
-      ended: 0,
-      total: 0,
-    };
-
-    airdropStats.forEach((s) => {
-      switch (s.status) {
-        case "UPCOMING":
-          finalStats.upcoming = s._count.status;
-          break;
-        case "CLAIMABLE":
-          finalStats.claimable = s._count.status;
-          break;
-        case "ENDED":
-          finalStats.ended = s._count.status;
-          break;
-      }
-      finalStats.total += s._count.status;
-    });
-
-    console.log("✅ [AUTO-SYNC] Completed in", duration, "ms");
-    console.log("📊 Stats:", finalStats);
-    console.log("📱 Notifications sent:", results.notified);
 
     return NextResponse.json({
       success: true,
-      message: "Auto-sync completed successfully",
       data: {
         duration,
-        synced: results.synced,
-        created: results.created,
-        updated: results.updated,
-        notified: results.notified,
-        errors: results.errors.length,
-        stats: finalStats,
+        squareFetchStatus: syncStats.squareFetchStatus,
+        squarePostCount: syncStats.squarePostCount,
+        parsedSuccessCount: syncStats.parsedSuccessCount,
+        parseFailureCount: syncStats.parseFailureCount,
+        insertedEvents: syncStats.insertedEvents,
+        updatedEvents: syncStats.updatedEvents,
+        dedupedEvents: syncStats.dedupedEvents,
+        enrichmentSuccessCount: syncStats.enrichmentSuccessCount,
+        enrichmentFailureCount: syncStats.enrichmentFailureCount,
+        finalScheduleCount: syncStats.finalScheduleCount,
+        finalEventCount: syncStats.finalEventCount,
+        notified: notificationSummary.total,
+        notificationSummary,
+        errors: syncStats.errors,
       },
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("❌ [AUTO-SYNC] Critical error:", error);
+    console.error("[cron:update-airdrops] critical failure", error);
 
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Auto-sync failed",
-        data: results,
+        error: error instanceof Error ? error.message : "Sync failed",
       },
       { status: 500 },
     );
   }
 }
 
-// Also support POST for manual trigger
 export async function POST(request: Request) {
   return GET(request);
 }

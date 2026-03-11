@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { useSettingsStore } from "@/lib/stores/settings-store";
 import { useLanguage } from "@/lib/stores/language-store";
+import { settingsPageCopy } from "@/lib/i18n/route-copy";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -47,6 +48,7 @@ import { MagicCard } from "@/components/ui/magic-card";
 
 export default function SettingsPage() {
   const { t, language, setLanguage } = useLanguage();
+  const pageCopy = settingsPageCopy[language];
   const mounted = useMounted();
 
   // API Keys State
@@ -332,7 +334,7 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-300">
-                      Binance API Key
+                      {pageCopy.binanceApiKeyLabel}
                     </label>
                     <div className="relative">
                       <input
@@ -340,7 +342,7 @@ export default function SettingsPage() {
                         value={tempApiKey}
                         onChange={(e) => setTempApiKey(e.target.value)}
                         className="w-full pl-10 pr-12 py-3 md:py-2.5 text-sm bg-black/20 border border-white/10 rounded-xl focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
-                        placeholder="Enter your Binance API Key"
+                        placeholder={pageCopy.binanceApiKeyPlaceholder}
                       />
                       <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                       <button
@@ -358,7 +360,7 @@ export default function SettingsPage() {
 
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-300">
-                      Binance Secret Key
+                      {pageCopy.binanceSecretKeyLabel}
                     </label>
                     <div className="relative">
                       <input
@@ -366,7 +368,7 @@ export default function SettingsPage() {
                         value={tempApiSecret}
                         onChange={(e) => setTempApiSecret(e.target.value)}
                         className="w-full pl-10 pr-12 py-3 md:py-2.5 text-sm bg-black/20 border border-white/10 rounded-xl focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
-                        placeholder="Enter your Binance Secret Key"
+                        placeholder={pageCopy.binanceSecretKeyPlaceholder}
                       />
                       <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                       <button
@@ -424,10 +426,10 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="space-y-0.5 flex-1 min-w-0">
                       <label className="text-sm md:text-base font-medium text-slate-200">
-                        Telegram Integration
+                        {pageCopy.telegramIntegrationTitle}
                       </label>
                       <p className="text-xs md:text-sm text-muted-foreground">
-                        Receive alerts directly to your Telegram
+                        {pageCopy.telegramIntegrationDesc}
                       </p>
                     </div>
                     <div className="p-2 bg-blue-500/20 rounded-lg flex-shrink-0">
@@ -437,27 +439,27 @@ export default function SettingsPage() {
 
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-300">
-                      Telegram Bot Token
+                      {pageCopy.telegramBotTokenLabel}
                     </label>
                     <input
                       type="password"
                       value={tempTelegramToken}
                       onChange={(e) => setTempTelegramToken(e.target.value)}
                       className="w-full px-4 py-3 md:py-2.5 text-sm bg-black/20 border border-white/10 rounded-xl focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
-                      placeholder="Enter Bot Token"
+                      placeholder={pageCopy.telegramBotTokenPlaceholder}
                     />
                   </div>
 
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-300">
-                      Telegram Chat ID
+                      {pageCopy.telegramChatIdLabel}
                     </label>
                     <input
                       type="text"
                       value={tempTelegramChatId}
                       onChange={(e) => setTempTelegramChatId(e.target.value)}
                       className="w-full px-4 py-3 md:py-2.5 text-sm bg-black/20 border border-white/10 rounded-xl focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
-                      placeholder="Enter Chat ID"
+                      placeholder={pageCopy.telegramChatIdPlaceholder}
                     />
                   </div>
 
@@ -478,23 +480,7 @@ export default function SettingsPage() {
 
                 {/* Notification Toggles */}
                 <div className="space-y-3 md:space-y-4">
-                  {[
-                    {
-                      id: "price-alerts",
-                      label: "Price Alerts",
-                      desc: "Get notified when price moves significantly",
-                    },
-                    {
-                      id: "stability-alerts",
-                      label: "Stability Alerts",
-                      desc: "Alerts for stability score changes",
-                    },
-                    {
-                      id: "new-listings",
-                      label: "New Listings",
-                      desc: "Notification for new token listings",
-                    },
-                  ].map((item) => (
+                  {pageCopy.notificationOptions.map((item) => (
                     <div
                       key={item.id}
                       className="flex items-center justify-between gap-3 p-3 md:p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors"
@@ -580,10 +566,10 @@ export default function SettingsPage() {
                 <div className="flex items-center justify-between gap-3 p-3 md:p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
                   <div className="space-y-0.5 flex-1 min-w-0">
                     <label className="text-sm font-medium text-slate-200">
-                      Compact Mode
+                      {pageCopy.compactModeTitle}
                     </label>
                     <p className="text-xs text-muted-foreground">
-                      Reduce spacing and font size
+                      {pageCopy.compactModeDesc}
                     </p>
                   </div>
                   <Switch className="flex-shrink-0" />
@@ -592,10 +578,10 @@ export default function SettingsPage() {
                 <div className="flex items-center justify-between gap-3 p-3 md:p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
                   <div className="space-y-0.5 flex-1 min-w-0">
                     <label className="text-sm font-medium text-slate-200">
-                      Animations
+                      {pageCopy.animationsTitle}
                     </label>
                     <p className="text-xs text-muted-foreground">
-                      Enable UI animations and effects
+                      {pageCopy.animationsDesc}
                     </p>
                   </div>
                   <Switch
@@ -627,10 +613,10 @@ export default function SettingsPage() {
                   <div className="p-3 md:p-4 rounded-xl bg-white/5 border border-white/10">
                     <h3 className="font-medium mb-2 flex items-center gap-2 text-sm md:text-base">
                       <Download className="w-4 h-4 text-blue-400" />
-                      Export Data
+                      {pageCopy.exportDataTitle}
                     </h3>
                     <p className="text-xs md:text-sm text-muted-foreground mb-3 md:mb-4">
-                      Download all your data as a JSON file backup.
+                      {pageCopy.exportDataDesc}
                     </p>
                     <motion.button
                       whileHover={{ scale: 1.02 }}
@@ -638,17 +624,17 @@ export default function SettingsPage() {
                       onClick={handleExportData}
                       className="w-full py-2.5 md:py-2 text-sm bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-colors"
                     >
-                      Export JSON
+                      {pageCopy.exportJsonButton}
                     </motion.button>
                   </div>
 
                   <div className="p-3 md:p-4 rounded-xl bg-white/5 border border-white/10">
                     <h3 className="font-medium mb-2 flex items-center gap-2 text-sm md:text-base">
                       <Upload className="w-4 h-4 text-emerald-400" />
-                      Import Data
+                      {pageCopy.importDataTitle}
                     </h3>
                     <p className="text-xs md:text-sm text-muted-foreground mb-3 md:mb-4">
-                      Restore your data from a JSON backup file.
+                      {pageCopy.importDataDesc}
                     </p>
                     <div className="relative">
                       <input
@@ -662,7 +648,7 @@ export default function SettingsPage() {
                         whileTap={{ scale: 0.98 }}
                         className="w-full py-2.5 md:py-2 text-sm bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg hover:bg-emerald-500/20 transition-colors"
                       >
-                        Select File
+                        {pageCopy.selectFileButton}
                       </motion.button>
                     </div>
                   </div>
@@ -671,11 +657,10 @@ export default function SettingsPage() {
                 <div className="p-3 md:p-4 rounded-xl bg-red-500/5 border border-red-500/10">
                   <h3 className="font-medium mb-2 flex items-center gap-2 text-red-400 text-sm md:text-base">
                     <Trash2 className="w-4 h-4" />
-                    Danger Zone
+                    {pageCopy.dangerZoneTitle}
                   </h3>
                   <p className="text-xs md:text-sm text-muted-foreground mb-3 md:mb-4">
-                    Permanently delete all your data. This action cannot be
-                    undone.
+                    {pageCopy.dangerZoneDesc}
                   </p>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
@@ -684,18 +669,16 @@ export default function SettingsPage() {
                         whileTap={{ scale: 0.98 }}
                         className="px-4 py-2.5 md:py-2 text-sm bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-colors"
                       >
-                        Reset All Data
+                        {pageCopy.resetAllDataButton}
                       </motion.button>
                     </AlertDialogTrigger>
                     <AlertDialogContent className="glass-premium border-white/10">
                       <AlertDialogHeader>
                         <AlertDialogTitle>
-                          Are you absolutely sure?
+                          {pageCopy.confirmResetTitle}
                         </AlertDialogTitle>
                         <AlertDialogDescription>
-                          This action cannot be undone. This will permanently
-                          delete all your data including settings, API keys, and
-                          income entries.
+                          {pageCopy.confirmResetDesc}
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -706,7 +689,7 @@ export default function SettingsPage() {
                           onClick={handleResetData}
                           className="bg-red-500 hover:bg-red-600 text-white border-none"
                         >
-                          Yes, delete everything
+                          {pageCopy.confirmResetAction}
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>

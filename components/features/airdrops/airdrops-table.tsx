@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { useIsMobile, useMounted } from "@/lib/hooks/use-mobile";
 import {
   useReactTable,
   getCoreRowModel,
@@ -39,15 +39,10 @@ import {
   CalendarClock,
   Star,
 } from "lucide-react";
-import {
-  formatDistanceToNow,
-  format,
-  isToday,
-  isTomorrow,
-  addDays,
-  isBefore,
-} from "date-fns";
-import { th } from "date-fns/locale";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
+import { format } from "date-fns/format";
+import { addDays } from "date-fns/addDays";
+import { isBefore } from "date-fns/isBefore";
 
 // UI Components
 import { Card, CardHeader } from "@/components/ui/card";
@@ -89,6 +84,16 @@ import {
 import { NumberTicker } from "@/components/ui/number-ticker";
 import { GradientText } from "@/components/ui/animated-text";
 import { useTelegram } from "@/lib/hooks/use-telegram";
+import { dedupeEventApiRows } from "@/lib/services/alpha/binance-event-pipeline";
+import { useLanguage } from "@/lib/stores/language-store";
+import {
+  getDateFnsLocale,
+  getDisplayDateByLanguage,
+  getIntlLocale,
+  isDateTodayByLanguage,
+  isDateTomorrowByLanguage,
+} from "@/lib/i18n/locale";
+import { airdropsPageCopy } from "@/lib/i18n/route-copy";
 
 // Types
 interface Airdrop {
@@ -111,10 +116,29 @@ interface Airdrop {
   description?: string;
   website?: string;
   twitter?: string;
-  type: "TGE" | "PRETGE" | "PreTGE" | "Airdrop" | "AIRDROP";
+  type: "TGE" | "PRETGE" | "PRE_TGE" | "PreTGE" | "Airdrop" | "AIRDROP";
   requiredPoints: number;
   deductPoints: number;
   contractAddress: string;
+  sourceUrl?: string | null;
+  confidence?: number;
+  listingTime?: string | null;
+}
+
+type ResponsiveAirdropsLayoutInput = {
+  mounted: boolean;
+  isMobileViewport: boolean;
+};
+
+export function getResponsiveAirdropsLayoutMode({
+  mounted,
+  isMobileViewport,
+}: ResponsiveAirdropsLayoutInput): "pending" | "mobile" | "desktop" {
+  if (!mounted) {
+    return "pending";
+  }
+
+  return isMobileViewport ? "mobile" : "desktop";
 }
 
 // Chain colors with premium styling
@@ -139,6 +163,8 @@ const typeColors: Record<string, string> = {
     "bg-gradient-to-r from-amber-500/20 to-orange-500/10 text-amber-400 border-amber-500/40",
   PRETGE:
     "bg-gradient-to-r from-amber-500/20 to-orange-500/10 text-amber-400 border-amber-500/40",
+  PRE_TGE:
+    "bg-gradient-to-r from-amber-500/20 to-orange-500/10 text-amber-400 border-amber-500/40",
   Airdrop:
     "bg-gradient-to-r from-cyan-500/20 to-blue-500/10 text-cyan-400 border-cyan-500/40",
   AIRDROP:
@@ -146,9 +172,6 @@ const typeColors: Record<string, string> = {
 };
 
 const TELEGRAM_JOIN_URL = "https://t.me/binance_alphachi";
-const TELEGRAM_CTA_PRIMARY = "คลิกเลย รับแจ้งเตือน Binance Alpha";
-const TELEGRAM_CTA_SECONDARY =
-  "เข้าร่วม @binance_alphachi เพื่อไม่พลาดข้อมูลใหม่";
 
 function parseNumericAmount(amount?: string | null): number | null {
   if (!amount) {
@@ -186,40 +209,45 @@ function getDisplayValue(airdrop: Airdrop): string | null {
 function getDisplayTimeInfo(
   airdrop: Airdrop,
   activeTab: "today" | "upcoming" | "all",
+  language: "th" | "en",
+  copy: (typeof airdropsPageCopy)["en"],
 ): { main: string; secondary: string | null } {
+  const locale = getDateFnsLocale(language);
+
   if (!airdrop.claimStartDate) {
-    return { main: "TBA", secondary: null };
+    return { main: copy.tba, secondary: null };
   }
 
   const targetDate = new Date(airdrop.claimStartDate);
+  const displayDate = getDisplayDateByLanguage(targetDate, language);
   const secondary = formatDistanceToNow(targetDate, {
-    locale: th,
+    locale,
     addSuffix: true,
   });
 
   if (activeTab === "today") {
     return {
-      main: format(targetDate, "HH:mm", { locale: th }),
+      main: format(displayDate, "HH:mm", { locale }),
       secondary,
     };
   }
 
   if (activeTab === "upcoming") {
-    if (isTomorrow(targetDate)) {
+    if (isDateTomorrowByLanguage(targetDate, language)) {
       return {
-        main: `Tomorrow ${format(targetDate, "HH:mm", { locale: th })}`,
+        main: `${copy.tomorrow} ${format(displayDate, "HH:mm", { locale })}`,
         secondary,
       };
     }
 
     return {
-      main: format(targetDate, "M/d HH:mm", { locale: th }),
+      main: format(displayDate, "M/d HH:mm", { locale }),
       secondary,
     };
   }
 
   return {
-    main: format(targetDate, "dd MMM HH:mm", { locale: th }),
+    main: format(displayDate, "dd MMM HH:mm", { locale }),
     secondary,
   };
 }
@@ -248,6 +276,8 @@ interface MobileAirdropCardProps {
   onClick: () => void;
   onSendAlert: () => void;
   isSendingTelegram: boolean;
+  language: "th" | "en";
+  copy: (typeof airdropsPageCopy)["en"];
 }
 
 function MobileAirdropCard({
@@ -255,12 +285,22 @@ function MobileAirdropCard({
   onClick,
   onSendAlert,
   isSendingTelegram,
+  language,
+  copy,
 }: MobileAirdropCardProps) {
+  const locale = getDateFnsLocale(language);
   const targetDate = airdrop.claimStartDate
     ? new Date(airdrop.claimStartDate)
     : null;
-  const isTodayDate = targetDate ? isToday(targetDate) : false;
-  const isTomorrowDate = targetDate ? isTomorrow(targetDate) : false;
+  const displayTargetDate = targetDate
+    ? getDisplayDateByLanguage(targetDate, language)
+    : null;
+  const isTodayDate = targetDate
+    ? isDateTodayByLanguage(targetDate, language)
+    : false;
+  const isTomorrowDate = targetDate
+    ? isDateTomorrowByLanguage(targetDate, language)
+    : false;
   const isExpiringSoon =
     airdrop.claimEndDate &&
     isBefore(new Date(airdrop.claimEndDate), addDays(new Date(), 3));
@@ -336,16 +376,16 @@ function MobileAirdropCard({
           <div className="flex items-center gap-1.5 mb-1.5">
             <Star className="w-4 h-4 text-amber-400" />
             <span className="text-xs text-muted-foreground font-medium">
-              Alpha Points
+              {copy.alphaPoints}
             </span>
           </div>
           <div className="font-bold text-amber-400 text-lg">
             {airdrop.requiredPoints || 0}
-            <span className="text-xs font-normal ml-1">pts</span>
+            <span className="text-xs font-normal ml-1">{copy.pointsSuffix}</span>
           </div>
           {(airdrop.deductPoints ?? 0) > 0 && (
             <div className="text-xs text-red-400 mt-1 font-medium">
-              หัก: -{airdrop.deductPoints} pts
+              {copy.totalDeducted}: -{airdrop.deductPoints} {copy.pointsSuffix}
             </div>
           )}
         </div>
@@ -355,7 +395,7 @@ function MobileAirdropCard({
           <div className="flex items-center gap-1.5 mb-1.5">
             <Clock className="w-4 h-4 text-primary" />
             <span className="text-xs text-muted-foreground font-medium">
-              เวลา
+              {copy.time}
             </span>
           </div>
           {targetDate ? (
@@ -366,7 +406,7 @@ function MobileAirdropCard({
                     variant="outline"
                     className="h-5 px-2 bg-emerald-500/20 text-emerald-400 border-emerald-500/40 text-[10px] font-semibold"
                   >
-                    วันนี้
+                    {copy.today}
                   </Badge>
                 )}
                 {isTomorrowDate && (
@@ -374,18 +414,20 @@ function MobileAirdropCard({
                     variant="outline"
                     className="h-5 px-2 bg-blue-500/20 text-blue-400 border-blue-500/40 text-[10px] font-semibold"
                   >
-                    พรุ่งนี้
+                    {copy.tomorrow}
                   </Badge>
                 )}
               </div>
               <div className="text-sm font-semibold text-foreground">
-                {format(targetDate, "dd MMM HH:mm", { locale: th })}
+                {displayTargetDate
+                  ? format(displayTargetDate, "dd MMM HH:mm", { locale })
+                  : "-"}
               </div>
               <div
                 className={`text-xs mt-0.5 ${isExpiringSoon ? "text-red-400 font-medium" : "text-muted-foreground"}`}
               >
                 {formatDistanceToNow(targetDate, {
-                  locale: th,
+                  locale,
                   addSuffix: true,
                 })}
               </div>
@@ -409,7 +451,7 @@ function MobileAirdropCard({
           className="flex-1 h-10 text-sm gap-2 border-primary/30 hover:bg-primary/10 font-medium"
         >
           <Send className="w-4 h-4" />
-          แจ้งเตือน
+          {copy.notify}
         </Button>
         <Button
           variant="default"
@@ -421,7 +463,7 @@ function MobileAirdropCard({
           className="h-10 px-4 text-sm gap-2 bg-primary/20 hover:bg-primary/30 text-primary font-medium"
         >
           <ArrowUpRight className="w-4 h-4" />
-          ดูเพิ่ม
+          {copy.viewMore}
         </Button>
       </div>
     </motion.div>
@@ -429,7 +471,16 @@ function MobileAirdropCard({
 }
 
 export function AirdropsTable() {
-  const isMobile = useIsMobile();
+  const mounted = useMounted();
+  const isMobileViewport = useIsMobile();
+  const { language } = useLanguage();
+  const copy = airdropsPageCopy[language];
+  const dateLocale = getDateFnsLocale(language);
+  const numberLocale = getIntlLocale(language);
+  const responsiveLayoutMode = getResponsiveAirdropsLayoutMode({
+    mounted,
+    isMobileViewport,
+  });
   const [activeTab, setActiveTab] = useState<"today" | "upcoming" | "all">(
     "today",
   );
@@ -466,7 +517,9 @@ export function AirdropsTable() {
   // All airdrops data - sorted by claimStartDate descending (latest first)
   const allData = useMemo(() => {
     if (!allAirdropsData) return [];
-    return [...allAirdropsData].sort(sortByClaimStartDesc);
+    return [
+      ...(dedupeEventApiRows(allAirdropsData as any) as Airdrop[]),
+    ].sort(sortByClaimStartDesc);
   }, [allAirdropsData]);
 
   const hasScheduleBuckets = useMemo(
@@ -484,7 +537,7 @@ export function AirdropsTable() {
 
           const targetDate = new Date(airdrop.claimStartDate);
           return (
-            isToday(targetDate) &&
+            isDateTodayByLanguage(targetDate, language) &&
             airdrop.scheduleStatus !== "ended" &&
             airdrop.scheduleStatus !== "cancelled"
           );
@@ -498,7 +551,7 @@ export function AirdropsTable() {
           airdrop.status === "live" || airdrop.status === "claimable",
       )
       .sort(sortByClaimStartDesc);
-  }, [allData, hasScheduleBuckets]);
+  }, [allData, hasScheduleBuckets, language]);
 
   const futureData = useMemo(() => {
     if (hasScheduleBuckets) {
@@ -512,7 +565,7 @@ export function AirdropsTable() {
           const targetDate = new Date(airdrop.claimStartDate);
           return (
             targetDate.getTime() > now.getTime() &&
-            !isToday(targetDate) &&
+            !isDateTodayByLanguage(targetDate, language) &&
             airdrop.scheduleStatus !== "ended" &&
             airdrop.scheduleStatus !== "cancelled"
           );
@@ -523,7 +576,7 @@ export function AirdropsTable() {
     return allData
       .filter((airdrop) => airdrop.status === "upcoming")
       .sort(sortByClaimStartAsc);
-  }, [allData, hasScheduleBuckets]);
+  }, [allData, hasScheduleBuckets, language]);
 
   // Filter and search data
   const filteredData = useMemo(() => {
@@ -589,6 +642,7 @@ export function AirdropsTable() {
       (a) =>
         a.type === "AIRDROP" ||
         a.type === "Airdrop" ||
+        a.type === "PRE_TGE" ||
         a.type === "PRETGE" ||
         a.type === "PreTGE",
     ).length;
@@ -599,6 +653,7 @@ export function AirdropsTable() {
       (a) =>
         a.type === "AIRDROP" ||
         a.type === "Airdrop" ||
+        a.type === "PRE_TGE" ||
         a.type === "PRETGE" ||
         a.type === "PreTGE",
     ).length;
@@ -733,7 +788,7 @@ export function AirdropsTable() {
       {
         id: "amountDisplay",
         accessorFn: (row) => parseNumericAmount(row.airdropAmount) ?? 0,
-        header: "Amount",
+        header: copy.amount,
         cell: ({ row }) => {
           const airdrop = row.original;
           const displayAmount = getDisplayAmount(airdrop);
@@ -756,10 +811,10 @@ export function AirdropsTable() {
       {
         id: "timeDisplay",
         accessorFn: (row) => row.claimStartDate,
-        header: "Time",
+        header: copy.time,
         cell: ({ row }) => {
           const airdrop = row.original;
-          const timeInfo = getDisplayTimeInfo(airdrop, activeTab);
+          const timeInfo = getDisplayTimeInfo(airdrop, activeTab, language, copy);
 
           return (
             <div className="flex flex-col gap-1">
@@ -792,7 +847,7 @@ export function AirdropsTable() {
       },
       {
         accessorKey: "requiredPoints",
-        header: "Alpha Points",
+        header: copy.alphaPoints,
         cell: ({ row }) => {
           const airdrop = row.original;
           const required = airdrop.requiredPoints || 0;
@@ -803,14 +858,16 @@ export function AirdropsTable() {
               <div className="flex items-center gap-1.5">
                 <Star className="w-3.5 h-3.5 text-amber-400" />
                 <span className="font-semibold text-amber-400">
-                  {required > 0 ? `${required} pts` : "ไม่ระบุ"}
+                  {required > 0
+                    ? `${required} ${copy.pointsSuffix}`
+                    : copy.notSpecified}
                 </span>
               </div>
               {deduct > 0 && (
                 <div className="flex items-center gap-1">
                   <span className="text-xs text-red-400/80">หัก:</span>
                   <span className="text-xs font-medium text-red-400">
-                    -{deduct} pts
+                    -{deduct} {copy.pointsSuffix}
                   </span>
                 </div>
               )}
@@ -820,7 +877,7 @@ export function AirdropsTable() {
       },
       {
         accessorKey: "claimStartDate",
-        header: "เวลา",
+        header: copy.time,
         cell: ({ row }) => {
           const airdrop = row.original;
           const targetDate = airdrop.claimStartDate
@@ -832,23 +889,42 @@ export function AirdropsTable() {
           }
 
           const date = new Date(targetDate);
+          const displayDate = getDisplayDateByLanguage(targetDate, language);
           const timeText = formatDistanceToNow(date, {
-            locale: th,
+            locale: dateLocale,
             addSuffix: true,
           });
-          const dateText = format(date, "dd MMM yy HH:mm", { locale: th });
+          const dateText = format(displayDate, "dd MMM yy HH:mm", {
+            locale: dateLocale,
+          });
           const isExpiringSoon =
             airdrop.claimEndDate &&
             isBefore(new Date(airdrop.claimEndDate), addDays(new Date(), 3));
 
           // Check if it's today or tomorrow
-          const isTodayDate = isToday(date);
-          const isTomorrowDate = isTomorrow(date);
+          const isTodayDate = isDateTodayByLanguage(targetDate, language);
+          const isTomorrowDate = isDateTomorrowByLanguage(targetDate, language);
+          const dayBadge = isTodayDate ? (
+            <Badge
+              variant="outline"
+              className="h-5 px-1.5 bg-emerald-500/20 text-emerald-400 border-emerald-500/40 text-[10px]"
+            >
+              {copy.todayShort}
+            </Badge>
+          ) : isTomorrowDate ? (
+            <Badge
+              variant="outline"
+              className="h-5 px-1.5 bg-blue-500/20 text-blue-400 border-blue-500/40 text-[10px]"
+            >
+              {copy.tomorrow}
+            </Badge>
+          ) : null;
 
           return (
             <div className="flex flex-col">
               <div className="flex items-center gap-1.5">
-                {isTodayDate && (
+                {dayBadge}
+                {false && isTodayDate && (
                   <Badge
                     variant="outline"
                     className="h-5 px-1.5 bg-emerald-500/20 text-emerald-400 border-emerald-500/40 text-[10px]"
@@ -856,7 +932,7 @@ export function AirdropsTable() {
                     วันนี้
                   </Badge>
                 )}
-                {isTomorrowDate && (
+                {false && isTomorrowDate && (
                   <Badge
                     variant="outline"
                     className="h-5 px-1.5 bg-blue-500/20 text-blue-400 border-blue-500/40 text-[10px]"
@@ -929,7 +1005,15 @@ export function AirdropsTable() {
         },
       },
     ],
-    [activeTab, sendAirdropAlert, isSendingTelegram, handleAirdropClick],
+    [
+      activeTab,
+      copy,
+      dateLocale,
+      handleAirdropClick,
+      isSendingTelegram,
+      language,
+      sendAirdropAlert,
+    ],
   );
 
   // React Table instance
@@ -1013,11 +1097,11 @@ export function AirdropsTable() {
                     <GradientText
                       colors={["#d4a948", "#f0c674", "#b8860b", "#d4a948"]}
                     >
-                      Binance Alpha Airdrops
+                      {copy.heroTitle}
                     </GradientText>
                   </h1>
                   <p className="text-sm text-muted-foreground mt-1">
-                    🔥 ติดตาม Airdrop & TGE จาก Binance Alpha แบบ Real-time
+                    {copy.heroDescription}
                   </p>
                 </div>
               </div>
@@ -1031,7 +1115,7 @@ export function AirdropsTable() {
                     href={TELEGRAM_JOIN_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    aria-label={`${TELEGRAM_CTA_PRIMARY} ${TELEGRAM_CTA_SECONDARY}`}
+                    aria-label={`${copy.telegramCtaPrimary} ${copy.telegramCtaSecondary}`}
                   >
                     <span className="flex w-full items-start gap-3 text-left">
                       <span className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#030305]/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]">
@@ -1039,10 +1123,10 @@ export function AirdropsTable() {
                       </span>
                       <span className="flex min-w-0 flex-col">
                         <span className="text-sm font-semibold leading-tight sm:text-base">
-                          {TELEGRAM_CTA_PRIMARY}
+                          {copy.telegramCtaPrimary}
                         </span>
                         <span className="mt-1 text-xs leading-snug text-[#030305]/80 sm:text-sm">
-                          {TELEGRAM_CTA_SECONDARY}
+                          {copy.telegramCtaSecondary}
                         </span>
                       </span>
                     </span>
@@ -1080,10 +1164,10 @@ export function AirdropsTable() {
               <div>
                 <div className="text-xs sm:text-sm text-muted-foreground mb-1 flex items-center gap-2">
                   <CalendarDays className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-400" />
-                  <span>วันนี้</span>
+                  <span>{copy.today}</span>
                 </div>
                 <div className="text-2xl sm:text-3xl font-bold text-red-400">
-                  <NumberTicker value={stats.todayCount} />
+                  <NumberTicker value={stats.todayCount} locale={numberLocale} />
                 </div>
                 <div className="text-[10px] sm:text-xs text-muted-foreground mt-1">
                   {stats.tgeCount} TGE / {stats.airdropTypeCount} Airdrop
@@ -1116,10 +1200,13 @@ export function AirdropsTable() {
               <div>
                 <div className="text-xs sm:text-sm text-muted-foreground mb-1 flex items-center gap-2">
                   <CalendarClock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400" />
-                  <span>กำลังจะมา</span>
+                  <span>{copy.upcoming}</span>
                 </div>
                 <div className="text-2xl sm:text-3xl font-bold text-blue-400">
-                  <NumberTicker value={stats.upcomingCount} />
+                  <NumberTicker
+                    value={stats.upcomingCount}
+                    locale={numberLocale}
+                  />
                 </div>
                 <div className="text-[10px] sm:text-xs text-muted-foreground mt-1">
                   {stats.upcomingTGE} TGE / {stats.upcomingAirdrop} Airdrop
@@ -1152,14 +1239,17 @@ export function AirdropsTable() {
               <div>
                 <div className="text-xs sm:text-sm text-muted-foreground mb-1 flex items-center gap-2">
                   <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
-                  <span>Alpha Points</span>
+                  <span>{copy.alphaPoints}</span>
                 </div>
                 <div className="text-2xl sm:text-3xl font-bold text-amber-400">
-                  <NumberTicker value={stats.avgRequiredPoints} />
-                  <span className="text-sm ml-1">avg</span>
+                  <NumberTicker
+                    value={stats.avgRequiredPoints}
+                    locale={numberLocale}
+                  />
+                  <span className="text-sm ml-1">{copy.average}</span>
                 </div>
                 <div className="text-[10px] sm:text-xs text-muted-foreground mt-1">
-                  หักรวม: {stats.todayDeductPoints} pts
+                  {copy.totalDeducted}: {stats.todayDeductPoints} {copy.pointsSuffix}
                 </div>
               </div>
               <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500/20 to-yellow-500/20 flex items-center justify-center">
@@ -1192,7 +1282,7 @@ export function AirdropsTable() {
                   <span>ทั้งหมด</span>
                 </div>
                 <div className="text-2xl sm:text-3xl font-bold text-purple-400">
-                  <NumberTicker value={stats.allCount} />
+                  <NumberTicker value={stats.allCount} locale={numberLocale} />
                 </div>
                 <div className="text-[10px] sm:text-xs text-muted-foreground mt-1">
                   โปรเจคทั้งหมด
@@ -1238,8 +1328,8 @@ export function AirdropsTable() {
                   className="flex items-center gap-1 sm:gap-2 data-[state=active]:bg-red-500/20 data-[state=active]:text-red-400"
                 >
                   <CalendarDays className="w-4 h-4" />
-                  <span className="hidden sm:inline">วันนี้</span>
-                  <span className="sm:hidden">Today</span>
+                  <span className="hidden sm:inline">{copy.today}</span>
+                  <span className="sm:hidden">{copy.todayShort}</span>
                   {stats.todayCount > 0 && (
                     <Badge
                       variant="secondary"
@@ -1254,8 +1344,8 @@ export function AirdropsTable() {
                   className="flex items-center gap-1 sm:gap-2 data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400"
                 >
                   <CalendarClock className="w-4 h-4" />
-                  <span className="hidden sm:inline">กำลังจะมา</span>
-                  <span className="sm:hidden">Soon</span>
+                  <span className="hidden sm:inline">{copy.upcoming}</span>
+                  <span className="sm:hidden">{copy.upcomingShort}</span>
                   {stats.upcomingCount > 0 && (
                     <Badge
                       variant="secondary"
@@ -1270,8 +1360,8 @@ export function AirdropsTable() {
                   className="flex items-center gap-1 sm:gap-2 data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400"
                 >
                   <Coins className="w-4 h-4" />
-                  <span className="hidden sm:inline">ทั้งหมด</span>
-                  <span className="sm:hidden">All</span>
+                  <span className="hidden sm:inline">{copy.all}</span>
+                  <span className="sm:hidden">{copy.allShort}</span>
                   {stats.allCount > 0 && (
                     <Badge
                       variant="secondary"
@@ -1289,7 +1379,7 @@ export function AirdropsTable() {
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
-                      placeholder="ค้นหาโปรเจค หรือ Symbol..."
+                      placeholder={copy.searchPlaceholder}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-9 h-11 sm:h-10 text-base sm:text-sm bg-muted/30 border-primary/20 focus:border-primary/40"
@@ -1305,7 +1395,7 @@ export function AirdropsTable() {
                             className="flex-1 sm:flex-none h-11 sm:h-10 gap-2 bg-muted/30 border-primary/20 text-sm"
                           >
                             <Filter className="w-4 h-4" />
-                            <span>Chain</span>
+                            <span>{copy.chain}</span>
                             {selectedChains.length > 0 && (
                               <Badge
                                 variant="secondary"
@@ -1408,7 +1498,13 @@ export function AirdropsTable() {
                   {[...Array(5)].map((_, i) => (
                     <Skeleton
                       key={i}
-                      className={`${isMobile ? "h-40" : "h-16"} w-full rounded-lg`}
+                      className={`${
+                        responsiveLayoutMode === "mobile"
+                          ? "h-40"
+                          : responsiveLayoutMode === "desktop"
+                            ? "h-16"
+                            : "h-28"
+                      } w-full rounded-lg`}
                     />
                   ))}
                 </div>
@@ -1423,10 +1519,10 @@ export function AirdropsTable() {
                   </div>
                   <h3 className="text-lg font-semibold text-foreground mb-2">
                     {activeTab === "today"
-                      ? "ยังไม่มี Airdrop วันนี้"
+                      ? copy.emptyToday
                       : activeTab === "upcoming"
-                        ? "ยังไม่มี Airdrop ที่กำลังจะมา"
-                        : "ไม่พบ Airdrop"}
+                        ? copy.emptyUpcoming
+                        : copy.emptyAll}
                   </h3>
                   <p className="text-sm text-muted-foreground max-w-md">
                     {hasFilters
@@ -1434,10 +1530,22 @@ export function AirdropsTable() {
                       : "รอติดตามการอัปเดตจาก Binance Alpha"}
                   </p>
                 </motion.div>
+              ) : responsiveLayoutMode === "pending" ? (
+                <div
+                  className="mt-4 space-y-3"
+                  data-responsive-layout="pending"
+                >
+                  {[...Array(4)].map((_, i) => (
+                    <Skeleton
+                      key={i}
+                      className="h-28 w-full rounded-xl border border-primary/10"
+                    />
+                  ))}
+                </div>
               ) : (
                 <>
                   {/* Mobile Card View */}
-                  {isMobile ? (
+                  {responsiveLayoutMode === "mobile" ? (
                     <div className="mt-4 space-y-3">
                       <ScrollArea className="h-[calc(100vh-420px)] min-h-[400px]">
                         <div className="space-y-3 pr-2">
@@ -1476,6 +1584,8 @@ export function AirdropsTable() {
                                     });
                                   }}
                                   isSendingTelegram={isSendingTelegram}
+                                  language={language}
+                                  copy={copy}
                                 />
                               );
                             })}
@@ -1673,7 +1783,7 @@ export function AirdropsTable() {
                   </div>
                 </DialogTitle>
                 <DialogDescription>
-                  {selectedAirdrop.description || "รายละเอียด Airdrop"}
+                  {selectedAirdrop.description || copy.detailDescription}
                 </DialogDescription>
               </DialogHeader>
 
@@ -1683,7 +1793,7 @@ export function AirdropsTable() {
                   <div className="flex items-center gap-2 mb-3">
                     <Star className="w-5 h-5 text-amber-400" />
                     <span className="font-semibold text-amber-400">
-                      Alpha Points
+                      {copy.alphaPoints}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -1693,7 +1803,7 @@ export function AirdropsTable() {
                       </div>
                       <div className="text-xl font-bold text-amber-400">
                         {selectedAirdrop.requiredPoints || 0}{" "}
-                        <span className="text-sm">pts</span>
+                        <span className="text-sm">{copy.pointsSuffix}</span>
                       </div>
                     </div>
                     <div>
@@ -1702,7 +1812,7 @@ export function AirdropsTable() {
                       </div>
                       <div className="text-xl font-bold text-red-400">
                         -{selectedAirdrop.deductPoints || 0}{" "}
-                        <span className="text-sm">pts</span>
+                        <span className="text-sm">{copy.pointsSuffix}</span>
                       </div>
                     </div>
                   </div>
@@ -1712,7 +1822,7 @@ export function AirdropsTable() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <div className="text-xs text-muted-foreground mb-1">
-                        Amount
+                        {copy.amount}
                       </div>
                       <div className="text-xl font-bold text-foreground">
                         {getDisplayAmount(selectedAirdrop)}
@@ -1734,19 +1844,22 @@ export function AirdropsTable() {
                   <div className="p-4 rounded-xl bg-muted/30 border border-primary/10">
                     <div className="flex items-center gap-2 mb-2">
                       <Clock className="w-4 h-4 text-primary" />
-                      <span className="font-medium">เวลาเริ่ม Claim</span>
+                      <span className="font-medium">{copy.claimStart}</span>
                     </div>
                     <div className="text-lg font-semibold">
                       {format(
-                        new Date(selectedAirdrop.claimStartDate),
+                        getDisplayDateByLanguage(
+                          new Date(selectedAirdrop.claimStartDate),
+                          language,
+                        ),
                         "dd MMMM yyyy HH:mm",
-                        { locale: th },
+                        { locale: dateLocale },
                       )}
                     </div>
                     <div className="text-sm text-muted-foreground">
                       {formatDistanceToNow(
                         new Date(selectedAirdrop.claimStartDate),
-                        { locale: th, addSuffix: true },
+                        { locale: dateLocale, addSuffix: true },
                       )}
                     </div>
                   </div>
@@ -1809,7 +1922,7 @@ export function AirdropsTable() {
                     disabled={isSendingTelegram}
                   >
                     <Send className="w-4 h-4" />
-                    ส่งแจ้งเตือน Telegram
+                    {copy.sendTelegram}
                   </Button>
                   {selectedAirdrop.contractAddress && (
                     <Button variant="outline" className="gap-2" asChild>
@@ -1819,7 +1932,7 @@ export function AirdropsTable() {
                         rel="noopener noreferrer"
                       >
                         <ExternalLink className="w-4 h-4" />
-                        BscScan
+                        {copy.bscscan}
                       </a>
                     </Button>
                   )}

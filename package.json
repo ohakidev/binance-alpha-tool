@@ -8,6 +8,7 @@
     "build": "next build",
     "build:analyze": "cross-env ANALYZE=true next build",
     "start": "next start",
+    "postinstall": "prisma generate",
     "lint": "eslint",
     "test": "vitest",
     "test:ui": "vitest --ui",

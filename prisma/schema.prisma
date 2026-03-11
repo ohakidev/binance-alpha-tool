@@ -232,6 +232,7 @@ enum AirdropType {
 // Airdrop Schedule model - Track airdrop timing in the history-style format
 model AirdropSchedule {
   id              String    @id @default(uuid())
+  dedupeKey       String?   @unique
   token           String    // Token symbol
   name            String    // Project full name
 
@@ -263,6 +264,8 @@ model AirdropSchedule {
   // Metadata
   logoUrl         String?
   description     String?
+  confidence      Float?
+  sourcePublishedAt DateTime?
 
   // Flags
   isActive        Boolean   @default(true)
@@ -344,6 +347,103 @@ model BinanceAlphaToken {
   @@index([onlineAirdrop])
   @@index([onlineTge])
   @@map("binance_alpha_tokens")
+}
+
+enum CanonicalEventType {
+  AIRDROP
+  TGE
+  PRE_TGE
+}
+
+enum CanonicalEventStatus {
+  UPCOMING
+  TODAY
+  LIVE
+  CLAIMABLE
+  ENDED
+  UNKNOWN
+}
+
+enum EventSourceType {
+  BINANCE_SQUARE
+  BINANCE_ANNOUNCEMENT
+  BINANCE_ALPHA_TOKEN_LIST
+  DATABASE_CACHE
+}
+
+model AirdropEvent {
+  id                  String               @id @default(uuid())
+  dedupeKey           String               @unique
+  sourceType          EventSourceType
+  sourceUrl           String?
+  sourcePublishedAt   DateTime?
+  sourceRawText       String
+  projectName         String
+  symbol              String?
+  eventType           CanonicalEventType
+  status              CanonicalEventStatus @default(UNKNOWN)
+  confidence          Float
+  claimStartAt        DateTime?
+  listingTime         DateTime?
+  normalizedClaimDay  DateTime?
+  requiredAlphaPoints Int?
+  deductPoints        Int?
+  tokenAmount         Float?
+  tokenAmountText     String?
+  estimatedUsdValue   Float?
+  chain               String?
+  contractAddress     String?
+  alphaId             String?
+  latestPrice         Float?
+  onlineAirdrop       Boolean?
+  onlineTge           Boolean?
+  notes               String?
+  phaseLabel          String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  rawSources          EventRawSource[]
+
+  @@index([status, claimStartAt])
+  @@index([symbol, eventType, normalizedClaimDay])
+  @@index([sourceType, sourcePublishedAt])
+  @@map("airdrop_events")
+}
+
+model EventRawSource {
+  id                String          @id @default(uuid())
+  eventId           String
+  sourceType        EventSourceType
+  sourceKey         String          @unique
+  sourceUrl         String?
+  sourcePublishedAt DateTime?
+  rawText           String
+  parsedPayload     String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  event             AirdropEvent    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([sourceType, sourcePublishedAt])
+  @@map("event_raw_sources")
+}
+
+model SourceHealth {
+  id                  String    @id @default(uuid())
+  sourceKey           String    @unique
+  displayName         String
+  status              String
+  lastSuccessAt       DateTime?
+  lastFailureAt       DateTime?
+  lastCheckedAt       DateTime  @default(now())
+  consecutiveFailures Int       @default(0)
+  message             String?
+  details             String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@map("source_health")
 }
 
 // Sync log for tracking API syncs

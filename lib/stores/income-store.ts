@@ -6,7 +6,9 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { IncomeEntry, IncomeStats } from "@/lib/types";
-import { startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
+import { startOfMonth } from "date-fns/startOfMonth";
+import { endOfMonth } from "date-fns/endOfMonth";
+import { isWithinInterval } from "date-fns/isWithinInterval";
 
 interface IncomeStore {
   entries: IncomeEntry[];

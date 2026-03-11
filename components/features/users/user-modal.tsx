@@ -11,6 +11,8 @@ import { useState, useEffect } from "react";
 import { useUserStore } from "@/lib/stores/user-store";
 import { modalVariants, fadeVariants } from "@/lib/animations";
 import { useUIStore } from "@/lib/stores/ui-store";
+import { useLanguage } from "@/lib/stores/language-store";
+import { userManagementCopy } from "@/lib/i18n/route-copy";
 
 interface UserModalProps {
   isOpen: boolean;
@@ -31,6 +33,8 @@ const avatarPresets = [
 ];
 
 export function UserModal({ isOpen, onClose, userId }: UserModalProps) {
+  const { language, t } = useLanguage();
+  const copy = userManagementCopy[language];
   const { users, addUser, updateUser } = useUserStore();
   const addToast = useUIStore((state) => state.addToast);
 
@@ -62,11 +66,11 @@ export function UserModal({ isOpen, onClose, userId }: UserModalProps) {
     const newErrors: { username?: string } = {};
 
     if (!username.trim()) {
-      newErrors.username = "Username is required";
+      newErrors.username = copy.usernameRequired;
     } else if (username.trim().length < 2) {
-      newErrors.username = "Username must be at least 2 characters";
+      newErrors.username = copy.usernameMinLength;
     } else if (username.trim().length > 20) {
-      newErrors.username = "Username must be less than 20 characters";
+      newErrors.username = copy.usernameMaxLength;
     } else {
       // Check for duplicate username (excluding current user when editing)
       const duplicate = users.find(
@@ -75,7 +79,7 @@ export function UserModal({ isOpen, onClose, userId }: UserModalProps) {
           u.id !== userId
       );
       if (duplicate) {
-        newErrors.username = "Username already exists";
+        newErrors.username = copy.usernameAlreadyExists;
       }
     }
 
@@ -97,13 +101,13 @@ export function UserModal({ isOpen, onClose, userId }: UserModalProps) {
         });
         addToast({
           type: "success",
-          title: "Success",
-          description: "User updated successfully",
+          title: t("common.success"),
+          description: copy.userUpdated,
         });
         addToast({
           type: "success",
-          title: "Success",
-          description: "User updated successfully",
+          title: t("common.success"),
+          description: copy.userUpdated,
         });
       } else {
         addUser({
@@ -114,8 +118,8 @@ export function UserModal({ isOpen, onClose, userId }: UserModalProps) {
         });
         addToast({
           type: "success",
-          title: "Success",
-          description: "User created successfully",
+          title: t("common.success"),
+          description: copy.userCreated,
         });
       }
 
@@ -123,8 +127,8 @@ export function UserModal({ isOpen, onClose, userId }: UserModalProps) {
     } catch {
       addToast({
         type: "error",
-        title: "Error",
-        description: "Failed to save user",
+        title: t("common.error"),
+        description: copy.saveUserFailed,
       });
     } finally {
       setIsSubmitting(false);
@@ -158,7 +162,7 @@ export function UserModal({ isOpen, onClose, userId }: UserModalProps) {
               {/* Header */}
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold gradient-text-gold">
-                  {isEdit ? "Edit User" : "Add New User"}
+                  {isEdit ? copy.editUser : copy.addNewUser}
                 </h2>
                 <button
                   onClick={onClose}
@@ -174,7 +178,7 @@ export function UserModal({ isOpen, onClose, userId }: UserModalProps) {
                 {/* Avatar Selection */}
                 <div>
                   <label className="block text-sm font-medium mb-3">
-                    Select Avatar
+                    {copy.selectAvatar}
                   </label>
                   <div className="grid grid-cols-4 gap-3">
                     {avatarPresets.map((preset, index) => (
@@ -215,7 +219,7 @@ export function UserModal({ isOpen, onClose, userId }: UserModalProps) {
                     htmlFor="username"
                     className="block text-sm font-medium mb-2"
                   >
-                    Username
+                    {copy.username}
                   </label>
                   <div className="relative">
                     <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -239,7 +243,7 @@ export function UserModal({ isOpen, onClose, userId }: UserModalProps) {
                             : "border-white/20"
                         }
                       `}
-                      placeholder="Enter username"
+                      placeholder={copy.enterUsername}
                       maxLength={20}
                       autoFocus
                     />
@@ -254,13 +258,13 @@ export function UserModal({ isOpen, onClose, userId }: UserModalProps) {
                     </motion.p>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
-                    {username.length}/20 characters
+                    {username.length}/20 {copy.characters}
                   </p>
                 </div>
 
                 {/* Preview */}
                 <div className="glass rounded-xl p-4">
-                  <p className="text-sm text-muted-foreground mb-3">Preview</p>
+                  <p className="text-sm text-muted-foreground mb-3">{copy.preview}</p>
                   <div className="flex items-center gap-3">
                     <div
                       className={`
@@ -274,7 +278,7 @@ export function UserModal({ isOpen, onClose, userId }: UserModalProps) {
                     </div>
                     <div>
                       <p className="font-bold">
-                        {username.trim() || "Username"}
+                        {username.trim() || copy.username}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {isEdit
@@ -282,7 +286,7 @@ export function UserModal({ isOpen, onClose, userId }: UserModalProps) {
                               Math.floor((editingUser?.entryCount || 0) / 10) +
                               1
                             }`
-                          : "Lv 1"}
+                          : `${copy.level} 1`}
                       </p>
                     </div>
                   </div>
@@ -295,7 +299,7 @@ export function UserModal({ isOpen, onClose, userId }: UserModalProps) {
                     onClick={onClose}
                     className="flex-1 px-4 py-2.5 rounded-lg glass hover:bg-white/20 transition-colors font-medium"
                   >
-                    Cancel
+                    {copy.cancel}
                   </button>
                   <button
                     type="submit"
@@ -313,12 +317,12 @@ export function UserModal({ isOpen, onClose, userId }: UserModalProps) {
                           }}
                           className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full"
                         />
-                        Saving...
+                        {copy.saving}
                       </>
                     ) : (
                       <>
                         <Save className="w-4 h-4" />
-                        {isEdit ? "Update" : "Create"}
+                        {isEdit ? copy.update : copy.create}
                       </>
                     )}
                   </button>

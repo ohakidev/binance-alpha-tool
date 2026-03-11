@@ -9,8 +9,11 @@ import { motion } from "framer-motion";
 import { Plus, Edit2, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useUserStore } from "@/lib/stores/user-store";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { cardVariants } from "@/lib/animations";
+import { useLanguage } from "@/lib/stores/language-store";
+import { getDateFnsLocale } from "@/lib/i18n/locale";
+import { userManagementCopy } from "@/lib/i18n/route-copy";
 
 interface UserSwitcherProps {
   onAddUser: () => void;
@@ -18,16 +21,19 @@ interface UserSwitcherProps {
 }
 
 export function UserSwitcher({ onAddUser, onEditUser }: UserSwitcherProps) {
+  const { language } = useLanguage();
+  const copy = userManagementCopy[language];
+  const locale = getDateFnsLocale(language);
   const { users, activeUserId, setActiveUser, removeUser } = useUserStore();
   const [showActions, setShowActions] = useState<string | null>(null);
 
   const handleDelete = (userId: string, username: string) => {
     if (users.length <= 1) {
-      alert("Cannot delete the last user");
+      alert(copy.cannotDeleteLastUser);
       return;
     }
 
-    if (confirm(`Are you sure you want to delete ${username}?`)) {
+    if (confirm(copy.deleteUserConfirm(username))) {
       removeUser(userId);
     }
   };
@@ -45,13 +51,13 @@ export function UserSwitcher({ onAddUser, onEditUser }: UserSwitcherProps) {
   return (
     <div className="glass-card">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-bold text-lg">Select User</h3>
+        <h3 className="font-bold text-lg">{copy.selectUser}</h3>
         <button
           onClick={onAddUser}
           className="px-3 py-1.5 gradient-gold text-black rounded-lg hover:glow-gold transition-all flex items-center gap-2 text-sm font-medium"
         >
           <Plus className="w-4 h-4" />
-          Add User
+          {copy.addUser}
         </button>
       </div>
 
@@ -111,7 +117,7 @@ export function UserSwitcher({ onAddUser, onEditUser }: UserSwitcherProps) {
 
                   {/* Level Badge */}
                   <div className="px-2 py-0.5 rounded-full glass text-xs font-medium">
-                    Lv {Math.floor(user.entryCount / 10) + 1}
+                    {copy.level} {Math.floor(user.entryCount / 10) + 1}
                   </div>
                 </div>
 
@@ -124,10 +130,10 @@ export function UserSwitcher({ onAddUser, onEditUser }: UserSwitcherProps) {
                     ${user.totalEarnings.toFixed(0)}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {user.entryCount} entries
+                    {user.entryCount} {copy.entries}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {format(user.lastActive, "MMM d")}
+                    {format(user.lastActive, "MMM d", { locale })}
                   </p>
                 </div>
 
@@ -166,7 +172,7 @@ export function UserSwitcher({ onAddUser, onEditUser }: UserSwitcherProps) {
 
       {/* Info Text */}
       <p className="text-xs text-muted-foreground mt-4 text-center">
-        Click on a user card to switch active user
+        {copy.switchUserHint}
       </p>
     </div>
   );

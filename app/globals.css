@@ -1482,6 +1482,33 @@
     will-change: transform, opacity;
 }
 
+@media (max-width: 767px), (hover: none) and (pointer: coarse) {
+    .animated-bg-layer {
+        animation: none !important;
+        filter: blur(36px) !important;
+        will-change: auto !important;
+    }
+
+    .animated-bg-layer-3 {
+        display: none;
+    }
+
+    .mobile-performance-surface {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        background: linear-gradient(
+            180deg,
+            rgba(10, 10, 12, 0.985) 0%,
+            rgba(3, 3, 5, 0.995) 100%
+        ) !important;
+    }
+
+    .mobile-performance-overlay {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+}
+
 /* Shiny Text Animation */
 @keyframes shiny-text {
     0%,
