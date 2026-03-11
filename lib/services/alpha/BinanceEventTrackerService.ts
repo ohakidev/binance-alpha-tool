@@ -37,6 +37,7 @@ const ANNOUNCEMENT_LINK_RE =
 const SLOT_RE = /\b\d+(?:\.\d+)?k?\s+slots\b/i;
 const TELEGRAM_MESSAGE_RE =
   /<div class="tgme_widget_message text_not_supported_wrap js-widget_message"[^>]*data-post="([^"]+)"[\s\S]*?<div class="tgme_widget_message_text js-message_text" dir="auto">([\s\S]*?)<\/div>[\s\S]*?<a class="tgme_widget_message_date" href="([^"]+)"><time datetime="([^"]+)"/gi;
+const HISTORY_MATCH_MAX_TIME_DELTA_MS = 24 * 60 * 60 * 1000;
 
 interface RawSourceSnapshot {
   sourceType: EventSourceType;
@@ -720,6 +721,12 @@ function mapDbEventToApiRow(event: any): EventApiRow {
     scheduleStatus: event.status.toLowerCase(),
     sourceUrl: event.sourceUrl,
     confidence: event.confidence,
+    sourceType: event.sourceType,
+    pointsText:
+      event.requiredAlphaPoints !== null && event.requiredAlphaPoints !== undefined
+        ? String(event.requiredAlphaPoints)
+        : null,
+    slotText: extractSlotText(event.sourceRawText),
   };
 }
 
@@ -741,6 +748,12 @@ function mapCanonicalEventToApiRow(event: CanonicalEventRecord): EventApiRow {
     scheduleStatus: event.status,
     sourceUrl: event.sourceUrl,
     confidence: event.confidence,
+    sourceType: event.sourceType,
+    pointsText:
+      event.requiredAlphaPoints !== null && event.requiredAlphaPoints !== undefined
+        ? String(event.requiredAlphaPoints)
+        : null,
+    slotText: extractSlotText(event.sourceRawText),
   };
 }
 
@@ -1092,6 +1105,12 @@ function mapLegacyScheduleToApiRow(schedule: any): EventApiRow {
     scheduleStatus: status,
     sourceUrl: schedule.sourceUrl ?? null,
     confidence: schedule.confidence ?? 0.55,
+    sourceType: null,
+    pointsText:
+      schedule.points !== null && schedule.points !== undefined
+        ? String(schedule.points)
+        : null,
+    slotText: extractSlotText(schedule.description),
   };
 }
 
@@ -1118,6 +1137,12 @@ function mapLegacyAirdropToApiRow(airdrop: any): EventApiRow {
     scheduleStatus: status,
     sourceUrl: null,
     confidence: airdrop.verified ? 0.6 : 0.45,
+    sourceType: null,
+    pointsText:
+      airdrop.requiredPoints !== null && airdrop.requiredPoints !== undefined
+        ? String(airdrop.requiredPoints)
+        : null,
+    slotText: extractSlotText(airdrop.description),
   };
 }
 
@@ -1199,6 +1224,151 @@ function mapHistoryEnrichmentToApiRow(
     scheduleStatus: status,
     sourceUrl: entry.sourceUrl,
     confidence: 0.78,
+    sourceType: null,
+    pointsText: entry.pointsText,
+    slotText: entry.slotText,
+  };
+}
+
+function normalizeAddress(value?: string | null): string {
+  return (value || "").trim().toLowerCase();
+}
+
+function getApiRowTimestamp(row: EventApiRow): number | null {
+  const value = row.claimStartDate || row.listingTime;
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isCloseHistoryMatch(
+  entry: HistoryEnrichment,
+  targetTimestamp: number | null,
+): boolean {
+  if (!targetTimestamp || !entry.scheduledAt) {
+    return false;
+  }
+
+  return (
+    Math.abs(entry.scheduledAt.getTime() - targetTimestamp) <=
+    HISTORY_MATCH_MAX_TIME_DELTA_MS
+  );
+}
+
+function rankHistoryMatches(
+  matches: HistoryEnrichment[],
+  targetTimestamp: number | null,
+  targetContract: string,
+): HistoryEnrichment[] {
+  return [...matches].sort((left, right) => {
+    const leftContractMatch =
+      targetContract && normalizeAddress(left.contractAddress) === targetContract
+        ? 1
+        : 0;
+    const rightContractMatch =
+      targetContract && normalizeAddress(right.contractAddress) === targetContract
+        ? 1
+        : 0;
+
+    if (leftContractMatch !== rightContractMatch) {
+      return rightContractMatch - leftContractMatch;
+    }
+
+    if (targetTimestamp && left.scheduledAt && right.scheduledAt) {
+      const leftDiff = Math.abs(left.scheduledAt.getTime() - targetTimestamp);
+      const rightDiff = Math.abs(right.scheduledAt.getTime() - targetTimestamp);
+
+      if (leftDiff !== rightDiff) {
+        return leftDiff - rightDiff;
+      }
+    }
+
+    const leftTime = left.scheduledAt?.getTime() ?? Number.MIN_SAFE_INTEGER;
+    const rightTime = right.scheduledAt?.getTime() ?? Number.MIN_SAFE_INTEGER;
+    return rightTime - leftTime;
+  });
+}
+
+function findHistoryMatchForApiRow(
+  row: EventApiRow,
+  historyLookup: Map<string, HistoryEnrichment[]>,
+): { enrichment: HistoryEnrichment; replaceType: boolean } | null {
+  if (!row.symbol) {
+    return null;
+  }
+
+  const matches = historyLookup.get(row.symbol.toUpperCase());
+  if (!matches?.length) {
+    return null;
+  }
+
+  const targetTimestamp = getApiRowTimestamp(row);
+  const targetContract = normalizeAddress(row.contractAddress);
+  const sameTypeMatches = rankHistoryMatches(
+    matches.filter((entry) => normalizeHistoryEventType(entry.type) === row.type),
+    targetTimestamp,
+    targetContract,
+  );
+  const sameType = sameTypeMatches[0] || null;
+
+  if (
+    sameType &&
+    (!targetTimestamp ||
+      !sameType.scheduledAt ||
+      isCloseHistoryMatch(sameType, targetTimestamp))
+  ) {
+    return { enrichment: sameType, replaceType: false };
+  }
+
+  const isWeakTokenListPlaceholder =
+    row.sourceType === "BINANCE_ALPHA_TOKEN_LIST" &&
+    !row.requiredPoints &&
+    !row.airdropAmount &&
+    !row.estimatedValue;
+
+  if (!isWeakTokenListPlaceholder) {
+    return null;
+  }
+
+  const closeReplacement = rankHistoryMatches(
+    matches.filter((entry) => isCloseHistoryMatch(entry, targetTimestamp)),
+    targetTimestamp,
+    targetContract,
+  )[0];
+
+  if (!closeReplacement) {
+    return null;
+  }
+
+  return {
+    enrichment: closeReplacement,
+    replaceType: normalizeHistoryEventType(closeReplacement.type) !== row.type,
+  };
+}
+
+function enrichApiRowWithHistory(
+  row: EventApiRow,
+  historyLookup: Map<string, HistoryEnrichment[]>,
+): EventApiRow {
+  const match = findHistoryMatchForApiRow(row, historyLookup);
+  if (!match) {
+    return row;
+  }
+  const { enrichment, replaceType } = match;
+
+  return {
+    ...row,
+    type: replaceType ? normalizeHistoryEventType(enrichment.type) : row.type,
+    requiredPoints: row.requiredPoints ?? enrichment.pointsValue,
+    airdropAmount: row.airdropAmount || buildHistoryAmountText(enrichment),
+    estimatedValue: row.estimatedValue ?? enrichment.estimatedValue,
+    contractAddress: row.contractAddress ?? enrichment.contractAddress,
+    sourceUrl: row.sourceUrl ?? enrichment.sourceUrl,
+    pointsText: row.pointsText?.trim() || enrichment.pointsText,
+    slotText: row.slotText?.trim() || enrichment.slotText,
   };
 }
 
@@ -1875,6 +2045,13 @@ export class BinanceEventTrackerService {
     }
 
     try {
+      let historyLookup = new Map<string, HistoryEnrichment[]>();
+      try {
+        historyLookup = await fetchHistoryEnrichmentLookup();
+      } catch (error) {
+        warnCurrentSourceFailure("history-source", error);
+      }
+
       const events = await airdropEvent.findMany({
         where: {
           ...(options?.chain ? { chain: options.chain } : {}),
@@ -1886,7 +2063,11 @@ export class BinanceEventTrackerService {
         ],
       });
 
-      return dedupeEventApiRows(events.map(mapDbEventToApiRow))
+      return dedupeEventApiRows(
+        events
+          .map(mapDbEventToApiRow)
+          .map((row: EventApiRow) => enrichApiRowWithHistory(row, historyLookup)),
+      )
         .filter((row) => matchesApiRowFilters(row, options))
         .sort(sortApiRows)
         .slice(0, options?.limit || 500);
@@ -1921,10 +2102,11 @@ export class BinanceEventTrackerService {
       requirements: [],
       estimatedPrice: null,
       pointsText:
-        row.requiredPoints !== null && row.requiredPoints !== undefined
+        row.pointsText?.trim() ||
+        (row.requiredPoints !== null && row.requiredPoints !== undefined
           ? String(row.requiredPoints)
-          : null,
-      slotText: extractSlotText(row.airdropAmount),
+          : null),
+      slotText: row.slotText?.trim() || null,
       description: row.sourceUrl ? `Official source: ${row.sourceUrl}` : "",
       website: "",
       twitter: "",

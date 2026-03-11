@@ -76,6 +76,9 @@ export interface EventApiRow {
   scheduleStatus: CanonicalEventStatus | null;
   sourceUrl: string | null;
   confidence: number;
+  sourceType?: EventSourceType | null;
+  pointsText?: string | null;
+  slotText?: string | null;
 }
 
 const MONTH_PATTERN =
@@ -467,9 +470,13 @@ function prefersCandidate(
   }
 
   if ("sourceType" in left && "sourceType" in right) {
-    const sourceDelta = compareSourcePriority(left.sourceType, right.sourceType);
-    if (sourceDelta !== 0) {
-      return sourceDelta > 0;
+    const leftSourceType = left.sourceType;
+    const rightSourceType = right.sourceType;
+    if (leftSourceType && rightSourceType) {
+      const sourceDelta = compareSourcePriority(leftSourceType, rightSourceType);
+      if (sourceDelta !== 0) {
+        return sourceDelta > 0;
+      }
     }
   }
 
