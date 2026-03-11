@@ -27,6 +27,8 @@ const TRADE_LIMIT = 30; // Reduced from 50
 const CACHE_TTL = 4000; // 4 seconds fresh
 const STALE_TTL = 10000; // 10 seconds stale-while-revalidate
 const CONCURRENT_REQUESTS = 4; // Limit parallel requests
+const TOKEN_LIST_RETRIES = 1;
+const TOKEN_LIST_RETRY_TIMEOUT = 6000;
 
 // Stability thresholds (bps)
 const STABLE_THRESHOLD = 5;
@@ -176,6 +178,32 @@ async function fetchTrades(tradeSymbol: string, retries = 1): Promise<Trade[]> {
       if (i === retries) return [];
     }
   }
+  return [];
+}
+
+async function fetchTokenList(retries = TOKEN_LIST_RETRIES): Promise<AlphaTokenRaw[]> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const timeout = i === 0 ? REQUEST_TIMEOUT : TOKEN_LIST_RETRY_TIMEOUT;
+      const res = await fetchWithTimeout(BINANCE_ALPHA_API_URL, timeout);
+
+      if (!res.ok) {
+        if (i === retries) return [];
+        continue;
+      }
+
+      const data = await res.json();
+
+      if (data.code === "000000" && Array.isArray(data.data)) {
+        return data.data as AlphaTokenRaw[];
+      }
+
+      if (i === retries) return [];
+    } catch {
+      if (i === retries) return [];
+    }
+  }
+
   return [];
 }
 
@@ -358,21 +386,14 @@ async function refreshCache(): Promise<void> {
   cache.isRefreshing = true;
 
   try {
-    const listRes = await fetchWithTimeout(BINANCE_ALPHA_API_URL);
+    const tokenList = await fetchTokenList();
 
-    if (!listRes.ok) {
+    if (tokenList.length === 0) {
       cache.isRefreshing = false;
       return;
     }
 
-    const listData = await listRes.json();
-
-    if (listData.code !== "000000" || !Array.isArray(listData.data)) {
-      cache.isRefreshing = false;
-      return;
-    }
-
-    const eligibleTokens = (listData.data as AlphaTokenRaw[])
+    const eligibleTokens = tokenList
       .filter((t) => t.mulPoint === 4 || t.symbol === "KOGE")
       .sort((a, b) => parseFloat(b.volume24h) - parseFloat(a.volume24h))
       .slice(0, MAX_TOKENS);
