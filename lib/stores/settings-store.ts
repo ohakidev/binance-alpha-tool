@@ -5,13 +5,12 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { UserSettings, AppSettings, NotificationSettings, APISettings } from '@/lib/types';
+import { UserSettings, AppSettings, NotificationSettings } from '@/lib/types';
 
 interface SettingsStore extends UserSettings {
   // Actions
   updateAppSettings: (settings: Partial<AppSettings>) => void;
   updateNotificationSettings: (settings: Partial<NotificationSettings>) => void;
-  updateAPISettings: (settings: Partial<APISettings>) => void;
   resetToDefaults: () => void;
 }
 
@@ -40,16 +39,11 @@ const defaultNotificationSettings: NotificationSettings = {
   },
 };
 
-const defaultAPISettings: APISettings = {
-  testConnection: false,
-};
-
 export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set) => ({
       app: defaultAppSettings,
       notifications: defaultNotificationSettings,
-      api: defaultAPISettings,
 
       updateAppSettings: (settings) => {
         set((state) => ({
@@ -63,22 +57,15 @@ export const useSettingsStore = create<SettingsStore>()(
         }));
       },
 
-      updateAPISettings: (settings) => {
-        set((state) => ({
-          api: { ...state.api, ...settings },
-        }));
-      },
-
       resetToDefaults: () => {
         set({
           app: defaultAppSettings,
           notifications: defaultNotificationSettings,
-          api: defaultAPISettings,
         });
       },
     }),
     {
-      name: 'binance-alpha-settings',
+      name: 'alpha-tracker-settings',
     }
   )
 );

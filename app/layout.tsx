@@ -27,7 +27,7 @@ const prompt = Prompt({
 export const metadata: Metadata = {
   title: "Alpha Airdrop Tracker",
   description:
-    "Independent dashboard for tracking alpha airdrops, project stability, and income data. Not affiliated with Binance.",
+    "Independent public-data tracker for alpha airdrops, project stability, and income data. Not affiliated with Binance.",
   applicationName: "Alpha Airdrop Tracker",
   manifest: "/manifest.json",
   appleWebApp: {

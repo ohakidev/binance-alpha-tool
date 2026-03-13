@@ -88,6 +88,7 @@ interface ApiResponse {
 // ============= Constants =============
 
 const REFRESH_INTERVAL = 5000;
+const STABILITY_DATA_API_PATH = "/api/binance/alpha/stability-data";
 
 function getStabilityConfig(copy: (typeof stabilityPageCopy)["en"]) {
   return {
@@ -232,6 +233,7 @@ export default function StabilityPage() {
   const [data, setData] = useState<TokenData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState(0);
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL / 1000);
   const [alertEnabled, setAlertEnabled] = useState(false);
@@ -384,11 +386,13 @@ export default function StabilityPage() {
     try {
       setIsRefreshing(true);
 
-      const res = await fetch("/api/binance/alpha/stability-data", {
+      const res = await fetch(STABILITY_DATA_API_PATH, {
         cache: "no-store",
       });
 
-      if (!res.ok) throw new Error("Failed to fetch");
+      if (!res.ok) {
+        throw new Error(`Stability API request failed with ${res.status}`);
+      }
 
       const json: ApiResponse = await res.json();
 
@@ -396,6 +400,7 @@ export default function StabilityPage() {
         setData(json.data);
         setLastUpdate(Date.now());
         setIsLoading(false);
+        setErrorMessage(null);
 
         const now = Date.now();
         const newStableStartTime: Record<string, number> = {};
@@ -408,9 +413,15 @@ export default function StabilityPage() {
         });
 
         setStableStartTime(newStableStartTime);
+        return;
       }
+
+      throw new Error("Stability API returned an empty payload");
     } catch (error) {
-      console.error("Fetch error:", error);
+      setErrorMessage(
+        error instanceof Error ? error.message : "Unable to load stability data",
+      );
+      setIsLoading(false);
     } finally {
       setIsRefreshing(false);
     }
@@ -483,7 +494,7 @@ export default function StabilityPage() {
         }
       }
     });
-  }, [data, alertEnabled, alertThreshold, stableStartTime]);
+  }, [copy, data, alertEnabled, alertThreshold, stableStartTime]);
 
   // Request notification permission
   const enableAlerts = useCallback(async () => {
@@ -809,6 +820,19 @@ export default function StabilityPage() {
                       <div className="flex flex-col items-center gap-3">
                         <Info className="w-8 h-8 text-slate-600" />
                         <p className="text-sm">{copy.noDataAvailable}</p>
+                        {errorMessage ? (
+                          <p className="max-w-md text-xs text-amber-400">
+                            {errorMessage}
+                          </p>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={fetchData}
+                          className="inline-flex items-center gap-2 rounded-lg bg-slate-800/60 px-3 py-2 text-xs font-medium text-slate-200 ring-1 ring-white/10 transition-colors hover:bg-slate-700/70"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                          Retry
+                        </button>
                       </div>
                     </td>
                   </tr>

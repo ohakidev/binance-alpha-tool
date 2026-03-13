@@ -82,7 +82,10 @@ import {
 } from "@/components/ui/shine-border";
 import { NumberTicker } from "@/components/ui/number-ticker";
 import { GradientText } from "@/components/ui/animated-text";
-import { dedupeEventApiRows } from "@/lib/services/alpha/binance-event-pipeline";
+import {
+  dedupeEventApiRows,
+  type EventApiRow,
+} from "@/lib/services/alpha/binance-event-pipeline";
 import { useLanguage } from "@/lib/stores/language-store";
 import {
   getDateFnsLocale,
@@ -168,8 +171,6 @@ const typeColors: Record<string, string> = {
   AIRDROP:
     "bg-gradient-to-r from-cyan-500/20 to-blue-500/10 text-cyan-400 border-cyan-500/40",
 };
-
-const TELEGRAM_JOIN_URL = "https://t.me/binance_alphachi";
 
 function parseNumericAmount(amount?: string | null): number | null {
   if (!amount) {
@@ -506,16 +507,37 @@ function MobileAirdropCard({
   );
 }
 
-export function AirdropsTable() {
+interface AirdropsTableProps {
+  alertChannelUrl?: string | null;
+}
+
+export function AirdropsTable({ alertChannelUrl }: AirdropsTableProps) {
   const mounted = useMounted();
   const isMobileViewport = useIsMobile();
   const { language } = useLanguage();
   const copy = airdropsPageCopy[language];
+  const alertChannelHref = alertChannelUrl?.trim() || "";
   const telegramCtaPrimary = copy.telegramCtaPrimary.trim();
   const telegramCtaSecondary = copy.telegramCtaSecondary.trim();
   const telegramCtaAriaLabel = [telegramCtaPrimary, telegramCtaSecondary]
     .filter(Boolean)
     .join(" ");
+  const trustBadges =
+    language === "th"
+      ? [
+          "ใช้ข้อมูลสาธารณะเท่านั้น",
+          "ไม่มี login หรือ wallet connect",
+          "ไม่ใช่เว็บทางการของ Binance",
+        ]
+      : [
+          "Public data only",
+          "No login or wallet connect",
+          "Not affiliated with Binance",
+        ];
+  const trustDisclosure =
+    language === "th"
+      ? "เครื่องมือนี้เป็น tracker อิสระจากข้อมูลสาธารณะเท่านั้น และจะไม่ขอ API key, secret key, bot token หรือข้อมูลบัญชีจากเบราว์เซอร์"
+      : "This is an independent tracker built from public data sources only. It does not request API keys, secret keys, bot tokens, or account credentials in the browser.";
   const dateLocale = getDateFnsLocale(language);
   const numberLocale = getIntlLocale(language);
   const responsiveLayoutMode = getResponsiveAirdropsLayoutMode({
@@ -541,9 +563,14 @@ export function AirdropsTable() {
   } = useQuery({
     queryKey: ["airdrops", "all"],
     queryFn: async () => {
-      const res = await fetch("/api/binance/alpha/airdrops?limit=500");
+      const res = await fetch("/api/binance/alpha/airdrops?limit=500", {
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        throw new Error(`Airdrops API request failed with ${res.status}`);
+      }
       const json = await res.json();
-      return json.data as Airdrop[];
+      return (json.data || []) as Airdrop[];
     },
     refetchInterval: 60000,
     refetchOnWindowFocus: false,
@@ -554,7 +581,7 @@ export function AirdropsTable() {
   const allData = useMemo(() => {
     if (!allAirdropsData) return [];
     return [
-      ...(dedupeEventApiRows(allAirdropsData as any) as Airdrop[]),
+      ...(dedupeEventApiRows(allAirdropsData as EventApiRow[]) as Airdrop[]),
     ].sort(sortByClaimStartDesc);
   }, [allAirdropsData]);
 
@@ -1078,36 +1105,52 @@ export function AirdropsTable() {
                   <p className="text-sm text-muted-foreground mt-1">
                     {copy.heroDescription}
                   </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {trustBadges.map((badge) => (
+                      <Badge
+                        key={badge}
+                        variant="outline"
+                        className="border-emerald-500/20 bg-emerald-500/10 text-[11px] font-medium text-emerald-200"
+                      >
+                        {badge}
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="mt-3 max-w-2xl text-xs leading-6 text-muted-foreground sm:text-sm">
+                    {trustDisclosure}
+                  </p>
                 </div>
               </div>
-              <div className="w-full sm:w-auto sm:max-w-[440px]">
-                <Button
-                  asChild
-                  variant="premium"
-                  className="h-auto w-full rounded-2xl px-4 py-4 sm:px-5 sm:py-4 shadow-[0_10px_35px_rgba(212,169,72,0.25)]"
-                >
-                  <a
-                    href={TELEGRAM_JOIN_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={telegramCtaAriaLabel}
+              {alertChannelHref ? (
+                <div className="w-full sm:w-auto sm:max-w-[440px]">
+                  <Button
+                    asChild
+                    variant="premium"
+                    className="h-auto w-full rounded-2xl px-4 py-4 sm:px-5 sm:py-4 shadow-[0_10px_35px_rgba(212,169,72,0.25)]"
                   >
-                    <span className="flex w-full items-start gap-3 text-left">
-                      <span className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#030305]/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]">
-                        <Send className="w-5 h-5" />
-                      </span>
-                      <span className="flex min-w-0 flex-col">
-                        <span className="text-sm font-semibold leading-tight sm:text-base">
-                          {telegramCtaPrimary}
+                    <a
+                      href={alertChannelHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={telegramCtaAriaLabel}
+                    >
+                      <span className="flex w-full items-start gap-3 text-left">
+                        <span className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#030305]/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]">
+                          <Send className="w-5 h-5" />
                         </span>
-                        <span className="mt-1 text-xs leading-snug text-[#030305]/80 sm:text-sm">
-                          {telegramCtaSecondary}
+                        <span className="flex min-w-0 flex-col">
+                          <span className="text-sm font-semibold leading-tight sm:text-base">
+                            {telegramCtaPrimary}
+                          </span>
+                          <span className="mt-1 text-xs leading-snug text-[#030305]/80 sm:text-sm">
+                            {telegramCtaSecondary}
+                          </span>
                         </span>
                       </span>
-                    </span>
-                  </a>
-                </Button>
-              </div>
+                    </a>
+                  </Button>
+                </div>
+              ) : null}
             </div>
           </div>
           <CornerGlow

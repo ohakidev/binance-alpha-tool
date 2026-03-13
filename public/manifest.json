@@ -1,7 +1,7 @@
 {
   "name": "Alpha Airdrop Tracker",
   "short_name": "AlphaTracker",
-  "description": "Independent tracker for alpha airdrops, project stability, and income data.",
+  "description": "Independent public-data tracker for alpha airdrops, project stability, and income data. Not affiliated with Binance.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",

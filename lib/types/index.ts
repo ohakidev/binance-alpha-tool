@@ -183,12 +183,6 @@ export interface NotificationSettings {
   };
 }
 
-export interface APISettings {
-  binanceApiKey?: string;
-  binanceSecretKey?: string;
-  testConnection: boolean;
-}
-
 export interface AppSettings {
   theme: "dark" | "light" | "auto";
   accentColor: "gold" | "cyan" | "purple" | "green";
@@ -201,7 +195,6 @@ export interface AppSettings {
 
 export interface UserSettings {
   notifications: NotificationSettings;
-  api: APISettings;
   app: AppSettings;
 }
 

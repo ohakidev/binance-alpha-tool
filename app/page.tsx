@@ -10,6 +10,7 @@ import {
   BottomGradientFade,
 } from "@/components/ui/animated-background";
 import { AirdropsTable } from "@/components/features/airdrops/airdrops-table";
+import { resolveAlertChannelUrl } from "@/lib/config/runtime-links";
 
 // Loading skeleton component - server rendered
 function AirdropsTableSkeleton() {
@@ -79,6 +80,8 @@ function AirdropsTableSkeleton() {
 }
 
 export default function Home() {
+  const alertChannelUrl = resolveAlertChannelUrl();
+
   return (
     <div className="min-h-screen bg-[#030305] relative overflow-hidden">
       {/* Background - CSS-only animations for performance */}
@@ -87,7 +90,7 @@ export default function Home() {
       {/* Content */}
       <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-7xl">
         <Suspense fallback={<AirdropsTableSkeleton />}>
-          <AirdropsTable />
+          <AirdropsTable alertChannelUrl={alertChannelUrl} />
         </Suspense>
       </div>
 

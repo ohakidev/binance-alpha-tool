@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { resolveAlertChannelUrl, resolveWebsiteUrl } from '@/lib/config/runtime-links';
 import { telegramService } from '@/lib/services/telegram';
 
 /**
@@ -67,12 +68,21 @@ export async function GET() {
   const isConfigured = !!(
     process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID
   );
+  const rawChatId = process.env.TELEGRAM_CHAT_ID || "";
+  const chatId = rawChatId
+    ? rawChatId.startsWith("@") ||
+      rawChatId.startsWith("-") ||
+      !Number.isNaN(Number(rawChatId))
+      ? rawChatId
+      : `@${rawChatId}`
+    : undefined;
 
   return NextResponse.json({
     configured: isConfigured,
-    chatId: process.env.TELEGRAM_CHAT_ID
-      ? `@${process.env.TELEGRAM_CHAT_ID}`
-      : null,
+    destinationConfigured: isConfigured,
+    chatId,
     language: process.env.TELEGRAM_LANGUAGE || 'th',
+    alertChannelUrl: resolveAlertChannelUrl() || null,
+    websiteUrl: resolveWebsiteUrl() || null,
   });
 }

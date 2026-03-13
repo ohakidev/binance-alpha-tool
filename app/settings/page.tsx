@@ -6,7 +6,7 @@
  */
 
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMounted } from "@/lib/hooks/use-mobile";
 import {
   Palette,
@@ -14,8 +14,7 @@ import {
   Database,
   Download,
   Trash2,
-  Save,
-  Upload,
+  Upload,
   Globe,
   Settings as SettingsIcon,
   Monitor,
@@ -25,7 +24,6 @@ import {
 } from "lucide-react";
 import { useSettingsStore } from "@/lib/stores/settings-store";
 import { useLanguage } from "@/lib/stores/language-store";
-import { settingsPageCopy } from "@/lib/i18n/route-copy";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -42,10 +40,93 @@ import {
 } from "@/components/ui/alert-dialog";
 import { MagicCard } from "@/components/ui/magic-card";
 
+const settingsClientCopy = {
+  th: {
+    alertDeliveryTitle: "การแจ้งเตือนสาธารณะ",
+    alertDeliveryDesc: "ระบบแจ้งเตือนสำหรับ production ถูกจัดการฝั่งเซิร์ฟเวอร์",
+    notificationOptions: [
+      {
+        id: "price-alerts",
+        label: "แจ้งเตือนราคา",
+        desc: "แจ้งเตือนเมื่อราคามีการเปลี่ยนแปลงมากผิดปกติ",
+      },
+      {
+        id: "stability-alerts",
+        label: "แจ้งเตือนความเสถียร",
+        desc: "แจ้งเตือนเมื่อคะแนนความเสถียรเปลี่ยนแปลง",
+      },
+      {
+        id: "new-listings",
+        label: "ลิสต์ใหม่",
+        desc: "แจ้งเตือนเมื่อมีโทเค็นลิสต์ใหม่",
+      },
+    ],
+    compactModeTitle: "โหมดกระชับ",
+    compactModeDesc: "ลดระยะห่างและขนาดตัวอักษรในหน้าจอ",
+    animationsTitle: "แอนิเมชัน",
+    animationsDesc: "เปิดใช้แอนิเมชันและเอฟเฟกต์ของ UI",
+    exportDataTitle: "ส่งออกข้อมูล",
+    exportDataDesc: "ดาวน์โหลดข้อมูลทั้งหมดเป็นไฟล์สำรองแบบ JSON",
+    exportJsonButton: "ส่งออก JSON",
+    importDataTitle: "นำเข้าข้อมูล",
+    importDataDesc: "กู้คืนข้อมูลจากไฟล์สำรอง JSON",
+    selectFileButton: "เลือกไฟล์",
+    dangerZoneTitle: "โซนอันตราย",
+    dangerZoneDesc: "ลบข้อมูลทั้งหมดถาวร การกระทำนี้ไม่สามารถย้อนกลับได้",
+    resetAllDataButton: "รีเซ็ตข้อมูลทั้งหมด",
+    confirmResetTitle: "ยืนยันการลบข้อมูลทั้งหมด?",
+    confirmResetDesc:
+      "การกระทำนี้ไม่สามารถย้อนกลับได้ และจะลบข้อมูลทั้งหมด รวมถึงการตั้งค่าและรายการรายได้",
+    confirmResetAction: "ใช่ ลบทั้งหมด",
+  },
+  en: {
+    alertDeliveryTitle: "Public alert delivery",
+    alertDeliveryDesc: "Production alert delivery is managed server-side",
+    notificationOptions: [
+      {
+        id: "price-alerts",
+        label: "Price Alerts",
+        desc: "Get notified when price moves significantly",
+      },
+      {
+        id: "stability-alerts",
+        label: "Stability Alerts",
+        desc: "Alerts for stability score changes",
+      },
+      {
+        id: "new-listings",
+        label: "New Listings",
+        desc: "Notification for new token listings",
+      },
+    ],
+    compactModeTitle: "Compact Mode",
+    compactModeDesc: "Reduce spacing and font size",
+    animationsTitle: "Animations",
+    animationsDesc: "Enable UI animations and effects",
+    exportDataTitle: "Export Data",
+    exportDataDesc: "Download all your data as a JSON file backup.",
+    exportJsonButton: "Export JSON",
+    importDataTitle: "Import Data",
+    importDataDesc: "Restore your data from a JSON backup file.",
+    selectFileButton: "Select File",
+    dangerZoneTitle: "Danger Zone",
+    dangerZoneDesc: "Permanently delete all your data. This action cannot be undone.",
+    resetAllDataButton: "Reset All Data",
+    confirmResetTitle: "Are you absolutely sure?",
+    confirmResetDesc:
+      "This action cannot be undone. This will permanently delete all your data including settings and income entries.",
+    confirmResetAction: "Yes, delete everything",
+  },
+} as const;
+
 export default function SettingsPage() {
   const { t, language, setLanguage } = useLanguage();
-  const pageCopy = settingsPageCopy[language];
+  const pageCopy = settingsClientCopy[language];
   const mounted = useMounted();
+  const notificationConfigMessage =
+    language === "th"
+      ? "การแจ้งเตือนสาธารณะถูกตั้งค่าฝั่งเซิร์ฟเวอร์สำหรับ production แล้ว และหน้าเว็บนี้จะไม่รับ API key, secret key, bot token หรือ chat ID จากเบราว์เซอร์"
+      : "Public alert delivery is configured server-side for production. This deployment does not accept browser-based API keys, secret keys, bot tokens, or chat IDs.";
   const languageOptions = [
     {
       code: "en" as const,
@@ -58,12 +139,6 @@ export default function SettingsPage() {
       flag: "🇹🇭",
     },
   ];
-  // Telegram State
-  const [, setTelegramToken] = useState("");
-  const [, setTelegramChatId] = useState("");
-  const [tempTelegramToken, setTempTelegramToken] = useState("");
-  const [tempTelegramChatId, setTempTelegramChatId] = useState("");
-
   const [activeTab, setActiveTab] = useState("general");
 
   // Get settings after mount to avoid hydration mismatch
@@ -72,19 +147,6 @@ export default function SettingsPage() {
     (state) => state.updateAppSettings,
   );
   const resetToDefaults = useSettingsStore((state) => state.resetToDefaults);
-
-  useEffect(() => {
-    if (!mounted) return;
-    // Load saved settings
-    const savedTelegramToken = localStorage.getItem("telegram_bot_token") || "";
-    const savedTelegramChatId = localStorage.getItem("telegram_chat_id") || "";
-
-
-    setTelegramToken(savedTelegramToken);
-    setTelegramChatId(savedTelegramChatId);
-    setTempTelegramToken(savedTelegramToken);
-    setTempTelegramChatId(savedTelegramChatId);
-  }, [mounted]);
 
   if (!mounted) {
     return (
@@ -108,18 +170,6 @@ export default function SettingsPage() {
     );
   }
 
-  const handleSaveTelegram = () => {
-    if (!tempTelegramToken || !tempTelegramChatId) {
-      toast.error(t("common.error"));
-      return;
-    }
-    localStorage.setItem("telegram_bot_token", tempTelegramToken);
-    localStorage.setItem("telegram_chat_id", tempTelegramChatId);
-    setTelegramToken(tempTelegramToken);
-    setTelegramChatId(tempTelegramChatId);
-    toast.success(t("common.success"));
-  };
-
   const handleResetData = () => {
     resetToDefaults();
     toast.success(t("common.success"));
@@ -135,7 +185,7 @@ export default function SettingsPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `binance-alpha-backup-${Date.now()}.json`;
+      a.download = `alpha-airdrop-tracker-backup-${Date.now()}.json`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success(t("common.success"));
@@ -303,15 +353,15 @@ export default function SettingsPage() {
                 </p>
               </div>
               <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-                {/* Telegram Settings */}
+                {/* Public alert delivery */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="space-y-0.5 flex-1 min-w-0">
                       <label className="text-sm md:text-base font-medium text-slate-200">
-                        {pageCopy.telegramIntegrationTitle}
+                        {pageCopy.alertDeliveryTitle}
                       </label>
                       <p className="text-xs md:text-sm text-muted-foreground">
-                        {pageCopy.telegramIntegrationDesc}
+                        {pageCopy.alertDeliveryDesc}
                       </p>
                     </div>
                     <div className="p-2 bg-blue-500/20 rounded-lg flex-shrink-0">
@@ -319,42 +369,8 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">
-                      {pageCopy.telegramBotTokenLabel}
-                    </label>
-                    <input
-                      type="password"
-                      value={tempTelegramToken}
-                      onChange={(e) => setTempTelegramToken(e.target.value)}
-                      className="w-full px-4 py-3 md:py-2.5 text-sm bg-black/20 border border-white/10 rounded-xl focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
-                      placeholder={pageCopy.telegramBotTokenPlaceholder}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">
-                      {pageCopy.telegramChatIdLabel}
-                    </label>
-                    <input
-                      type="text"
-                      value={tempTelegramChatId}
-                      onChange={(e) => setTempTelegramChatId(e.target.value)}
-                      className="w-full px-4 py-3 md:py-2.5 text-sm bg-black/20 border border-white/10 rounded-xl focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
-                      placeholder={pageCopy.telegramChatIdPlaceholder}
-                    />
-                  </div>
-
-                  <div className="flex justify-end pt-2 md:pt-4">
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={handleSaveTelegram}
-                      className="w-full md:w-auto px-6 py-3 md:py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium rounded-xl shadow-lg shadow-purple-500/20 hover:shadow-purple-500/40 transition-all flex items-center justify-center gap-2"
-                    >
-                      <Save className="w-4 h-4" />
-                      {t("common.save")}
-                    </motion.button>
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-slate-200">
+                    {notificationConfigMessage}
                   </div>
                 </div>
 

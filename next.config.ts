@@ -376,7 +376,33 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        source: "/api/alpha/airdrops",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, s-maxage=60, stale-while-revalidate=120",
+          },
+        ],
+      },
+      {
         source: "/api/binance/alpha/stability-data",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-store, no-cache, must-revalidate, max-age=0",
+          },
+          {
+            key: "Pragma",
+            value: "no-cache",
+          },
+          {
+            key: "Expires",
+            value: "0",
+          },
+        ],
+      },
+      {
+        source: "/api/alpha/stability-data",
         headers: [
           {
             key: "Cache-Control",
@@ -406,7 +432,29 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        source: "/api/alpha/stability",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-store, no-cache, must-revalidate, max-age=0",
+          },
+          {
+            key: "Pragma",
+            value: "no-cache",
+          },
+        ],
+      },
+      {
         source: "/api/binance/market/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, s-maxage=10, stale-while-revalidate=30",
+          },
+        ],
+      },
+      {
+        source: "/api/market/:path*",
         headers: [
           {
             key: "Cache-Control",
@@ -473,7 +521,24 @@ const nextConfig: NextConfig = {
 
   async rewrites() {
     return {
-      beforeFiles: [],
+      beforeFiles: [
+        {
+          source: "/api/alpha/airdrops",
+          destination: "/api/binance/alpha/airdrops",
+        },
+        {
+          source: "/api/alpha/stability",
+          destination: "/api/binance/alpha/stability",
+        },
+        {
+          source: "/api/alpha/stability-data",
+          destination: "/api/binance/alpha/stability-data",
+        },
+        {
+          source: "/api/market/:path*",
+          destination: "/api/binance/market/:path*",
+        },
+      ],
       afterFiles: [],
       fallback: [],
     };

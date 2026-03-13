@@ -4,6 +4,7 @@
  */
 
 import TelegramBot from "node-telegram-bot-api";
+import { resolveWebsiteUrl } from "@/lib/config/runtime-links";
 
 export type Language = "th" | "en";
 export type MessageType = "info" | "warning" | "success" | "error";
@@ -75,22 +76,7 @@ export interface TelegramConfig {
 
 const DIVIDER = "--------------------";
 
-const normalizeWebsiteUrl = (value?: string | null): string | null => {
-  const normalized = value?.trim().replace(/\/+$/, "") || "";
-  if (
-    !normalized ||
-    normalized.includes("localhost") ||
-    normalized.includes("127.0.0.1")
-  ) {
-    return null;
-  }
-
-  return normalized;
-};
-
-const WEBSITE_URL =
-  normalizeWebsiteUrl(process.env.APP_URL) ||
-  normalizeWebsiteUrl(process.env.NEXT_PUBLIC_APP_URL);
+const WEBSITE_URL = resolveWebsiteUrl();
 
 const CHAIN_TO_DEXSCREENER: Record<string, string> = {
   BSC: "bsc",
@@ -220,11 +206,9 @@ class TelegramService {
 
     if (this.isEnabled && token) {
       this.bot = new TelegramBot(token, { polling: false });
-      console.log(`Telegram bot initialized - Chat ID: ${this.chatId}`);
+      console.log("Server-side alert delivery initialized.");
     } else {
-      console.warn(
-        "Telegram bot disabled: Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID",
-      );
+      console.warn("Server-side alert delivery is not configured.");
     }
   }
 
@@ -361,7 +345,11 @@ class TelegramService {
       return [];
     }
 
-    return ["", DIVIDER, `${this.t("checkMore")}: ${WEBSITE_URL}`];
+    return [
+      "",
+      DIVIDER,
+      `${this.t("checkMore")}: <a href="${escapeHtml(WEBSITE_URL)}">${escapeHtml(WEBSITE_URL)}</a>`,
+    ];
   }
 
   private appendOptionalLine(lines: string[], label: string, value?: string | null) {
