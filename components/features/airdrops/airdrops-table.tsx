@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useIsMobile, useMounted } from "@/lib/hooks/use-mobile";
 import {
   useReactTable,
   getCoreRowModel,
@@ -124,22 +123,6 @@ interface Airdrop {
   sourceUrl?: string | null;
   confidence?: number;
   listingTime?: string | null;
-}
-
-type ResponsiveAirdropsLayoutInput = {
-  mounted: boolean;
-  isMobileViewport: boolean;
-};
-
-export function getResponsiveAirdropsLayoutMode({
-  mounted,
-  isMobileViewport,
-}: ResponsiveAirdropsLayoutInput): "pending" | "mobile" | "desktop" {
-  if (!mounted) {
-    return "pending";
-  }
-
-  return isMobileViewport ? "mobile" : "desktop";
 }
 
 // Chain colors with premium styling
@@ -512,8 +495,8 @@ interface AirdropsTableProps {
 }
 
 export function AirdropsTable({ alertChannelUrl }: AirdropsTableProps) {
-  const mounted = useMounted();
-  const isMobileViewport = useIsMobile();
+  "use no memo";
+
   const { language } = useLanguage();
   const copy = airdropsPageCopy[language];
   const alertChannelHref = alertChannelUrl?.trim() || "";
@@ -540,10 +523,6 @@ export function AirdropsTable({ alertChannelUrl }: AirdropsTableProps) {
       : "This is an independent tracker built from public data sources only. It does not request API keys, secret keys, bot tokens, or account credentials in the browser.";
   const dateLocale = getDateFnsLocale(language);
   const numberLocale = getIntlLocale(language);
-  const responsiveLayoutMode = getResponsiveAirdropsLayoutMode({
-    mounted,
-    isMobileViewport,
-  });
   const [activeTab, setActiveTab] = useState<"today" | "upcoming" | "all">(
     "today",
   );
@@ -1018,7 +997,9 @@ export function AirdropsTable({ alertChannelUrl }: AirdropsTableProps) {
     ],
   );
 
-  // React Table instance
+  // TanStack Table uses interior mutability, so this component opts out of
+  // compiler memoization and suppresses the known lint warning for this hook.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: filteredData as Airdrop[],
     columns: airdropColumns,
@@ -1332,18 +1313,18 @@ export function AirdropsTable({ alertChannelUrl }: AirdropsTableProps) {
         duration={6}
       >
         <Card className="bg-background/95 backdrop-blur-sm border-0">
-          <CardHeader className="pb-4">
+          <CardHeader className="px-4 pb-4 sm:px-6">
             <Tabs
               value={activeTab}
               onValueChange={(v) =>
                 setActiveTab(v as "today" | "upcoming" | "all")
               }
-              className="w-full"
+              className="w-full min-w-0"
             >
-              <TabsList className="grid w-full grid-cols-3 mb-4 bg-muted/50">
+              <TabsList className="mb-4 grid w-full min-w-0 grid-cols-[repeat(3,minmax(0,1fr))] gap-1 overflow-hidden bg-muted/50 p-1">
                 <TabsTrigger
                   value="today"
-                  className="flex items-center gap-1 sm:gap-2 data-[state=active]:bg-red-500/20 data-[state=active]:text-red-400"
+                  className="min-w-0 gap-1 px-2 text-xs sm:gap-2 sm:px-3 sm:text-sm data-[state=active]:bg-red-500/20 data-[state=active]:text-red-400"
                 >
                   <CalendarDays className="w-4 h-4" />
                   <span className="hidden sm:inline">{copy.today}</span>
@@ -1351,7 +1332,7 @@ export function AirdropsTable({ alertChannelUrl }: AirdropsTableProps) {
                   {stats.todayCount > 0 && (
                     <Badge
                       variant="secondary"
-                      className="ml-1 h-5 px-1.5 bg-red-500/20 text-red-400 text-xs"
+                      className="ml-1 h-5 shrink-0 px-1.5 bg-red-500/20 text-red-400 text-[10px] sm:text-xs"
                     >
                       {stats.todayCount}
                     </Badge>
@@ -1359,7 +1340,7 @@ export function AirdropsTable({ alertChannelUrl }: AirdropsTableProps) {
                 </TabsTrigger>
                 <TabsTrigger
                   value="upcoming"
-                  className="flex items-center gap-1 sm:gap-2 data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400"
+                  className="min-w-0 gap-1 px-2 text-xs sm:gap-2 sm:px-3 sm:text-sm data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400"
                 >
                   <CalendarClock className="w-4 h-4" />
                   <span className="hidden sm:inline">{copy.upcoming}</span>
@@ -1367,7 +1348,7 @@ export function AirdropsTable({ alertChannelUrl }: AirdropsTableProps) {
                   {stats.upcomingCount > 0 && (
                     <Badge
                       variant="secondary"
-                      className="ml-1 h-5 px-1.5 bg-blue-500/20 text-blue-400 text-xs"
+                      className="ml-1 h-5 shrink-0 px-1.5 bg-blue-500/20 text-blue-400 text-[10px] sm:text-xs"
                     >
                       {stats.upcomingCount}
                     </Badge>
@@ -1375,7 +1356,7 @@ export function AirdropsTable({ alertChannelUrl }: AirdropsTableProps) {
                 </TabsTrigger>
                 <TabsTrigger
                   value="all"
-                  className="flex items-center gap-1 sm:gap-2 data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400"
+                  className="min-w-0 gap-1 px-2 text-xs sm:gap-2 sm:px-3 sm:text-sm data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400"
                 >
                   <Coins className="w-4 h-4" />
                   <span className="hidden sm:inline">{copy.all}</span>
@@ -1383,7 +1364,7 @@ export function AirdropsTable({ alertChannelUrl }: AirdropsTableProps) {
                   {stats.allCount > 0 && (
                     <Badge
                       variant="secondary"
-                      className="ml-1 h-5 px-1.5 bg-purple-500/20 text-purple-400 text-xs"
+                      className="ml-1 h-5 shrink-0 px-1.5 bg-purple-500/20 text-purple-400 text-[10px] sm:text-xs"
                     >
                       {stats.allCount}
                     </Badge>
@@ -1516,13 +1497,7 @@ export function AirdropsTable({ alertChannelUrl }: AirdropsTableProps) {
                   {[...Array(5)].map((_, i) => (
                     <Skeleton
                       key={i}
-                      className={`${
-                        responsiveLayoutMode === "mobile"
-                          ? "h-40"
-                          : responsiveLayoutMode === "desktop"
-                            ? "h-16"
-                            : "h-28"
-                      } w-full rounded-lg`}
+                      className="h-40 w-full rounded-lg md:h-16"
                     />
                   ))}
                 </div>
@@ -1548,192 +1523,174 @@ export function AirdropsTable({ alertChannelUrl }: AirdropsTableProps) {
                       : copy.waitingForUpdates}
                   </p>
                 </motion.div>
-              ) : responsiveLayoutMode === "pending" ? (
-                <div
-                  className="mt-4 space-y-3"
-                  data-responsive-layout="pending"
-                >
-                  {[...Array(4)].map((_, i) => (
-                    <Skeleton
-                      key={i}
-                      className="h-28 w-full rounded-xl border border-primary/10"
-                    />
-                  ))}
-                </div>
               ) : (
                 <>
                   {/* Mobile Card View */}
-                  {responsiveLayoutMode === "mobile" ? (
-                    <div className="mt-4 space-y-3">
-                      <ScrollArea className="h-[calc(100vh-420px)] min-h-[400px]">
-                        <div className="space-y-3 pr-2">
-                          <AnimatePresence>
-                            {table.getRowModel().rows.map((row) => {
-                              const airdrop = row.original as Airdrop;
-                              return (
-                                <MobileAirdropCard
-                                  key={row.id}
-                                  airdrop={airdrop}
-                                  onClick={() => handleAirdropClick(airdrop)}
-                                  language={language}
-                                  copy={copy}
-                                />
-                              );
-                            })}
-                          </AnimatePresence>
-                        </div>
-                      </ScrollArea>
-
-                      {/* Mobile Pagination */}
-                      {table.getPageCount() > 1 && (
-                        <div className="flex flex-col gap-3 pt-3 border-t border-primary/10">
-                          <div className="text-xs text-center text-muted-foreground">
-                            {copy.page} {table.getState().pagination.pageIndex + 1}{" "}
-                            {copy.of} {table.getPageCount()} ({filteredData.length}{" "}
-                            {copy.items})
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => table.previousPage()}
-                              disabled={!table.getCanPreviousPage()}
-                              className="flex-1 h-10 border-primary/20"
-                            >
-                              {copy.previous}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => table.nextPage()}
-                              disabled={!table.getCanNextPage()}
-                              className="flex-1 h-10 border-primary/20"
-                            >
-                              {copy.next}
-                            </Button>
-                          </div>
-                        </div>
-                      )}
+                  <div className="mt-4 space-y-3 pb-24 md:hidden">
+                    <div className="space-y-3">
+                      <AnimatePresence>
+                        {table.getRowModel().rows.map((row) => {
+                          const airdrop = row.original as Airdrop;
+                          return (
+                            <MobileAirdropCard
+                              key={row.id}
+                              airdrop={airdrop}
+                              onClick={() => handleAirdropClick(airdrop)}
+                              language={language}
+                              copy={copy}
+                            />
+                          );
+                        })}
+                      </AnimatePresence>
                     </div>
-                  ) : (
-                    /* Desktop Table View */
-                    <div className="mt-4 rounded-xl overflow-hidden border border-primary/10">
-                      <ScrollArea className="w-full">
-                        <Table>
-                          <TableHeader>
-                            {table.getHeaderGroups().map((headerGroup) => (
-                              <TableRow
-                                key={headerGroup.id}
-                                className="bg-muted/30 hover:bg-muted/40"
-                              >
-                                {headerGroup.headers.map((header) => (
-                                  <TableHead
-                                    key={header.id}
-                                    className="text-muted-foreground font-medium whitespace-nowrap"
-                                  >
-                                    {header.isPlaceholder ? null : (
-                                      <div
-                                        className={
-                                          header.column.getCanSort()
-                                            ? "cursor-pointer select-none flex items-center gap-1"
-                                            : ""
-                                        }
-                                        onClick={header.column.getToggleSortingHandler()}
-                                      >
-                                        {flexRender(
-                                          (header.column.id === "projectName"
-                                            ? copy.project
-                                            : header.column.columnDef
-                                                .header) as string,
-                                          header.getContext() as never,
-                                        )}
-                                        {{
-                                          asc: (
-                                            <ChevronUp className="w-4 h-4 text-primary" />
-                                          ),
-                                          desc: (
-                                            <ChevronDown className="w-4 h-4 text-primary" />
-                                          ),
-                                        }[
-                                          header.column.getIsSorted() as string
-                                        ] ??
-                                          (header.column.getCanSort() ? (
-                                            <ChevronsUpDown className="w-4 h-4 opacity-50" />
-                                          ) : null)}
-                                      </div>
-                                    )}
-                                  </TableHead>
-                                ))}
-                              </TableRow>
-                            ))}
-                          </TableHeader>
-                          <TableBody>
-                            <AnimatePresence>
-                              {table.getRowModel().rows.map((row, index) => (
-                                <motion.tr
-                                  key={row.id}
-                                  initial={{ opacity: 0, x: -20 }}
-                                  animate={{ opacity: 1, x: 0 }}
-                                  transition={{
-                                    delay: index * 0.02,
-                                    duration: 0.2,
-                                  }}
-                                  className="border-b border-primary/5 hover:bg-primary/5 transition-colors cursor-pointer"
-                                  onClick={() =>
-                                    handleAirdropClick(row.original as Airdrop)
-                                  }
+
+                    {table.getPageCount() > 1 && (
+                      <div className="flex flex-col gap-3 border-t border-primary/10 pt-3">
+                        <div className="text-center text-xs text-muted-foreground">
+                          {copy.page} {table.getState().pagination.pageIndex + 1}{" "}
+                          {copy.of} {table.getPageCount()} ({filteredData.length}{" "}
+                          {copy.items})
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => table.previousPage()}
+                            disabled={!table.getCanPreviousPage()}
+                            className="h-10 flex-1 border-primary/20"
+                          >
+                            {copy.previous}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => table.nextPage()}
+                            disabled={!table.getCanNextPage()}
+                            className="h-10 flex-1 border-primary/20"
+                          >
+                            {copy.next}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Desktop Table View */}
+                  <div className="mt-4 hidden overflow-hidden rounded-xl border border-primary/10 md:block">
+                    <ScrollArea className="w-full">
+                      <Table className="min-w-[56rem]">
+                        <TableHeader>
+                          {table.getHeaderGroups().map((headerGroup) => (
+                            <TableRow
+                              key={headerGroup.id}
+                              className="bg-muted/30 hover:bg-muted/40"
+                            >
+                              {headerGroup.headers.map((header) => (
+                                <TableHead
+                                  key={header.id}
+                                  className="text-muted-foreground font-medium whitespace-nowrap"
                                 >
-                                  {row.getVisibleCells().map((cell) => (
-                                    <TableCell
-                                      key={cell.id}
-                                      className="py-3 whitespace-nowrap"
+                                  {header.isPlaceholder ? null : (
+                                    <div
+                                      className={
+                                        header.column.getCanSort()
+                                          ? "flex cursor-pointer select-none items-center gap-1"
+                                          : ""
+                                      }
+                                      onClick={header.column.getToggleSortingHandler()}
                                     >
                                       {flexRender(
-                                        cell.column.columnDef.cell as never,
-                                        cell.getContext() as never,
+                                        (header.column.id === "projectName"
+                                          ? copy.project
+                                          : header.column.columnDef
+                                              .header) as string,
+                                        header.getContext() as never,
                                       )}
-                                    </TableCell>
-                                  ))}
-                                </motion.tr>
+                                      {{
+                                        asc: (
+                                          <ChevronUp className="w-4 h-4 text-primary" />
+                                        ),
+                                        desc: (
+                                          <ChevronDown className="w-4 h-4 text-primary" />
+                                        ),
+                                      }[
+                                        header.column.getIsSorted() as string
+                                      ] ??
+                                        (header.column.getCanSort() ? (
+                                          <ChevronsUpDown className="w-4 h-4 opacity-50" />
+                                        ) : null)}
+                                    </div>
+                                  )}
+                                </TableHead>
                               ))}
-                            </AnimatePresence>
-                          </TableBody>
-                        </Table>
-                        <ScrollBar orientation="horizontal" />
-                      </ScrollArea>
+                            </TableRow>
+                          ))}
+                        </TableHeader>
+                        <TableBody>
+                          <AnimatePresence>
+                            {table.getRowModel().rows.map((row, index) => (
+                              <motion.tr
+                                key={row.id}
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{
+                                  delay: index * 0.02,
+                                  duration: 0.2,
+                                }}
+                                className="cursor-pointer border-b border-primary/5 transition-colors hover:bg-primary/5"
+                                onClick={() =>
+                                  handleAirdropClick(row.original as Airdrop)
+                                }
+                              >
+                                {row.getVisibleCells().map((cell) => (
+                                  <TableCell
+                                    key={cell.id}
+                                    className="py-3 whitespace-nowrap"
+                                  >
+                                    {flexRender(
+                                      cell.column.columnDef.cell as never,
+                                      cell.getContext() as never,
+                                    )}
+                                  </TableCell>
+                                ))}
+                              </motion.tr>
+                            ))}
+                          </AnimatePresence>
+                        </TableBody>
+                      </Table>
+                      <ScrollBar orientation="horizontal" />
+                    </ScrollArea>
 
-                      {/* Desktop Pagination */}
-                      {table.getPageCount() > 1 && (
-                        <div className="flex items-center justify-between px-4 py-3 border-t border-primary/10 bg-muted/20">
-                          <div className="text-sm text-muted-foreground">
-                            {copy.page} {table.getState().pagination.pageIndex + 1}{" "}
-                            {copy.of} {table.getPageCount()} ({filteredData.length}{" "}
-                            {copy.items})
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => table.previousPage()}
-                              disabled={!table.getCanPreviousPage()}
-                              className="border-primary/20"
-                            >
-                              {copy.previous}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => table.nextPage()}
-                              disabled={!table.getCanNextPage()}
-                              className="border-primary/20"
-                            >
-                              {copy.next}
-                            </Button>
-                          </div>
+                    {table.getPageCount() > 1 && (
+                      <div className="flex items-center justify-between border-t border-primary/10 bg-muted/20 px-4 py-3">
+                        <div className="text-sm text-muted-foreground">
+                          {copy.page} {table.getState().pagination.pageIndex + 1}{" "}
+                          {copy.of} {table.getPageCount()} ({filteredData.length}{" "}
+                          {copy.items})
                         </div>
-                      )}
-                    </div>
-                  )}
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => table.previousPage()}
+                            disabled={!table.getCanPreviousPage()}
+                            className="border-primary/20"
+                          >
+                            {copy.previous}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => table.nextPage()}
+                            disabled={!table.getCanNextPage()}
+                            className="border-primary/20"
+                          >
+                            {copy.next}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
             </Tabs>
