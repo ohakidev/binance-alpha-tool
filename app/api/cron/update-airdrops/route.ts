@@ -28,6 +28,9 @@ const SCHEDULE_NOTIFICATION_ACTIONS: ScheduleNotificationStage[] = [
   "5m",
   "live",
 ];
+const LIVE_NOTIFICATION_TOLERANCE_MS = 30 * 60 * 1000;
+const FIVE_MINUTE_REMINDER_WINDOW_MS = 15 * 60 * 1000;
+const TWENTY_MINUTE_REMINDER_WINDOW_MS = 30 * 60 * 1000;
 
 function isAuthorized(request: Request): boolean {
   if (request.headers.get("x-vercel-cron")) {
@@ -84,15 +87,20 @@ export function getScheduleNotificationStage(
 ): ScheduleNotificationStage | null {
   const diffMs = scheduledTime.getTime() - now.getTime();
 
-  if (diffMs <= 0 && diffMs > -5 * 60 * 1000) {
+  // GitHub scheduled workflows can drift well beyond 5 minutes, so keep a wider
+  // live window and broader reminder bands. Dedupe logs prevent duplicate sends.
+  if (diffMs <= 0 && diffMs > -LIVE_NOTIFICATION_TOLERANCE_MS) {
     return "live";
   }
 
-  if (diffMs > 0 && diffMs <= 5 * 60 * 1000) {
+  if (diffMs > 0 && diffMs <= FIVE_MINUTE_REMINDER_WINDOW_MS) {
     return "5m";
   }
 
-  if (diffMs > 15 * 60 * 1000 && diffMs <= 20 * 60 * 1000) {
+  if (
+    diffMs > FIVE_MINUTE_REMINDER_WINDOW_MS &&
+    diffMs <= TWENTY_MINUTE_REMINDER_WINDOW_MS
+  ) {
     return "20m";
   }
 
@@ -107,15 +115,16 @@ function getScheduleNotificationAction(stage: ScheduleNotificationStage): string
   return `notify-${stage}`;
 }
 
-function getReminderMinutesForStage(stage: ScheduleNotificationStage): number {
-  switch (stage) {
-    case "20m":
-      return 20;
-    case "5m":
-      return 5;
-    case "live":
-      return 0;
+function getReminderMinutesUntil(
+  scheduledTime: Date,
+  now: Date = new Date(),
+): number {
+  const diffMs = scheduledTime.getTime() - now.getTime();
+  if (diffMs <= 0) {
+    return 0;
   }
+
+  return Math.max(1, Math.ceil(diffMs / (60 * 1000)));
 }
 
 export async function GET(request: Request) {
@@ -198,8 +207,8 @@ export async function GET(request: Request) {
       const schedules = await (prisma as any).airdropSchedule.findMany({
         where: {
           scheduledTime: {
-            gte: new Date(now.getTime() - 5 * 60 * 1000),
-            lte: new Date(now.getTime() + 20 * 60 * 1000),
+            gte: new Date(now.getTime() - LIVE_NOTIFICATION_TOLERANCE_MS),
+            lte: new Date(now.getTime() + TWENTY_MINUTE_REMINDER_WINDOW_MS),
           },
           isActive: true,
           status: {
@@ -268,7 +277,7 @@ export async function GET(request: Request) {
           name: schedule.name,
           symbol: schedule.token,
           scheduledTime: schedule.scheduledTime,
-          minutesUntil: getReminderMinutesForStage(stage),
+          minutesUntil: getReminderMinutesUntil(schedule.scheduledTime, now),
           chain: schedule.chain,
           points: schedule.points,
           amount: schedule.amount,
