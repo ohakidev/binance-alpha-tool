@@ -349,7 +349,7 @@ export function Navigation() {
             repeat: isHovered ? Infinity : 0,
           }}
         >
-          Binance Alpha
+          Alpha Tracker
         </motion.span>
       </Link>
     );
@@ -640,7 +640,7 @@ export function Navigation() {
               {/* Footer */}
               <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-[rgba(212,169,72,0.1)]">
                 <div className="text-center text-xs text-[#a1a1aa]">
-                  Binance Alpha Tool v1.0
+                  Alpha Airdrop Tracker v1.0
                 </div>
               </div>
             </motion.div>

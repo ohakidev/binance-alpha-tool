@@ -210,7 +210,7 @@ export const API_URLS = {
     process.env.EXTERNAL_HISTORY_BASE_URL ||
     process.env.AIRDROP_HISTORY_BASE_URL ||
     process.env.ALPHA123_API_URL ||
-    "https://alpha123.uk",
+    null,
 } as const;
 
 // ============= Default Timeouts =============

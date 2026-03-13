@@ -78,7 +78,7 @@ export const translations = {
     // Stability
     stability: {
       title: "ความเสถียรของโครงการ",
-      subtitle: "ตรวจสอบความเสถียรและความเสี่ยงของโครงการ Binance Alpha",
+      subtitle: "Monitor stability and risk levels from public alpha data",
       symbol: "สัญลักษณ์",
       price: "ราคา",
       change24h: "24h เปลี่ยนแปลง",
@@ -139,9 +139,9 @@ export const translations = {
       comingSoon: "เร็วๆ นี้",
       moreFeatures: "ฟีเจอร์เพิ่มเติม",
       featuresDesc: "Stability Dashboard, Income Calendar และ BNB Calculator",
-      heroTitle: "Binance Alpha Airdrops",
+      heroTitle: "Alpha Airdrops",
       heroDesc:
-        "ติดตาม crypto airdrops ที่คุณชื่นชอบ ตรวจสอบความเสถียร และจัดการรายได้ของคุณด้วยอินเทอร์เฟซสไตล์เกม",
+        "Track crypto airdrops, monitor stability, and manage your income with a game-inspired interface.",
     },
 
     // Airdrops
@@ -224,13 +224,13 @@ export const translations = {
     settings: {
       title: "การตั้งค่า",
       subtitle: "ปรับแต่งระบบให้เหมาะกับการใช้งานของคุณ",
-      apiKeys: "Binance API Keys",
-      apiKeysDesc: "เชื่อมต่อกับ Binance Account ของคุณ",
+      apiKeys: "API Access",
+      apiKeysDesc: "Direct exchange credential input is disabled on the web app",
       apiKey: "API Key",
-      secretKey: "Secret Key",
-      saveApiKeys: "บันทึก API Keys",
+      secretKey: "Server-side Secret",
+      saveApiKeys: "Save API Access",
       apiKeysWarning:
-        "⚠️ API Keys จะถูกเข้ารหัสและเก็บไว้บนอุปกรณ์ของคุณเท่านั้น",
+        "Sensitive exchange credentials should never be entered on this public deployment.",
       telegram: "การแจ้งเตือน Telegram",
       telegramDesc: "รับการแจ้งเตือนผ่าน Telegram Bot",
       botToken: "Bot Token",
@@ -447,7 +447,7 @@ export const translations = {
     // Stability
     stability: {
       title: "Project Stability",
-      subtitle: "Monitor stability and risk levels of Binance Alpha projects",
+      subtitle: "Monitor stability and risk levels of projects from public alpha data",
       symbol: "Symbol",
       price: "Price",
       change24h: "24h Change",
@@ -508,7 +508,7 @@ export const translations = {
       comingSoon: "Coming Soon",
       moreFeatures: "More Features",
       featuresDesc: "Stability Dashboard, Income Calendar, and BNB Calculator",
-      heroTitle: "Binance Alpha Airdrops",
+      heroTitle: "Alpha Airdrops",
       heroDesc:
         "Track your favorite crypto airdrops, monitor stability, and manage your income with a game-inspired interface.",
     },
@@ -593,11 +593,11 @@ export const translations = {
     settings: {
       title: "Settings",
       subtitle: "Customize the system to fit your needs",
-      apiKeys: "Binance API Keys",
-      apiKeysDesc: "Connect to your Binance Account",
+      apiKeys: "API Access",
+      apiKeysDesc: "Direct exchange credential input is disabled on the web app",
       apiKey: "API Key",
-      secretKey: "Secret Key",
-      saveApiKeys: "Save API Keys",
+      secretKey: "Server-side Secret",
+      saveApiKeys: "Save API Access",
       apiKeysWarning:
         "⚠️ API Keys will be encrypted and stored on your device only",
       telegram: "Telegram Notifications",

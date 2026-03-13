@@ -6,7 +6,6 @@ import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/lib/providers/query-provider";
 import { ThemeProvider } from "@/lib/providers/theme-provider";
 import { LanguageProvider } from "@/lib/providers/language-provider";
-import { API_URLS } from "@/lib/constants/alpha.constants";
 
 // Optimized font loading with display swap and preload
 const prompt = Prompt({
@@ -26,16 +25,22 @@ const prompt = Prompt({
 });
 
 export const metadata: Metadata = {
-  title: "Binance Alpha Tool - Airdrop & Profit Tracker",
-  description: "Track airdrops, stability, and income with game-style UI",
+  title: "Alpha Airdrop Tracker",
+  description:
+    "Independent dashboard for tracking alpha airdrops, project stability, and income data. Not affiliated with Binance.",
+  applicationName: "Alpha Airdrop Tracker",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Binance Alpha",
+    title: "Alpha Tracker",
   },
   formatDetection: {
     telephone: false,
+  },
+  robots: {
+    index: false,
+    follow: false,
   },
   // Security headers as metadata
   other: {
@@ -62,37 +67,10 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const externalHistoryOrigin = API_URLS.HISTORY_SOURCE;
 
   return (
     <html lang="th" suppressHydrationWarning>
       <head>
-        {/* Preconnect to critical external domains for faster loading */}
-        <link
-          rel="preconnect"
-          href="https://api.binance.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          rel="preconnect"
-          href="https://www.binance.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          rel="preconnect"
-          href={externalHistoryOrigin}
-          crossOrigin="anonymous"
-        />
-        <link
-          rel="preconnect"
-          href="https://deep-index.moralis.io"
-          crossOrigin="anonymous"
-        />
-
-        {/* DNS prefetch for non-critical domains */}
-        <link rel="dns-prefetch" href="https://stream.binance.com" />
-        <link rel="dns-prefetch" href="https://cryptologos.cc" />
-
         {/* Apple touch icon */}
         <link rel="apple-touch-icon" href="/icon-192.png" />
 

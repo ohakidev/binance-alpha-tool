@@ -73,19 +73,24 @@ export interface TelegramConfig {
   language?: Language;
 }
 
-const DEFAULT_WEBSITE_URL = "https://binance-alpha-tool-chi.vercel.app";
 const DIVIDER = "--------------------";
 
-const getWebsiteUrl = (): string => {
-  const envUrl = process.env.NEXT_PUBLIC_APP_URL;
-  if (!envUrl || envUrl.includes("localhost") || envUrl.includes("127.0.0.1")) {
-    return DEFAULT_WEBSITE_URL;
+const normalizeWebsiteUrl = (value?: string | null): string | null => {
+  const normalized = value?.trim().replace(/\/+$/, "") || "";
+  if (
+    !normalized ||
+    normalized.includes("localhost") ||
+    normalized.includes("127.0.0.1")
+  ) {
+    return null;
   }
 
-  return envUrl;
+  return normalized;
 };
 
-const WEBSITE_URL = getWebsiteUrl();
+const WEBSITE_URL =
+  normalizeWebsiteUrl(process.env.APP_URL) ||
+  normalizeWebsiteUrl(process.env.NEXT_PUBLIC_APP_URL);
 
 const CHAIN_TO_DEXSCREENER: Record<string, string> = {
   BSC: "bsc",
@@ -352,6 +357,10 @@ class TelegramService {
   }
 
   private buildFooterLines(): string[] {
+    if (!WEBSITE_URL) {
+      return [];
+    }
+
     return ["", DIVIDER, `${this.t("checkMore")}: ${WEBSITE_URL}`];
   }
 
@@ -465,7 +474,7 @@ class TelegramService {
   private buildEnhancedAirdropMessage(airdrop: AirdropAlertData): string {
     const normalizedAirdrop = this.normalizeAirdropAlert(airdrop);
     const lines: string[] = [
-      `\u{1F381} <b>Binance Alpha Airdrop Tracker</b>`,
+      `\u{1F381} <b>Alpha Airdrop Tracker</b>`,
       this.t("newAirdrop"),
       "",
       `<b>${escapeHtml(normalizedAirdrop.name)}</b>`,
@@ -518,7 +527,7 @@ class TelegramService {
 
     try {
       const lines: string[] = [
-        `\u{1F4F8} <b>Binance Alpha Airdrop Tracker</b>`,
+        `\u{1F4F8} <b>Alpha Airdrop Tracker</b>`,
         this.t("snapshot"),
         "",
         `${this.t("airdrop")}: <b>${escapeHtml(airdrop.name)}</b>`,
@@ -553,7 +562,7 @@ class TelegramService {
 
     try {
       const lines: string[] = [
-        `\u{1F4B0} <b>Binance Alpha Airdrop Tracker</b>`,
+        `\u{1F4B0} <b>Alpha Airdrop Tracker</b>`,
         this.t("claimable"),
         "",
         `<b>${escapeHtml(airdrop.name)}</b> ($${escapeHtml(airdrop.symbol)})`,
@@ -618,7 +627,7 @@ class TelegramService {
 
     try {
       const lines: string[] = [
-        `\u{23F0} <b>Binance Alpha Airdrop Reminder</b>`,
+        `\u{23F0} <b>Alpha Airdrop Reminder</b>`,
         this.t("startingSoon"),
         "",
         `<b>${escapeHtml(data.name)}</b> ($${escapeHtml(data.symbol)})`,
@@ -681,7 +690,7 @@ class TelegramService {
 
     try {
       const lines: string[] = [
-        `\u{1F525} <b>Binance Alpha Airdrop Live</b>`,
+        `\u{1F525} <b>Alpha Airdrop Live</b>`,
         this.t("liveNow"),
         "",
         `<b>${escapeHtml(data.name)}</b> ($${escapeHtml(data.symbol)})`,

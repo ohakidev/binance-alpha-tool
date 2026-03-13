@@ -1,19 +1,34 @@
 import type { HistoryProjectRaw } from "@/lib/types/alpha.types";
 import { API_URLS } from "@/lib/constants/alpha.constants";
 
-const HISTORY_SOURCE_BASE_URL = API_URLS.HISTORY_SOURCE;
-const HISTORY_SOURCE_HISTORY_URL = `${HISTORY_SOURCE_BASE_URL}/api/historydata`;
-const HISTORY_SOURCE_PRICE_URL = `${HISTORY_SOURCE_BASE_URL}/api/price/?batch_dex=true`;
-const HISTORY_SOURCE_PAGE_URL = `${HISTORY_SOURCE_BASE_URL}/history.html`;
+function getHistorySourceConfig() {
+  const baseUrl = API_URLS.HISTORY_SOURCE;
 
-const HISTORY_SOURCE_HEADERS: Record<string, string> = {
-  Accept: "application/json, text/plain, */*",
-  Origin: HISTORY_SOURCE_BASE_URL,
-  Referer: HISTORY_SOURCE_PAGE_URL,
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
-  "X-Requested-With": "XMLHttpRequest",
-};
+  if (!baseUrl) {
+    throw new Error("External history source is not configured");
+  }
+
+  const pageUrl = `${baseUrl}/history.html`;
+
+  return {
+    baseUrl,
+    historyUrl: `${baseUrl}/api/historydata`,
+    priceUrl: `${baseUrl}/api/price/?batch_dex=true`,
+    pageUrl,
+    headers: {
+      Accept: "application/json, text/plain, */*",
+      Origin: baseUrl,
+      Referer: pageUrl,
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+      "X-Requested-With": "XMLHttpRequest",
+    } satisfies Record<string, string>,
+  };
+}
+
+function getHistorySourcePageUrl(): string | null {
+  return API_URLS.HISTORY_SOURCE ? `${API_URLS.HISTORY_SOURCE}/history.html` : null;
+}
 
 interface HistoryResponse {
   airdrops?: HistoryProjectRaw[];
@@ -139,7 +154,7 @@ function formatSlotText(slotCount: number | null): string | null {
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
     method: "GET",
-    headers: HISTORY_SOURCE_HEADERS,
+    headers: getHistorySourceConfig().headers,
     cache: "no-store",
   });
 
@@ -189,17 +204,17 @@ export function buildHistoryEnrichmentRecord(
     scheduledAt: parseScheduledAt(project),
     type: project.type?.trim() || null,
     status: project.status?.trim() || null,
-    sourceUrl: options?.sourceUrl || HISTORY_SOURCE_PAGE_URL,
+    sourceUrl: options?.sourceUrl || getHistorySourcePageUrl() || "",
   };
 }
 
 export async function fetchHistoryProjects(): Promise<HistoryProjectRaw[]> {
-  const response = await fetchJson<HistoryResponse>(HISTORY_SOURCE_HISTORY_URL);
+  const response = await fetchJson<HistoryResponse>(getHistorySourceConfig().historyUrl);
   return Array.isArray(response.airdrops) ? response.airdrops : [];
 }
 
 export async function fetchHistoryDexPrices(): Promise<Record<string, number>> {
-  const response = await fetchJson<HistoryPriceResponse>(HISTORY_SOURCE_PRICE_URL);
+  const response = await fetchJson<HistoryPriceResponse>(getHistorySourceConfig().priceUrl);
   const entries = Object.entries(response.prices || {});
 
   return entries.reduce<Record<string, number>>((accumulator, [symbol, value]) => {

@@ -14,14 +14,10 @@ import {
   Database,
   Download,
   Trash2,
-  Key,
   Save,
-  Upload,
-  Eye,
-  EyeOff,
+  Upload,
   Globe,
   Settings as SettingsIcon,
-  Shield,
   Monitor,
   Moon,
   Sun,
@@ -62,15 +58,6 @@ export default function SettingsPage() {
       flag: "🇹🇭",
     },
   ];
-
-  // API Keys State
-  const [, setApiKey] = useState("");
-  const [, setSecretKey] = useState("");
-  const [tempApiKey, setTempApiKey] = useState("");
-  const [tempApiSecret, setTempApiSecret] = useState("");
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [showApiSecret, setShowApiSecret] = useState(false);
-
   // Telegram State
   const [, setTelegramToken] = useState("");
   const [, setTelegramChatId] = useState("");
@@ -78,7 +65,6 @@ export default function SettingsPage() {
   const [tempTelegramChatId, setTempTelegramChatId] = useState("");
 
   const [activeTab, setActiveTab] = useState("general");
-  const [isSaving, setIsSaving] = useState(false);
 
   // Get settings after mount to avoid hydration mismatch
   const app = useSettingsStore((state) => state.app);
@@ -89,16 +75,10 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!mounted) return;
-    // Load saved keys
-    const savedApiKey = localStorage.getItem("binance_api_key") || "";
-    const savedSecretKey = localStorage.getItem("binance_secret_key") || "";
+    // Load saved settings
     const savedTelegramToken = localStorage.getItem("telegram_bot_token") || "";
     const savedTelegramChatId = localStorage.getItem("telegram_chat_id") || "";
 
-    setApiKey(savedApiKey);
-    setSecretKey(savedSecretKey);
-    setTempApiKey(savedApiKey);
-    setTempApiSecret(savedSecretKey);
 
     setTelegramToken(savedTelegramToken);
     setTelegramChatId(savedTelegramChatId);
@@ -127,22 +107,6 @@ export default function SettingsPage() {
       </div>
     );
   }
-
-  const handleSaveApiKeys = () => {
-    if (!tempApiKey || !tempApiSecret) {
-      toast.error(t("common.error"));
-      return;
-    }
-    setIsSaving(true);
-    setTimeout(() => {
-      localStorage.setItem("binance_api_key", tempApiKey);
-      localStorage.setItem("binance_secret_key", tempApiSecret);
-      setApiKey(tempApiKey);
-      setSecretKey(tempApiSecret);
-      toast.success(t("common.success"));
-      setIsSaving(false);
-    }, 1000);
-  };
 
   const handleSaveTelegram = () => {
     if (!tempTelegramToken || !tempTelegramChatId) {
@@ -209,7 +173,6 @@ export default function SettingsPage() {
 
   const tabItems = [
     { value: "general", label: t("settings.general"), icon: SettingsIcon },
-    { value: "api", label: t("settings.apiKeys"), icon: Key },
     { value: "notifications", label: t("settings.notifications"), icon: Bell },
     { value: "display", label: t("settings.display"), icon: Palette },
     { value: "data", label: t("settings.dataManagement"), icon: Database },
@@ -256,7 +219,7 @@ export default function SettingsPage() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="relative z-50">
             <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
-              <TabsList className="inline-flex md:grid md:w-full md:grid-cols-5 gap-2 bg-white/5 p-2 rounded-xl mb-6 min-w-max md:min-w-0">
+              <TabsList className="inline-flex md:grid md:w-full md:grid-cols-4 gap-2 bg-white/5 p-2 rounded-xl mb-6 min-w-max md:min-w-0">
                 {tabItems.map((tab) => (
                   <TabsTrigger
                     key={tab.value}
@@ -319,96 +282,6 @@ export default function SettingsPage() {
                       )}
                     </motion.button>
                   ))}
-                </div>
-              </div>
-            </MagicCard>
-          </TabsContent>
-
-          {/* API Keys */}
-          <TabsContent value="api" className="space-y-4 md:space-y-6">
-            <MagicCard
-              className="rounded-xl border-white/10 overflow-hidden"
-              gradientColor="rgba(6, 182, 212, 0.15)"
-            >
-              <div className="p-4 md:p-6 border-b border-white/10 bg-white/5">
-                <h2 className="text-lg md:text-xl font-semibold flex items-center gap-2">
-                  <Key className="w-5 h-5 text-cyan-500" />
-                  {t("settings.apiKeys")}
-                </h2>
-                <p className="text-xs md:text-sm text-muted-foreground mt-1">
-                  {t("settings.apiKeysDesc")}
-                </p>
-              </div>
-              <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">
-                      {pageCopy.binanceApiKeyLabel}
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showApiKey ? "text" : "password"}
-                        value={tempApiKey}
-                        onChange={(e) => setTempApiKey(e.target.value)}
-                        className="w-full pl-10 pr-12 py-3 md:py-2.5 text-sm bg-black/20 border border-white/10 rounded-xl focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
-                        placeholder={pageCopy.binanceApiKeyPlaceholder}
-                      />
-                      <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                      <button
-                        onClick={() => setShowApiKey(!showApiKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-1"
-                      >
-                        {showApiKey ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">
-                      {pageCopy.binanceSecretKeyLabel}
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showApiSecret ? "text" : "password"}
-                        value={tempApiSecret}
-                        onChange={(e) => setTempApiSecret(e.target.value)}
-                        className="w-full pl-10 pr-12 py-3 md:py-2.5 text-sm bg-black/20 border border-white/10 rounded-xl focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
-                        placeholder={pageCopy.binanceSecretKeyPlaceholder}
-                      />
-                      <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                      <button
-                        onClick={() => setShowApiSecret(!showApiSecret)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-1"
-                      >
-                        {showApiSecret ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end pt-2 md:pt-4">
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={handleSaveApiKeys}
-                      disabled={isSaving}
-                      className="w-full md:w-auto px-6 py-3 md:py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                      {isSaving ? (
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <Save className="w-4 h-4" />
-                      )}
-                      {t("common.save")}
-                    </motion.button>
-                  </div>
                 </div>
               </div>
             </MagicCard>

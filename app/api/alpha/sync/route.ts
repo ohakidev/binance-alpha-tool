@@ -13,28 +13,31 @@ import { prisma } from "@/lib/db/prisma";
 
 // Get the base URL for internal API calls
 function getBaseUrl(): string {
-  // Priority: VERCEL_URL > NEXT_PUBLIC_APP_URL > localhost (dev only)
+  // Priority: VERCEL_URL > APP_URL > NEXT_PUBLIC_APP_URL > localhost (dev only)
   if (process.env.VERCEL_URL) {
     return `https://${process.env.VERCEL_URL}`;
   }
-  if (process.env.NEXT_PUBLIC_APP_URL) {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-    // Prevent localhost in production
-    if (appUrl.includes("localhost") || appUrl.includes("127.0.0.1")) {
+
+  const configuredUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
+  if (configuredUrl) {
+    if (
+      configuredUrl.includes("localhost") ||
+      configuredUrl.includes("127.0.0.1")
+    ) {
       if (process.env.NODE_ENV === "production") {
-        throw new Error(
-          "NEXT_PUBLIC_APP_URL cannot be localhost in production",
-        );
+        throw new Error("APP_URL/NEXT_PUBLIC_APP_URL cannot be localhost in production");
       }
     }
-    return appUrl;
+
+    return configuredUrl;
   }
+
   // Only allow localhost in development
   if (process.env.NODE_ENV === "development") {
     return "http://localhost:3000";
   }
   throw new Error(
-    "NEXT_PUBLIC_APP_URL or VERCEL_URL must be set in production",
+    "APP_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL must be set in production",
   );
 }
 

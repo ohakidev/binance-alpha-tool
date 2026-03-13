@@ -17,7 +17,7 @@ export type ScheduleStatus =
 
 export enum AlphaDataSourceType {
   BINANCE_ALPHA = "binance-alpha",
-  HISTORY_SOURCE = "alpha123",
+  HISTORY_SOURCE = "external-history",
   CACHE = "cache",
 }
 

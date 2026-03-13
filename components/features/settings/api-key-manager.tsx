@@ -175,7 +175,7 @@ export function APIKeyManager() {
                 onChange={(e) =>
                   setFormData({ ...formData, key: e.target.value })
                 }
-                placeholder="Your Binance API Key"
+                placeholder="Server-side credential only"
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:border-primary focus:outline-none font-mono text-sm"
               />
             </div>

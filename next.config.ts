@@ -265,6 +265,10 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: [
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=31536000; includeSubDomains; preload",
+          },
           // Prevent clickjacking
           {
             key: "X-Frame-Options",
@@ -295,6 +299,14 @@ const nextConfig: NextConfig = {
           {
             key: "X-XSS-Protection",
             value: "1; mode=block",
+          },
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "same-origin",
+          },
+          {
+            key: "Cross-Origin-Resource-Policy",
+            value: "same-origin",
           },
         ],
       },
@@ -350,24 +362,6 @@ const nextConfig: NextConfig = {
             key: "Cache-Control",
             value:
               "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
-          },
-          // CORS headers
-          {
-            key: "Access-Control-Allow-Origin",
-            value: process.env.NEXT_PUBLIC_APP_URL || "*",
-          },
-          {
-            key: "Access-Control-Allow-Methods",
-            value: "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-          },
-          {
-            key: "Access-Control-Allow-Headers",
-            value:
-              "Content-Type, Authorization, X-Requested-With, X-CSRF-Token",
-          },
-          {
-            key: "Access-Control-Max-Age",
-            value: "86400",
           },
         ],
       },

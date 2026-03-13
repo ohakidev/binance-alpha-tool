@@ -32,7 +32,7 @@ export class HistorySource implements IAlphaDataSource {
   private timeout: number;
 
   constructor(options: { baseUrl?: string; timeout?: number } = {}) {
-    this.baseUrl = options.baseUrl || API_URLS.HISTORY_SOURCE;
+    this.baseUrl = options.baseUrl || API_URLS.HISTORY_SOURCE || "";
     this.timeout = options.timeout || DEFAULT_TIMEOUT;
   }
 
@@ -48,6 +48,10 @@ export class HistorySource implements IAlphaDataSource {
   }
 
   async isAvailable(): Promise<boolean> {
+    if (!this.baseUrl) {
+      return false;
+    }
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(
@@ -70,6 +74,10 @@ export class HistorySource implements IAlphaDataSource {
   }
 
   async fetchTokens(): Promise<AlphaToken[]> {
+    if (!this.baseUrl) {
+      throw new Error("History source API is not configured");
+    }
+
     console.log("Fetching from history source API...");
 
     const controller = new AbortController();
@@ -126,6 +134,10 @@ export class HistorySource implements IAlphaDataSource {
   }
 
   async fetchTokenPrice(token: string): Promise<number | null> {
+    if (!this.baseUrl) {
+      return null;
+    }
+
     try {
       const response = await fetch(`${this.baseUrl}/api/price/${token}`, {
         headers: this.getRequestHeaders(),

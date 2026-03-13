@@ -1,11 +1,14 @@
 {
-  "name": "Binance Alpha Tool",
-  "short_name": "BinanceAlpha",
-  "description": "Track Binance Alpha airdrops, calculate stability scores, and manage your crypto income",
+  "name": "Alpha Airdrop Tracker",
+  "short_name": "AlphaTracker",
+  "description": "Independent tracker for alpha airdrops, project stability, and income data.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#f59e0b",
   "orientation": "portrait",
-  "categories": ["finance", "utilities"]
+  "categories": [
+    "finance",
+    "utilities"
+  ]
 }

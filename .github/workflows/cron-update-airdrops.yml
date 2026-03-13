@@ -38,8 +38,12 @@ jobs:
             exit 1
           fi
 
-          # Default to production URL if APP_URL not set
-          URL="${APP_URL:-https://binance-alpha-tool-chi.vercel.app}"
+          if [ -z "${APP_URL:-}" ]; then
+            echo "❌ APP_URL is not configured in repository secrets."
+            exit 1
+          fi
+
+          URL="${APP_URL}"
           URL="${URL%/}"
 
           echo "CRON_URL=${URL}/api/cron/update-airdrops" >> "$GITHUB_ENV"
