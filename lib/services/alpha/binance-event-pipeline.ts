@@ -87,6 +87,10 @@ const ABSOLUTE_DATE_TIME_RE = new RegExp(
   `(${MONTH_PATTERN})\\s+(\\d{1,2})(?:,\\s*(\\d{4}))?,?\\s+(?:at|from)\\s+(\\d{1,2})(?::(\\d{2}))?\\s*(AM|PM)?(?:\\s+to\\s+\\d{1,2}(?::\\d{2})?\\s*(?:AM|PM)?)?\\s*\\(UTC\\)`,
   "i",
 );
+const TIME_FIRST_ABSOLUTE_DATE_TIME_RE = new RegExp(
+  `(\\d{1,2})(?::(\\d{2}))?\\s*(AM|PM)?\\s*(?:-|to)\\s*\\d{1,2}(?::\\d{2})?\\s*(?:AM|PM)?\\s*\\(UTC\\)\\s+on\\s+(${MONTH_PATTERN})\\s+(\\d{1,2})(?:,\\s*(\\d{4}))?`,
+  "i",
+);
 const RELATIVE_DAY_TIME_RE =
   /\b(today|tomorrow)\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?\s*\(UTC\)/i;
 const DATE_ONLY_RE = new RegExp(
@@ -171,7 +175,11 @@ function buildUtcDate(
 }
 
 function sourceTextHasExplicitClockTime(text: string): boolean {
-  return ABSOLUTE_DATE_TIME_RE.test(text) || RELATIVE_DAY_TIME_RE.test(text);
+  return (
+    ABSOLUTE_DATE_TIME_RE.test(text) ||
+    TIME_FIRST_ABSOLUTE_DATE_TIME_RE.test(text) ||
+    RELATIVE_DAY_TIME_RE.test(text)
+  );
 }
 
 function parseUtcClockTime(
@@ -213,6 +221,26 @@ function pickFirstDate(text: string, sourcePublishedAt: Date | null): Date | nul
   if (explicitDateTimeMatch) {
     const [, monthName, dayText, yearText, hourText, minuteText, meridiem] =
       explicitDateTimeMatch;
+    const year =
+      yearText !== undefined
+        ? Number.parseInt(yearText, 10)
+        : sourcePublishedAt?.getUTCFullYear();
+    const parsedTime = parseUtcClockTime(hourText, minuteText, meridiem);
+    if (year && parsedTime) {
+      return buildUtcDate(
+        year,
+        monthName,
+        Number.parseInt(dayText, 10),
+        parsedTime.hour,
+        parsedTime.minute,
+      );
+    }
+  }
+
+  const timeFirstDateTimeMatch = text.match(TIME_FIRST_ABSOLUTE_DATE_TIME_RE);
+  if (timeFirstDateTimeMatch) {
+    const [, hourText, minuteText, meridiem, monthName, dayText, yearText] =
+      timeFirstDateTimeMatch;
     const year =
       yearText !== undefined
         ? Number.parseInt(yearText, 10)
