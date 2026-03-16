@@ -147,8 +147,11 @@ export async function POST(request: Request) {
       console.log("🚀 Triggering full sync via cron job...");
 
       try {
-        const baseUrl = getBaseUrl();
-        const cronUrl = `${baseUrl}/api/cron/update-airdrops`;
+        const baseUrl = getBaseUrl().replace(/\/$/, "");
+        const cronUrl = new URL(`${baseUrl}/api/cron/update-airdrops`);
+        if (process.env.CRON_SECRET) {
+          cronUrl.searchParams.set("secret", process.env.CRON_SECRET);
+        }
 
         const response = await fetch(cronUrl, {
           method: "POST",

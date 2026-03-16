@@ -11,7 +11,10 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
-import { binanceEventTrackerService } from "@/lib/services/alpha/BinanceEventTrackerService";
+import {
+  binanceEventTrackerService,
+  type EventSyncStats,
+} from "@/lib/services/alpha/BinanceEventTrackerService";
 import {
   telegramService,
   type AirdropReminderData,
@@ -31,6 +34,22 @@ const SCHEDULE_NOTIFICATION_ACTIONS: ScheduleNotificationStage[] = [
 const LIVE_NOTIFICATION_TOLERANCE_MS = 30 * 60 * 1000;
 const FIVE_MINUTE_REMINDER_WINDOW_MS = 15 * 60 * 1000;
 const TWENTY_MINUTE_REMINDER_WINDOW_MS = 30 * 60 * 1000;
+
+function didOfficialSyncProduceUsableOutput(syncStats: EventSyncStats): boolean {
+  return (
+    syncStats.parsedSuccessCount > 0 ||
+    syncStats.dedupedEvents > 0 ||
+    syncStats.insertedEvents > 0 ||
+    syncStats.updatedEvents > 0 ||
+    syncStats.finalScheduleCount > 0
+  );
+}
+
+function isOfficialSyncDegraded(syncStats: EventSyncStats): boolean {
+  return (
+    syncStats.squareFetchStatus === "degraded" || syncStats.errors.length > 0
+  );
+}
 
 function isAuthorized(request: Request): boolean {
   if (request.headers.get("x-vercel-cron")) {
@@ -347,13 +366,15 @@ export async function GET(request: Request) {
     }
 
     const duration = Date.now() - startedAt;
+    const officialSyncSuccess = didOfficialSyncProduceUsableOutput(syncStats);
+    const officialSyncDegraded = isOfficialSyncDegraded(syncStats);
 
     try {
       await (prisma as any).syncLog.create({
         data: {
           source: "official-binance-event-tracker",
           action: "sync",
-          success: syncStats.errors.length === 0,
+          success: officialSyncSuccess,
           tokensCount: syncStats.squarePostCount,
           created: syncStats.insertedEvents,
           updated: syncStats.updatedEvents,
@@ -368,6 +389,7 @@ export async function GET(request: Request) {
             enrichmentFailureCount: syncStats.enrichmentFailureCount,
             finalScheduleCount: syncStats.finalScheduleCount,
             finalEventCount: syncStats.finalEventCount,
+            degraded: officialSyncDegraded,
             notificationSummary,
             errors: syncStats.errors.slice(0, 20),
           }),
@@ -391,7 +413,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      success: true,
+      success: officialSyncSuccess,
       data: {
         duration,
         squareFetchStatus: syncStats.squareFetchStatus,
@@ -405,6 +427,7 @@ export async function GET(request: Request) {
         enrichmentFailureCount: syncStats.enrichmentFailureCount,
         finalScheduleCount: syncStats.finalScheduleCount,
         finalEventCount: syncStats.finalEventCount,
+        degraded: officialSyncDegraded,
         notified: notificationSummary.total,
         notificationSummary,
         errors: syncStats.errors,
