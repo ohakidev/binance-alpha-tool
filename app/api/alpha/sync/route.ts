@@ -10,36 +10,7 @@ import { NextResponse } from "next/server";
 import { airdropScheduleService } from "@/lib/services/alpha/AirdropScheduleService";
 import { alphaService } from "@/lib/services/alpha/AlphaService";
 import { prisma } from "@/lib/db/prisma";
-
-// Get the base URL for internal API calls
-function getBaseUrl(): string {
-  // Priority: VERCEL_URL > APP_URL > NEXT_PUBLIC_APP_URL > localhost (dev only)
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`;
-  }
-
-  const configuredUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
-  if (configuredUrl) {
-    if (
-      configuredUrl.includes("localhost") ||
-      configuredUrl.includes("127.0.0.1")
-    ) {
-      if (process.env.NODE_ENV === "production") {
-        throw new Error("APP_URL/NEXT_PUBLIC_APP_URL cannot be localhost in production");
-      }
-    }
-
-    return configuredUrl;
-  }
-
-  // Only allow localhost in development
-  if (process.env.NODE_ENV === "development") {
-    return "http://localhost:3000";
-  }
-  throw new Error(
-    "APP_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL must be set in production",
-  );
-}
+import { POST as runOfficialCronUpdate } from "@/app/api/cron/update-airdrops/route";
 
 export const dynamic = "force-dynamic";
 
@@ -147,26 +118,23 @@ export async function POST(request: Request) {
       console.log("🚀 Triggering full sync via cron job...");
 
       try {
-        const baseUrl = getBaseUrl().replace(/\/$/, "");
-        const cronUrl = new URL(`${baseUrl}/api/cron/update-airdrops`);
+        const cronUrl = new URL("http://internal/api/cron/update-airdrops");
+        const headers = new Headers({
+          "Content-Type": "application/json",
+        });
         if (process.env.CRON_SECRET) {
           cronUrl.searchParams.set("secret", process.env.CRON_SECRET);
+          headers.set("Authorization", `Bearer ${process.env.CRON_SECRET}`);
         }
 
-        const response = await fetch(cronUrl, {
+        const response = await runOfficialCronUpdate(new Request(cronUrl, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            // Allow the request in development
-            ...(process.env.CRON_SECRET && {
-              Authorization: `Bearer ${process.env.CRON_SECRET}`,
-            }),
-          },
-        });
+          headers,
+        }));
 
         const cronResult = await response.json();
 
-        if (!response.ok) {
+        if (!response.ok || cronResult.success !== true) {
           throw new Error(cronResult.error || "Cron job failed");
         }
 
