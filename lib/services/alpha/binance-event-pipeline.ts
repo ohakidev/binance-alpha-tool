@@ -87,12 +87,22 @@ const ABSOLUTE_DATE_TIME_RE = new RegExp(
   `(${MONTH_PATTERN})\\s+(\\d{1,2})(?:,\\s*(\\d{4}))?,?\\s+(?:at|from)\\s+(\\d{1,2})(?::(\\d{2}))?\\s*(AM|PM)?(?:\\s+to\\s+\\d{1,2}(?::\\d{2})?\\s*(?:AM|PM)?)?\\s*\\(UTC\\)`,
   "i",
 );
+const DATE_WITH_TIME_RANGE_RE = new RegExp(
+  `(${MONTH_PATTERN})\\s+(\\d{1,2})(?:,\\s*(\\d{4}))?\\s*\\|\\s*(\\d{1,2})(?::(\\d{2}))?\\s*(AM|PM)?\\s*(?:-|to)\\s*\\d{1,2}(?::\\d{2})?\\s*(?:AM|PM)?\\s*\\(UTC\\)`,
+  "i",
+);
 const TIME_FIRST_ABSOLUTE_DATE_TIME_RE = new RegExp(
   `(\\d{1,2})(?::(\\d{2}))?\\s*(AM|PM)?\\s*(?:-|to)\\s*\\d{1,2}(?::\\d{2})?\\s*(?:AM|PM)?\\s*\\(UTC\\)\\s+on\\s+(${MONTH_PATTERN})\\s+(\\d{1,2})(?:,\\s*(\\d{4}))?`,
   "i",
 );
 const RELATIVE_DAY_TIME_RE =
-  /\b(today|tomorrow)\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?\s*\(UTC\)/i;
+  /\b(today|tomorrow)\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?\s*\(UTC\)/i;
+const ACTION_TIME_WITH_DATE_RE = new RegExp(
+  `\\b(?:claim(?:ing)?(?:\\s+the\\s+(?:token|airdrop))?(?:\\s+and\\s+start\\s+trading)?|start\\s+trading|trading\\s+(?:starts?|opens?|opened)|debut\\s+and\\s+trading\\s+open(?:\\s+as\\s+of)?)\\b[^.]{0,120}?(?:on\\s+)?(${MONTH_PATTERN})\\s+(\\d{1,2})(?:,\\s*(\\d{4}))?[^\\d]{0,24}(?:at\\s+)?(\\d{1,2})(?::(\\d{2}))?\\s*(AM|PM)?\\s*\\(UTC\\)`,
+  "i",
+);
+const ACTION_TIME_ONLY_RE =
+  /\b(?:claim(?:ing)?(?:\s+the\s+(?:token|airdrop))?(?:\s+and\s+start\s+trading)?|start\s+trading|trading\s+(?:starts?|opens?|opened))\b[^.]{0,120}?(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?\s*\(UTC\)/i;
 const DATE_ONLY_RE = new RegExp(
   `(${MONTH_PATTERN})\\s+(\\d{1,2})(?:,\\s*(\\d{4}))?`,
   "i",
@@ -177,8 +187,11 @@ function buildUtcDate(
 function sourceTextHasExplicitClockTime(text: string): boolean {
   return (
     ABSOLUTE_DATE_TIME_RE.test(text) ||
+    DATE_WITH_TIME_RANGE_RE.test(text) ||
     TIME_FIRST_ABSOLUTE_DATE_TIME_RE.test(text) ||
-    RELATIVE_DAY_TIME_RE.test(text)
+    RELATIVE_DAY_TIME_RE.test(text) ||
+    ACTION_TIME_WITH_DATE_RE.test(text) ||
+    ACTION_TIME_ONLY_RE.test(text)
   );
 }
 
@@ -216,11 +229,127 @@ function parseUtcClockTime(
   return { hour, minute };
 }
 
-function pickFirstDate(text: string, sourcePublishedAt: Date | null): Date | null {
+function buildDateFromAnchor(
+  anchorDate: Date,
+  hour: number,
+  minute: number,
+): Date | null {
+  const parsed = new Date(anchorDate);
+  parsed.setUTCHours(hour, minute, 0, 0);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function pickAnchorDate(text: string, sourcePublishedAt: Date | null): Date | null {
+  const relativeDayMatch = text.match(/\b(today|tomorrow)\b/i);
+  if (relativeDayMatch && sourcePublishedAt) {
+    const parsed = new Date(sourcePublishedAt);
+    parsed.setUTCHours(0, 0, 0, 0);
+
+    if (relativeDayMatch[1]?.toLowerCase() === "tomorrow") {
+      parsed.setUTCDate(parsed.getUTCDate() + 1);
+    }
+
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const dateMatch = text.match(DATE_ONLY_RE);
+  if (dateMatch) {
+    const [, monthName, dayText, yearText] = dateMatch;
+    const year =
+      yearText !== undefined
+        ? Number.parseInt(yearText, 10)
+        : sourcePublishedAt?.getUTCFullYear();
+    if (year) {
+      return buildUtcDate(year, monthName, Number.parseInt(dayText, 10));
+    }
+  }
+
+  if (!sourcePublishedAt) {
+    return null;
+  }
+
+  const parsed = new Date(sourcePublishedAt);
+  parsed.setUTCHours(0, 0, 0, 0);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function pickPriorityActionDate(
+  text: string,
+  sourcePublishedAt: Date | null,
+): Date | null {
+  const actionWithDateMatch = text.match(ACTION_TIME_WITH_DATE_RE);
+  if (actionWithDateMatch) {
+    const [, monthName, dayText, yearText, hourText, minuteText, meridiem] =
+      actionWithDateMatch;
+    const year =
+      yearText !== undefined
+        ? Number.parseInt(yearText, 10)
+        : sourcePublishedAt?.getUTCFullYear();
+    const parsedTime = parseUtcClockTime(hourText, minuteText, meridiem);
+
+    if (year && parsedTime) {
+      return buildUtcDate(
+        year,
+        monthName,
+        Number.parseInt(dayText, 10),
+        parsedTime.hour,
+        parsedTime.minute,
+      );
+    }
+  }
+
+  const actionTimeOnlyMatch = text.match(ACTION_TIME_ONLY_RE);
+  if (!actionTimeOnlyMatch) {
+    return null;
+  }
+
+  const [, hourText, minuteText, meridiem] = actionTimeOnlyMatch;
+  const parsedTime = parseUtcClockTime(hourText, minuteText, meridiem);
+  const anchorDate = pickAnchorDate(text, sourcePublishedAt);
+
+  if (!parsedTime || !anchorDate) {
+    return null;
+  }
+
+  return buildDateFromAnchor(anchorDate, parsedTime.hour, parsedTime.minute);
+}
+
+function pickFirstDate(
+  text: string,
+  sourcePublishedAt: Date | null,
+  eventType?: CanonicalEventType,
+): Date | null {
+  if (eventType === "TGE") {
+    const actionDate = pickPriorityActionDate(text, sourcePublishedAt);
+    if (actionDate) {
+      return actionDate;
+    }
+  }
+
   const explicitDateTimeMatch = text.match(ABSOLUTE_DATE_TIME_RE);
   if (explicitDateTimeMatch) {
     const [, monthName, dayText, yearText, hourText, minuteText, meridiem] =
       explicitDateTimeMatch;
+    const year =
+      yearText !== undefined
+        ? Number.parseInt(yearText, 10)
+        : sourcePublishedAt?.getUTCFullYear();
+    const parsedTime = parseUtcClockTime(hourText, minuteText, meridiem);
+    if (year && parsedTime) {
+      return buildUtcDate(
+        year,
+        monthName,
+        Number.parseInt(dayText, 10),
+        parsedTime.hour,
+        parsedTime.minute,
+      );
+    }
+  }
+
+  const dateWithTimeRangeMatch = text.match(DATE_WITH_TIME_RANGE_RE);
+  if (dateWithTimeRangeMatch) {
+    const [, monthName, dayText, yearText, hourText, minuteText, meridiem] =
+      dateWithTimeRangeMatch;
     const year =
       yearText !== undefined
         ? Number.parseInt(yearText, 10)
@@ -614,7 +743,12 @@ export function normalizeOfficialTextToEvent(
   const sourceRawText = sanitizeWhitespace(post.sourceRawText);
   const hasExplicitTime = sourceTextHasExplicitClockTime(sourceRawText);
   const symbol = extractSymbol(sourceRawText);
-  const claimStartAt = pickFirstDate(sourceRawText, post.sourcePublishedAt);
+  const eventType = deriveEventType(sourceRawText);
+  const claimStartAt = pickFirstDate(
+    sourceRawText,
+    post.sourcePublishedAt,
+    eventType,
+  );
   const requiredAlphaPoints = parsePositiveNumber(
     sourceRawText.match(POINTS_RE)?.[1],
   );
@@ -626,7 +760,6 @@ export function normalizeOfficialTextToEvent(
       ? `${amountMatch[1].replace(/,/g, "")} ${amountMatch[2]}`
       : null;
   const projectName = extractProjectName(sourceRawText, symbol);
-  const eventType = deriveEventType(sourceRawText);
   const phaseLabel = detectPhaseLabel(sourceRawText);
   const listingTime = eventType === "TGE" ? claimStartAt : null;
   const confidence = deriveConfidence({

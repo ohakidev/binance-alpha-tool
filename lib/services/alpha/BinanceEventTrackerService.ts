@@ -38,6 +38,7 @@ const SLOT_RE = /\b\d+(?:\.\d+)?k?\s+slots\b/i;
 const TELEGRAM_MESSAGE_RE =
   /<div class="tgme_widget_message text_not_supported_wrap js-widget_message"[^>]*data-post="([^"]+)"[\s\S]*?<div class="tgme_widget_message_text js-message_text" dir="auto">([\s\S]*?)<\/div>[\s\S]*?<a class="tgme_widget_message_date" href="([^"]+)"><time datetime="([^"]+)"/gi;
 const HISTORY_MATCH_MAX_TIME_DELTA_MS = 24 * 60 * 60 * 1000;
+const EXTERNAL_FETCH_TIMEOUT_MS = 8000;
 
 interface RawSourceSnapshot {
   sourceType: EventSourceType;
@@ -310,16 +311,31 @@ function finalizeEventStatus(
 }
 
 async function fetchHtml(url: string): Promise<string> {
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Cache-Control": "no-cache",
-    },
-    cache: "no-store",
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), EXTERNAL_FETCH_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Cache-Control": "no-cache",
+      },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Request timeout (${EXTERNAL_FETCH_TIMEOUT_MS}ms) for ${url}`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (
     response.status === 202 ||
@@ -2135,13 +2151,6 @@ export class BinanceEventTrackerService {
     }
 
     try {
-      let historyLookup = new Map<string, HistoryEnrichment[]>();
-      try {
-        historyLookup = await fetchHistoryEnrichmentLookup();
-      } catch (error) {
-        warnCurrentSourceFailure("history-source", error);
-      }
-
       const events = await airdropEvent.findMany({
         where: {
           ...(options?.chain ? { chain: options.chain } : {}),
@@ -2154,9 +2163,7 @@ export class BinanceEventTrackerService {
       });
 
       return dedupeEventApiRows(
-        events
-          .map(mapDbEventToApiRow)
-          .map((row: EventApiRow) => enrichApiRowWithHistory(row, historyLookup)),
+        events.map(mapDbEventToApiRow),
       )
         .filter((row) => matchesApiRowFilters(row, options))
         .sort(sortApiRows)

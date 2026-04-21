@@ -215,5 +215,5 @@ export const API_URLS = {
 
 // ============= Default Timeouts =============
 
-export const DEFAULT_TIMEOUT = 30000; // 30 seconds
+export const DEFAULT_TIMEOUT = 10000; // 10 seconds
 export const HEALTH_CHECK_TIMEOUT = 5000; // 5 seconds

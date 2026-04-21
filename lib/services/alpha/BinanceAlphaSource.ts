@@ -24,6 +24,7 @@ import {
 const BINANCE_ALPHA_DEPRECATED_API_URLS = new Set([
   "https://www.binance.com/bapi/composite/v1/public/alpha/project/list",
 ]);
+const BINANCE_ALPHA_TOKEN_CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
  * Binance Alpha Data Source
@@ -35,6 +36,13 @@ export class BinanceAlphaSource implements IAlphaDataSource {
 
   private apiUrl: string;
   private timeout: number;
+  private tokensCache:
+    | {
+        tokens: AlphaToken[];
+        expiresAt: number;
+      }
+    | null = null;
+  private tokensRequestPromise: Promise<AlphaToken[]> | null = null;
 
   constructor(options: { apiUrl?: string; timeout?: number } = {}) {
     this.apiUrl = this.normalizeApiUrl(options.apiUrl || API_URLS.BINANCE_ALPHA);
@@ -136,22 +144,43 @@ export class BinanceAlphaSource implements IAlphaDataSource {
    * Fetch all tokens from Binance Alpha API
    */
   async fetchTokens(): Promise<AlphaToken[]> {
-    console.log("Fetching from Binance Alpha API...");
-    let lastError: unknown = null;
-
-    for (const url of this.getCandidateUrls()) {
-      try {
-        const tokens = await this.fetchTokensFromUrl(url);
-        console.log(`Found ${tokens.length} tokens from Binance Alpha API`);
-        return tokens;
-      } catch (error) {
-        lastError = error;
-      }
+    const now = Date.now();
+    if (this.tokensCache && this.tokensCache.expiresAt > now) {
+      return this.tokensCache.tokens;
     }
 
-    throw lastError instanceof Error
-      ? lastError
-      : new Error(String(lastError || "Unknown Binance Alpha API error"));
+    if (this.tokensRequestPromise) {
+      return this.tokensRequestPromise;
+    }
+
+    console.log("Fetching from Binance Alpha API...");
+    this.tokensRequestPromise = (async () => {
+      let lastError: unknown = null;
+
+      for (const url of this.getCandidateUrls()) {
+        try {
+          const tokens = await this.fetchTokensFromUrl(url);
+          console.log(`Found ${tokens.length} tokens from Binance Alpha API`);
+          this.tokensCache = {
+            tokens,
+            expiresAt: Date.now() + BINANCE_ALPHA_TOKEN_CACHE_TTL_MS,
+          };
+          return tokens;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      throw lastError instanceof Error
+        ? lastError
+        : new Error(String(lastError || "Unknown Binance Alpha API error"));
+    })();
+
+    try {
+      return await this.tokensRequestPromise;
+    } finally {
+      this.tokensRequestPromise = null;
+    }
   }
 
   /**

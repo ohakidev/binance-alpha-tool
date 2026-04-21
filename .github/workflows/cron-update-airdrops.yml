@@ -1,15 +1,13 @@
 # GitHub Actions Cron Job for Airdrop Updates
-# Runs every 5 minutes to sync data and trigger Telegram alerts:
-# - about 20 minutes before claim
-# - about 5 minutes before claim
-# - at claim start on the first run after go-live
+# Runs every 10 minutes. The API heartbeat decides whether a full sync is due,
+# and reminder/live Telegram notifications are deduped server-side.
 
 
 name: Update Airdrops Cron
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/10 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -60,6 +58,9 @@ jobs:
           # which avoids losing Authorization on canonical domain redirects.
           if ! HTTP_CODE=$(curl -sS --location -o response.json -w "%{http_code}" \
             --max-time 120 \
+            --retry 2 \
+            --retry-delay 10 \
+            --retry-all-errors \
             --get \
             --data-urlencode "secret=${CRON_SECRET}" \
             -H "Authorization: Bearer ${CRON_SECRET}" \

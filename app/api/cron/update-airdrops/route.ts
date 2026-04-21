@@ -26,14 +26,11 @@ export const maxDuration = 30;
 export type ScheduleNotificationStage = "20m" | "5m" | "live";
 
 const SCHEDULE_NOTIFICATION_SOURCE_PREFIX = "airdrop-schedule";
-const SCHEDULE_NOTIFICATION_ACTIONS: ScheduleNotificationStage[] = [
-  "20m",
-  "5m",
-  "live",
-];
-const LIVE_NOTIFICATION_TOLERANCE_MS = 30 * 60 * 1000;
-const FIVE_MINUTE_REMINDER_WINDOW_MS = 15 * 60 * 1000;
-const TWENTY_MINUTE_REMINDER_WINDOW_MS = 30 * 60 * 1000;
+const SCHEDULE_NOTIFICATION_ACTIONS: ScheduleNotificationStage[] = ["20m", "live"];
+const OFFICIAL_SYNC_INTERVAL_MS = 30 * 60 * 1000;
+const LIVE_NOTIFICATION_TOLERANCE_MS = 35 * 60 * 1000;
+const REMINDER_LOOKAHEAD_MS = 40 * 60 * 1000;
+const IMMEDIATE_NEW_EVENT_ALERT_WINDOW_MS = 30 * 60 * 1000;
 
 function didOfficialSyncProduceUsableOutput(syncStats: EventSyncStats): boolean {
   return (
@@ -66,6 +63,14 @@ function isAuthorized(request: Request): boolean {
   }
 
   return process.env.NODE_ENV === "development";
+}
+
+function isForcedSyncRequest(request: Request): boolean {
+  const { searchParams } = new URL(request.url);
+  return (
+    searchParams.get("force") === "true" ||
+    request.headers.get("x-force-sync") === "true"
+  );
 }
 
 function extractSlotText(value?: string | null): string | null {
@@ -106,20 +111,13 @@ export function getScheduleNotificationStage(
 ): ScheduleNotificationStage | null {
   const diffMs = scheduledTime.getTime() - now.getTime();
 
-  // GitHub scheduled workflows can drift well beyond 5 minutes, so keep a wider
-  // live window and broader reminder bands. Dedupe logs prevent duplicate sends.
+  // GitHub scheduled workflows can drift, so prefer a single reminder band plus
+  // a broad live tolerance. Dedupe logs prevent duplicate sends.
   if (diffMs <= 0 && diffMs > -LIVE_NOTIFICATION_TOLERANCE_MS) {
     return "live";
   }
 
-  if (diffMs > 0 && diffMs <= FIVE_MINUTE_REMINDER_WINDOW_MS) {
-    return "5m";
-  }
-
-  if (
-    diffMs > FIVE_MINUTE_REMINDER_WINDOW_MS &&
-    diffMs <= TWENTY_MINUTE_REMINDER_WINDOW_MS
-  ) {
+  if (diffMs > 0 && diffMs <= REMINDER_LOOKAHEAD_MS) {
     return "20m";
   }
 
@@ -146,6 +144,67 @@ function getReminderMinutesUntil(
   return Math.max(1, Math.ceil(diffMs / (60 * 1000)));
 }
 
+export function shouldRunOfficialSync(
+  lastSuccessfulSyncAt: Date | null,
+  now: Date = new Date(),
+  force: boolean = false,
+): boolean {
+  if (force || !lastSuccessfulSyncAt) {
+    return true;
+  }
+
+  return now.getTime() - lastSuccessfulSyncAt.getTime() >= OFFICIAL_SYNC_INTERVAL_MS;
+}
+
+function shouldSendImmediateNewEventAlert(
+  event: {
+    status: string;
+    claimStartAt?: Date | null;
+    listingTime?: Date | null;
+  },
+  now: Date = new Date(),
+): boolean {
+  if (event.status === "live" || event.status === "claimable") {
+    return true;
+  }
+
+  const anchorTime = event.claimStartAt || event.listingTime;
+  if (!anchorTime) {
+    return false;
+  }
+
+  const diffMs = anchorTime.getTime() - now.getTime();
+  return (
+    diffMs <= IMMEDIATE_NEW_EVENT_ALERT_WINDOW_MS &&
+    diffMs > -LIVE_NOTIFICATION_TOLERANCE_MS
+  );
+}
+
+async function getLastSuccessfulOfficialSyncAt(): Promise<Date | null> {
+  try {
+    const syncLog = await (prisma as any).syncLog.findFirst({
+      where: {
+        source: "official-binance-event-tracker",
+        action: "sync",
+        success: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      select: {
+        createdAt: true,
+      },
+    });
+
+    return syncLog?.createdAt ?? null;
+  } catch (error) {
+    console.warn("[cron:update-airdrops] last successful sync lookup failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 export async function GET(request: Request) {
   const startedAt = Date.now();
   const notificationSummary = {
@@ -164,70 +223,92 @@ export async function GET(request: Request) {
       );
     }
 
-    const syncStats = await binanceEventTrackerService.syncEvents();
+    const now = new Date();
+    const forceSync = isForcedSyncRequest(request);
+    const lastSuccessfulSyncAt = await getLastSuccessfulOfficialSyncAt();
+    const runOfficialSync = shouldRunOfficialSync(
+      lastSuccessfulSyncAt,
+      now,
+      forceSync,
+    );
+    let syncStats: EventSyncStats | null = null;
 
-    console.log("[cron:update-airdrops] source fetch", {
-      squareFetchStatus: syncStats.squareFetchStatus,
-      squarePostCount: syncStats.squarePostCount,
-    });
-    console.log("[cron:update-airdrops] parse", {
-      success: syncStats.parsedSuccessCount,
-      failure: syncStats.parseFailureCount,
-    });
-    console.log("[cron:update-airdrops] persistence", {
-      inserted: syncStats.insertedEvents,
-      updated: syncStats.updatedEvents,
-      deduped: syncStats.dedupedEvents,
-      enrichmentSuccess: syncStats.enrichmentSuccessCount,
-      enrichmentFailure: syncStats.enrichmentFailureCount,
-      finalScheduleCount: syncStats.finalScheduleCount,
-    });
+    if (runOfficialSync) {
+      syncStats = await binanceEventTrackerService.syncEvents(now);
 
-    for (const event of syncStats.newEvents) {
-      if (!["upcoming", "today", "live", "claimable"].includes(event.status)) {
-        continue;
-      }
+      console.log("[cron:update-airdrops] source fetch", {
+        squareFetchStatus: syncStats.squareFetchStatus,
+        squarePostCount: syncStats.squarePostCount,
+      });
+      console.log("[cron:update-airdrops] parse", {
+        success: syncStats.parsedSuccessCount,
+        failure: syncStats.parseFailureCount,
+      });
+      console.log("[cron:update-airdrops] persistence", {
+        inserted: syncStats.insertedEvents,
+        updated: syncStats.updatedEvents,
+        deduped: syncStats.dedupedEvents,
+        enrichmentSuccess: syncStats.enrichmentSuccessCount,
+        enrichmentFailure: syncStats.enrichmentFailureCount,
+        finalScheduleCount: syncStats.finalScheduleCount,
+      });
 
-      try {
-        const sent = await telegramService.sendAirdropAlert({
-          name: event.projectName,
-          symbol: event.symbol || "UNKNOWN",
-          chain: event.chain || "BSC",
-          status: event.status,
-          claimStartDate: event.claimStartAt || event.listingTime || undefined,
-          estimatedPrice: event.latestPrice ?? undefined,
-          estimatedValue: event.estimatedUsdValue ?? undefined,
-          airdropAmount: formatAmount(event) ?? undefined,
-          requiredPoints: event.requiredAlphaPoints ?? undefined,
-          pointsText:
-            event.requiredAlphaPoints !== null &&
-            event.requiredAlphaPoints !== undefined
-              ? String(event.requiredAlphaPoints)
-              : undefined,
-          deductPoints: event.deductPoints ?? undefined,
-          slotText: extractSlotText(event.sourceRawText) ?? undefined,
-          contractAddress: event.contractAddress ?? undefined,
-        });
-
-        if (sent) {
-          notificationSummary.newEvent++;
-          notificationSummary.total++;
+      for (const event of syncStats.newEvents) {
+        if (!shouldSendImmediateNewEventAlert(event, now)) {
+          continue;
         }
-      } catch (error) {
-        console.error("[cron:update-airdrops] new-event notification failed", {
-          sourceUrl: event.sourceUrl,
-          error: error instanceof Error ? error.message : String(error),
-        });
+
+        try {
+          const sent = await telegramService.sendAirdropAlert({
+            name: event.projectName,
+            symbol: event.symbol || "UNKNOWN",
+            chain: event.chain || "BSC",
+            status: event.status,
+            claimStartDate: event.claimStartAt || event.listingTime || undefined,
+            estimatedPrice: event.latestPrice ?? undefined,
+            estimatedValue: event.estimatedUsdValue ?? undefined,
+            airdropAmount: formatAmount(event) ?? undefined,
+            requiredPoints: event.requiredAlphaPoints ?? undefined,
+            pointsText:
+              event.requiredAlphaPoints !== null &&
+              event.requiredAlphaPoints !== undefined
+                ? String(event.requiredAlphaPoints)
+                : undefined,
+            deductPoints: event.deductPoints ?? undefined,
+            slotText: extractSlotText(event.sourceRawText) ?? undefined,
+            contractAddress: event.contractAddress ?? undefined,
+          });
+
+          if (sent) {
+            notificationSummary.newEvent++;
+            notificationSummary.total++;
+          }
+        } catch (error) {
+          console.error("[cron:update-airdrops] new-event notification failed", {
+            sourceUrl: event.sourceUrl,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
+    } else {
+      console.log("[cron:update-airdrops] skipping full sync heartbeat", {
+        forceSync,
+        lastSuccessfulSyncAt: lastSuccessfulSyncAt?.toISOString() ?? null,
+        nextSyncAfterMs: lastSuccessfulSyncAt
+          ? Math.max(
+              0,
+              OFFICIAL_SYNC_INTERVAL_MS - (now.getTime() - lastSuccessfulSyncAt.getTime()),
+            )
+          : 0,
+      });
     }
 
     try {
-      const now = new Date();
       const schedules = await (prisma as any).airdropSchedule.findMany({
         where: {
           scheduledTime: {
             gte: new Date(now.getTime() - LIVE_NOTIFICATION_TOLERANCE_MS),
-            lte: new Date(now.getTime() + TWENTY_MINUTE_REMINDER_WINDOW_MS),
+            lte: new Date(now.getTime() + REMINDER_LOOKAHEAD_MS),
           },
           isActive: true,
           status: {
@@ -346,8 +427,6 @@ export async function GET(request: Request) {
             notificationSummary.live++;
           } else if (stage === "20m") {
             notificationSummary.reminder20m++;
-          } else {
-            notificationSummary.reminder5m++;
           }
 
           notificationSummary.total++;
@@ -366,71 +445,81 @@ export async function GET(request: Request) {
     }
 
     const duration = Date.now() - startedAt;
-    const officialSyncSuccess = didOfficialSyncProduceUsableOutput(syncStats);
-    const officialSyncDegraded = isOfficialSyncDegraded(syncStats);
+    const officialSyncSuccess = syncStats
+      ? didOfficialSyncProduceUsableOutput(syncStats)
+      : true;
+    const officialSyncDegraded = syncStats
+      ? isOfficialSyncDegraded(syncStats)
+      : false;
 
-    try {
-      await (prisma as any).syncLog.create({
-        data: {
-          source: "official-binance-event-tracker",
-          action: "sync",
-          success: officialSyncSuccess,
-          tokensCount: syncStats.squarePostCount,
-          created: syncStats.insertedEvents,
-          updated: syncStats.updatedEvents,
-          errors: syncStats.errors.length,
-          duration,
-          details: JSON.stringify({
-            squareFetchStatus: syncStats.squareFetchStatus,
-            parsedSuccessCount: syncStats.parsedSuccessCount,
-            parseFailureCount: syncStats.parseFailureCount,
-            dedupedEvents: syncStats.dedupedEvents,
-            enrichmentSuccessCount: syncStats.enrichmentSuccessCount,
-            enrichmentFailureCount: syncStats.enrichmentFailureCount,
-            finalScheduleCount: syncStats.finalScheduleCount,
-            finalEventCount: syncStats.finalEventCount,
-            degraded: officialSyncDegraded,
-            notificationSummary,
-            errors: syncStats.errors.slice(0, 20),
-          }),
-        },
-      });
-    } catch (error) {
-      console.error("[cron:update-airdrops] sync log write failed", error);
-    }
+    if (syncStats) {
+      try {
+        await (prisma as any).syncLog.create({
+          data: {
+            source: "official-binance-event-tracker",
+            action: "sync",
+            success: officialSyncSuccess,
+            tokensCount: syncStats.squarePostCount,
+            created: syncStats.insertedEvents,
+            updated: syncStats.updatedEvents,
+            errors: syncStats.errors.length,
+            duration,
+            details: JSON.stringify({
+              squareFetchStatus: syncStats.squareFetchStatus,
+              parsedSuccessCount: syncStats.parsedSuccessCount,
+              parseFailureCount: syncStats.parseFailureCount,
+              dedupedEvents: syncStats.dedupedEvents,
+              enrichmentSuccessCount: syncStats.enrichmentSuccessCount,
+              enrichmentFailureCount: syncStats.enrichmentFailureCount,
+              finalScheduleCount: syncStats.finalScheduleCount,
+              finalEventCount: syncStats.finalEventCount,
+              degraded: officialSyncDegraded,
+              notificationSummary,
+              errors: syncStats.errors.slice(0, 20),
+            }),
+          },
+        });
+      } catch (error) {
+        console.error("[cron:update-airdrops] sync log write failed", error);
+      }
 
-    try {
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - 30);
-      await (prisma as any).airdropSchedule.deleteMany({
-        where: {
-          status: "ENDED",
-          scheduledTime: { lt: cutoff },
-        },
-      });
-    } catch (error) {
-      console.warn("[cron:update-airdrops] cleanup degraded", error);
+      try {
+        const cutoff = new Date(now);
+        cutoff.setDate(cutoff.getDate() - 30);
+        await (prisma as any).airdropSchedule.deleteMany({
+          where: {
+            status: "ENDED",
+            scheduledTime: { lt: cutoff },
+          },
+        });
+      } catch (error) {
+        console.warn("[cron:update-airdrops] cleanup degraded", error);
+      }
     }
 
     return NextResponse.json({
       success: officialSyncSuccess,
       data: {
+        syncSkipped: !runOfficialSync,
+        syncIntervalMinutes: OFFICIAL_SYNC_INTERVAL_MS / (60 * 1000),
+        lastSuccessfulSyncAt: lastSuccessfulSyncAt?.toISOString() ?? null,
+        forceSync,
         duration,
-        squareFetchStatus: syncStats.squareFetchStatus,
-        squarePostCount: syncStats.squarePostCount,
-        parsedSuccessCount: syncStats.parsedSuccessCount,
-        parseFailureCount: syncStats.parseFailureCount,
-        insertedEvents: syncStats.insertedEvents,
-        updatedEvents: syncStats.updatedEvents,
-        dedupedEvents: syncStats.dedupedEvents,
-        enrichmentSuccessCount: syncStats.enrichmentSuccessCount,
-        enrichmentFailureCount: syncStats.enrichmentFailureCount,
-        finalScheduleCount: syncStats.finalScheduleCount,
-        finalEventCount: syncStats.finalEventCount,
+        squareFetchStatus: syncStats?.squareFetchStatus ?? null,
+        squarePostCount: syncStats?.squarePostCount ?? null,
+        parsedSuccessCount: syncStats?.parsedSuccessCount ?? null,
+        parseFailureCount: syncStats?.parseFailureCount ?? null,
+        insertedEvents: syncStats?.insertedEvents ?? null,
+        updatedEvents: syncStats?.updatedEvents ?? null,
+        dedupedEvents: syncStats?.dedupedEvents ?? null,
+        enrichmentSuccessCount: syncStats?.enrichmentSuccessCount ?? null,
+        enrichmentFailureCount: syncStats?.enrichmentFailureCount ?? null,
+        finalScheduleCount: syncStats?.finalScheduleCount ?? null,
+        finalEventCount: syncStats?.finalEventCount ?? null,
         degraded: officialSyncDegraded,
         notified: notificationSummary.total,
         notificationSummary,
-        errors: syncStats.errors,
+        errors: syncStats?.errors ?? [],
       },
       timestamp: new Date().toISOString(),
     });

@@ -542,18 +542,16 @@ export function AirdropsTable({ alertChannelUrl }: AirdropsTableProps) {
   } = useQuery({
     queryKey: ["airdrops", "all"],
     queryFn: async () => {
-      const res = await fetch("/api/binance/alpha/airdrops?limit=500", {
-        cache: "no-store",
-      });
+      const res = await fetch("/api/binance/alpha/airdrops?limit=500");
       if (!res.ok) {
         throw new Error(`Airdrops API request failed with ${res.status}`);
       }
       const json = await res.json();
       return (json.data || []) as Airdrop[];
     },
-    refetchInterval: 60000,
+    refetchInterval: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
-    staleTime: 55000,
+    staleTime: 4 * 60 * 1000,
   });
 
   // All airdrops data - sorted by claimStartDate descending (latest first)

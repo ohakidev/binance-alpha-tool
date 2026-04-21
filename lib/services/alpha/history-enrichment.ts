@@ -45,6 +45,15 @@ interface HistoryPriceResponse {
   prices?: Record<string, HistoryPriceEntry>;
 }
 
+const HISTORY_FETCH_TIMEOUT_MS = 8000;
+const HISTORY_ENRICHMENT_CACHE_TTL_MS = 5 * 60 * 1000;
+let cachedHistoryEnrichmentLookup: {
+  value: Map<string, HistoryEnrichment[]>;
+  expiresAt: number;
+} | null = null;
+let historyEnrichmentLookupPromise: Promise<Map<string, HistoryEnrichment[]>> | null =
+  null;
+
 export interface HistoryEnrichment {
   symbol: string;
   name: string;
@@ -152,11 +161,26 @@ function formatSlotText(slotCount: number | null): string | null {
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
-    method: "GET",
-    headers: getHistorySourceConfig().headers,
-    cache: "no-store",
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), HISTORY_FETCH_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: getHistorySourceConfig().headers,
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`History source request timeout (${HISTORY_FETCH_TIMEOUT_MS}ms)`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     throw new Error(`History source request failed (${response.status})`);
@@ -232,28 +256,58 @@ export async function fetchHistoryDexPrices(): Promise<Record<string, number>> {
 export async function fetchHistoryEnrichmentLookup(): Promise<
   Map<string, HistoryEnrichment[]>
 > {
-  const [projects, dexPrices] = await Promise.all([
-    fetchHistoryProjects(),
-    fetchHistoryDexPrices(),
-  ]);
+  const now = Date.now();
+  if (
+    cachedHistoryEnrichmentLookup &&
+    cachedHistoryEnrichmentLookup.expiresAt > now
+  ) {
+    return cachedHistoryEnrichmentLookup.value;
+  }
 
-  return projects.reduce<Map<string, HistoryEnrichment[]>>((lookup, project) => {
-    const symbol = normalizeSymbol(project.token);
-    if (!symbol) {
-      return lookup;
-    }
+  if (historyEnrichmentLookupPromise) {
+    return historyEnrichmentLookupPromise;
+  }
 
-    const enrichment = buildHistoryEnrichmentRecord(
-      project,
-      dexPrices[symbol] ?? null,
+  historyEnrichmentLookupPromise = (async () => {
+    const [projects, dexPrices] = await Promise.all([
+      fetchHistoryProjects(),
+      fetchHistoryDexPrices(),
+    ]);
+
+    const lookup = projects.reduce<Map<string, HistoryEnrichment[]>>(
+      (result, project) => {
+        const symbol = normalizeSymbol(project.token);
+        if (!symbol) {
+          return result;
+        }
+
+        const enrichment = buildHistoryEnrichmentRecord(
+          project,
+          dexPrices[symbol] ?? null,
+        );
+
+        const existing = result.get(symbol) || [];
+        existing.push(enrichment);
+        result.set(symbol, existing);
+
+        return result;
+      },
+      new Map<string, HistoryEnrichment[]>(),
     );
 
-    const existing = lookup.get(symbol) || [];
-    existing.push(enrichment);
-    lookup.set(symbol, existing);
+    cachedHistoryEnrichmentLookup = {
+      value: lookup,
+      expiresAt: Date.now() + HISTORY_ENRICHMENT_CACHE_TTL_MS,
+    };
 
     return lookup;
-  }, new Map<string, HistoryEnrichment[]>());
+  })();
+
+  try {
+    return await historyEnrichmentLookupPromise;
+  } finally {
+    historyEnrichmentLookupPromise = null;
+  }
 }
 
 function compareNullableDates(a: Date | null, b: Date | null): number {

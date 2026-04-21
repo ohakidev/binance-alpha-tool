@@ -8,6 +8,10 @@ import { binanceEventTrackerService } from "@/lib/services/alpha/BinanceEventTra
 
 export const dynamic = "force-dynamic";
 
+const AIRDROPS_API_CACHE_HEADERS = {
+  "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+};
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -33,13 +37,18 @@ export async function GET(request: Request) {
       airdropAmount: row.airdropAmount || "TBA",
     }));
 
-    return NextResponse.json({
-      success: true,
-      data,
-      count: data.length,
-      source: "database",
-      timestamp: new Date().toISOString(),
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data,
+        count: data.length,
+        source: "database",
+        timestamp: new Date().toISOString(),
+      },
+      {
+        headers: AIRDROPS_API_CACHE_HEADERS,
+      },
+    );
   } catch (error) {
     console.error("Airdrops API Error:", error);
     return NextResponse.json(
