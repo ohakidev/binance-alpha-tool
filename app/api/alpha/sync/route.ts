@@ -119,8 +119,10 @@ export async function POST(request: Request) {
 
       try {
         const cronUrl = new URL("http://internal/api/cron/update-airdrops");
+        cronUrl.searchParams.set("force", "true");
         const headers = new Headers({
           "Content-Type": "application/json",
+          "x-force-sync": "true",
         });
         if (process.env.CRON_SECRET) {
           cronUrl.searchParams.set("secret", process.env.CRON_SECRET);
