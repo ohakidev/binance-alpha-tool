@@ -83,6 +83,7 @@ import { NumberTicker } from "@/components/ui/number-ticker";
 import { GradientText } from "@/components/ui/animated-text";
 import {
   dedupeEventApiRows,
+  dedupeEventApiRowsByAsset,
   type EventApiRow,
 } from "@/lib/services/alpha/binance-event-pipeline";
 import { useLanguage } from "@/lib/stores/language-store";
@@ -596,12 +597,17 @@ export function AirdropsTable({ alertChannelUrl }: AirdropsTableProps) {
 
   const historicalData = useMemo(() => {
     if (hasScheduleBuckets) {
-      return allData.filter((airdrop) =>
-        isHistoricalScheduleAirdrop(airdrop, language),
-      );
+      return (
+        dedupeEventApiRowsByAsset(
+          allData.filter((airdrop) =>
+            isHistoricalScheduleAirdrop(airdrop, language),
+          ) as EventApiRow[],
+        ) as Airdrop[]
+      ).sort(sortByClaimStartDesc);
     }
 
-    return allData;
+    return (dedupeEventApiRowsByAsset(allData as EventApiRow[]) as Airdrop[])
+      .sort(sortByClaimStartDesc);
   }, [allData, hasScheduleBuckets, language]);
 
   // Filter and search data

@@ -860,12 +860,77 @@ export function mergeCanonicalEvents(
 }
 
 function buildApiDedupeKey(row: EventApiRow): string {
+  const day =
+    row.claimStartDate?.slice(0, 10) || row.listingTime?.slice(0, 10);
+
+  if (row.symbol && day) {
+    return `symbol:${row.symbol}:${row.type}:${day}`;
+  }
+
+  if (row.projectName && day) {
+    return `project:${row.projectName.toLowerCase()}:${row.type}:${day}`;
+  }
+
+  if (row.contractAddress && day) {
+    return `contract:${row.contractAddress.toLowerCase()}:${row.type}:${day}`;
+  }
+
   if (row.sourceUrl && !isGenericListSourceUrl(row.sourceUrl)) {
     return `url:${row.sourceUrl}`;
   }
 
-  const day = row.claimStartDate ? row.claimStartDate.slice(0, 10) : "unknown";
-  return `symbol:${row.symbol || row.projectName}:${row.type}:${day}`;
+  return row.id;
+}
+
+function hasUsefulApiAmount(row: EventApiRow): boolean {
+  return Boolean(
+    row.airdropAmount &&
+      row.airdropAmount.trim() &&
+      row.airdropAmount.trim().toUpperCase() !== "TBA",
+  );
+}
+
+function hasSpecificApiTime(row: EventApiRow): boolean {
+  const value = row.claimStartDate || row.listingTime;
+  if (!value) {
+    return false;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+
+  return (
+    date.getUTCHours() !== 0 ||
+    date.getUTCMinutes() !== 0 ||
+    date.getUTCSeconds() !== 0
+  );
+}
+
+function getApiRowCompletenessScore(row: EventApiRow): number {
+  let score = 0;
+
+  if (hasUsefulApiAmount(row)) score += 8;
+  if ((row.requiredPoints ?? 0) > 0) score += 6;
+  if ((row.deductPoints ?? 0) > 0) score += 2;
+  if (row.estimatedValue && row.estimatedValue > 0) score += 2;
+  if (row.contractAddress) score += 2;
+  if (row.claimStartDate || row.listingTime) score += 2;
+  if (hasSpecificApiTime(row)) score += 3;
+  if (row.sourceUrl && !isGenericListSourceUrl(row.sourceUrl)) score += 1;
+
+  return score;
+}
+
+function prefersApiRowCandidate(left: EventApiRow, right: EventApiRow): boolean {
+  const leftCompleteness = getApiRowCompletenessScore(left);
+  const rightCompleteness = getApiRowCompletenessScore(right);
+  if (leftCompleteness !== rightCompleteness) {
+    return leftCompleteness > rightCompleteness;
+  }
+
+  return prefersCandidate(left, right);
 }
 
 export function dedupeEventApiRows(rows: EventApiRow[]): EventApiRow[] {
@@ -874,7 +939,64 @@ export function dedupeEventApiRows(rows: EventApiRow[]): EventApiRow[] {
   for (const row of rows) {
     const key = buildApiDedupeKey(row);
     const existing = deduped.get(key);
-    if (!existing || prefersCandidate(row, existing)) {
+    if (!existing || prefersApiRowCandidate(row, existing)) {
+      deduped.set(key, row);
+    }
+  }
+
+  return [...deduped.values()];
+}
+
+function buildApiAssetDedupeKey(row: EventApiRow): string {
+  const symbol = row.symbol?.trim().toUpperCase();
+  if (symbol) {
+    return `symbol:${symbol}`;
+  }
+
+  const contractAddress = row.contractAddress?.trim().toLowerCase();
+  if (contractAddress) {
+    return `contract:${contractAddress}`;
+  }
+
+  return `project:${row.projectName.trim().toLowerCase()}`;
+}
+
+function getApiRowTimestamp(row: EventApiRow): number {
+  const value = row.claimStartDate || row.listingTime;
+  if (!value) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+}
+
+function prefersApiAssetCandidate(
+  left: EventApiRow,
+  right: EventApiRow,
+): boolean {
+  const leftCompleteness = getApiRowCompletenessScore(left);
+  const rightCompleteness = getApiRowCompletenessScore(right);
+  if (leftCompleteness !== rightCompleteness) {
+    return leftCompleteness > rightCompleteness;
+  }
+
+  const leftTimestamp = getApiRowTimestamp(left);
+  const rightTimestamp = getApiRowTimestamp(right);
+  if (leftTimestamp !== rightTimestamp) {
+    return leftTimestamp > rightTimestamp;
+  }
+
+  return prefersCandidate(left, right);
+}
+
+export function dedupeEventApiRowsByAsset(rows: EventApiRow[]): EventApiRow[] {
+  const deduped = new Map<string, EventApiRow>();
+
+  for (const row of rows) {
+    const key = buildApiAssetDedupeKey(row);
+    const existing = deduped.get(key);
+    if (!existing || prefersApiAssetCandidate(row, existing)) {
       deduped.set(key, row);
     }
   }
